@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, collection, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, query, where, doc, updateDoc, addDoc } from 'firebase/firestore';
 
 // 1. הגדרות החיבור ל-Firebase (אותן הגדרות כמו באפליקציה שלך)
 const firebaseConfig = {
@@ -58,8 +58,23 @@ export default async function handler(req, res) {
       }
     }
 
+    // --- חדש: שומרים את ההזמנה עצמה למסך "הזמנות חנות" באפליקציה ---
+    const orderData = {
+      orderId: order.id || Date.now(),
+      customerName: `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'לקוח לא ידוע',
+      address: `${order.shipping?.address_1 || order.billing?.address_1 || ''}, ${order.shipping?.city || order.billing?.city || ''}`,
+      shippingMethod: order.shipping_lines && order.shipping_lines.length > 0 ? order.shipping_lines[0].method_title : 'לא צוין',
+      items: lineItems.map(item => ({ name: item.name, quantity: item.quantity })),
+      total: order.total || '0',
+      date: new Date().toLocaleDateString('he-IL'),
+      time: new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    await addDoc(collection(db, 'erp', appId, 'orders'), orderData);
+    // ----------------------------------------------------------------
+
     // מחזירים תשובה לווקומרס שהכל עבר בהצלחה
-    return res.status(200).json({ success: true, message: 'המלאי באפליקציה עודכן בהצלחה' });
+    return res.status(200).json({ success: true, message: 'המלאי באפליקציה עודכן וההזמנה נשמרה' });
 
   } catch (error) {
     console.error('Error handling webhook:', error);
