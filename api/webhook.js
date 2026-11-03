@@ -19,13 +19,18 @@ const appId = 'publisher_erp_v1';
 
 // 2. הפונקציה שתופעל אוטומטית בכל פעם שיש הזמנה בווקומרס
 export default async function handler(req, res) {
-  // מוודאים שזו בקשת השליחה (POST) מווקומרס ולא סתם גלישה לכתובת
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  // מענה "ידידותי" לבדיקת התקינות שווקומרס עושה בעת השמירה
+  if (req.method === 'GET') {
+    return res.status(200).json({ message: 'Webhook is active!' });
+  }
+  
+  // אם זו הודעת הפינג הראשונית שווקומרס שולח רק כדי לבדוק חיבור
+  if (req.body && req.body.webhook_id) {
+    return res.status(200).json({ message: 'Ping received successfully' });
   }
 
   try {
-    const order = req.body; // כאן נמצאים כל פרטי ההזמנה שווקומרס שלח
+    const order = req.body || {}; // כאן נמצאים כל פרטי ההזמנה שווקומרס שלח
     const lineItems = order.line_items || [];
 
     // עוברים על כל הספרים שהלקוח קנה בהזמנה
