@@ -4,7 +4,7 @@ import {
   TrendingUp, FileText, PenTool, Printer, Truck, Store, Users, Search, X, 
   Image as ImageIcon, Upload, Receipt, Plus, DollarSign, Paperclip, Mail, 
   Megaphone, Settings, RefreshCw, Share2, Download, Edit, Phone, Menu, Trash2, 
-  Settings2, UserPlus, Send, UserCog, Info, StickyNote
+  Settings2, UserPlus, Send, UserCog, Info, StickyNote, History, Clock
 } from 'lucide-react';
 
 // ==========================================
@@ -209,9 +209,12 @@ export default function PublisherApp() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [newInvoice, setNewInvoice] = useState({ desc: '', amount: '' });
 
-  // --- Notes State ---
+  // --- Notes & Supplier History State ---
   const [notesList, setNotesList] = useState(initialNotes);
   const [newNote, setNewNote] = useState({ text: '', color: 'bg-yellow-100' });
+  const [supplierLogs, setSupplierLogs] = useState([]);
+  const [isSupplierHistoryModalOpen, setIsSupplierHistoryModalOpen] = useState(false);
+  const [selectedSupplierForHistory, setSelectedSupplierForHistory] = useState(null);
 
   const tasks = {
     in_progress: tasksList.filter(t => t.status === 'in_progress'),
@@ -324,6 +327,7 @@ export default function PublisherApp() {
         unsubs.push(onSnapshot(getCollRef('prCopies'), snap => setPrCopies(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
         unsubs.push(onSnapshot(getCollRef('tasks'), snap => setTasksList(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
         unsubs.push(onSnapshot(getCollRef('notes'), snap => setNotesList(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
+        unsubs.push(onSnapshot(getCollRef('supplier_logs'), snap => setSupplierLogs(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
         unsubs.push(onSnapshot(getCollRef('users'), snap => {
           if (!snap.empty) setUsersList(snap.docs.map(d => ({id: d.id, ...d.data()})));
         }, handleDbError));
@@ -568,6 +572,19 @@ export default function PublisherApp() {
     
     showToast("שולח מייל לספק ברקע...", "info");
     sendEmailBackground(invoiceSupplier.email, subject, body);
+    
+    // --- Logging the action to history ---
+    const logObj = {
+      supplierName: invoiceSupplier.name,
+      action: 'הפקת הזמנה ומייל',
+      user: currentUserName || username,
+      date: new Date().toLocaleString('he-IL'),
+      totalAmount: totalOrderPrice,
+      details: itemsText
+    };
+    if (db) addDoc(getCollRef('supplier_logs'), logObj);
+    else setSupplierLogs([{...logObj, id: Date.now().toString()}, ...supplierLogs]);
+
     setIsSupplierInvoiceModalOpen(false);
   };
 
@@ -794,10 +811,14 @@ export default function PublisherApp() {
     );
   }
 
+  // --- Dynamic Dashboard Stats ---
+  const dynamicInProduction = tasksList.filter(t => t.status === 'in_progress').length;
+  const dynamicCompleted = tasksList.filter(t => t.status === 'published').length;
+  
   const currentStats = statsData[dashboardPeriod] || initialStatsData.monthly;
   const dashboardStatsArray = [
-    { id: 1, title: 'ספרים בהפקה', value: currentStats.inProduction, icon: PenTool, color: 'text-blue-600', bgColor: 'bg-blue-100' },
-    { id: 2, title: dashboardPeriod === 'monthly' ? 'ספרים שהושלמו' : 'ספרים שהושלמו (השנה)', value: currentStats.completed, icon: BookOpen, color: 'text-indigo-600', bgColor: 'bg-indigo-100' },
+    { id: 1, title: 'ספרים בהפקה (מעודכן אוטומטית)', value: dynamicInProduction, icon: PenTool, color: 'text-blue-600', bgColor: 'bg-blue-100' },
+    { id: 2, title: 'ספרים שהושלמו (מעודכן אוטומטית)', value: dynamicCompleted, icon: BookOpen, color: 'text-indigo-600', bgColor: 'bg-indigo-100' },
     { id: 3, title: dashboardPeriod === 'monthly' ? 'נמכרו החודש (עותקים)' : 'נמכרו השנה (עותקים)', value: currentStats.sold, icon: Package, color: 'text-emerald-600', bgColor: 'bg-emerald-100' },
     { id: 4, title: dashboardPeriod === 'monthly' ? 'רווח מכירות חודשי (₪)' : 'רווח מכירות שנתי (₪)', value: `₪${currentStats.revenue}`, icon: DollarSign, color: 'text-green-600', bgColor: 'bg-green-100' },
     { id: 5, title: dashboardPeriod === 'monthly' ? 'מגמת מכירות (חודשי)' : 'גידול שנתי במכירות', value: currentStats.trend, icon: TrendingUp, color: 'text-purple-600', bgColor: 'bg-purple-100' },
@@ -1045,6 +1066,7 @@ export default function PublisherApp() {
                     </div>
                     <div className="pt-5 mt-4 border-t border-slate-50 flex gap-2 flex-col">
                       <button onClick={() => setSelectedSupplierForStock(supplier)} className="w-full flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-700 py-2.5 rounded-lg text-sm font-medium transition-colors"><Package className="w-4 h-4" /> צפה במלאי</button>
+                      <button onClick={() => { setSelectedSupplierForHistory(supplier); setIsSupplierHistoryModalOpen(true); }} className="w-full flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-700 py-2.5 rounded-lg text-sm font-medium transition-colors"><History className="w-4 h-4" /> היסטוריית פעולות</button>
                       {userRole === 'admin' && (
                         <button onClick={() => openSupplierInvoice(supplier)} className="w-full flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-2.5 rounded-lg text-sm font-medium transition-colors"><Receipt className="w-4 h-4" /> הפק הזמנה / קבלה</button>
                       )}
@@ -1316,6 +1338,58 @@ export default function PublisherApp() {
                 <div className="text-center py-10">
                   <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                   <p className="text-slate-500 font-medium">אין כרגע מלאי המשויך לספק זה במערכת.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Supplier History Modal */}
+      {isSupplierHistoryModalOpen && selectedSupplierForHistory && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full overflow-hidden animate-in zoom-in-95 duration-200" dir="rtl">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div>
+                <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><History className="w-5 h-5 text-indigo-600" /> היסטוריית פעולות</h3>
+                <p className="text-sm text-slate-500">עבור הספק/רשת: {selectedSupplierForHistory.name}</p>
+              </div>
+              <button onClick={() => setIsSupplierHistoryModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-white p-2 rounded-md shadow-sm border border-slate-200 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 max-h-[60vh] overflow-y-auto bg-slate-50/50">
+              {supplierLogs.filter(log => log.supplierName === selectedSupplierForHistory.name).length > 0 ? (
+                <div className="space-y-4">
+                  {supplierLogs.filter(log => log.supplierName === selectedSupplierForHistory.name)
+                    .sort((a, b) => new Date(b.date) - new Date(a.date))
+                    .map((log, idx) => (
+                    <div key={idx} className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex flex-col gap-3 relative">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-2">
+                          <div className="bg-blue-100 text-blue-600 p-1.5 rounded-lg"><Clock className="w-4 h-4" /></div>
+                          <div>
+                            <p className="font-bold text-slate-700 text-sm">{log.action}</p>
+                            <p className="text-[10px] text-slate-400">{log.date}</p>
+                          </div>
+                        </div>
+                        <div className="text-left">
+                          <p className="text-sm font-bold text-indigo-600">₪{Number(log.totalAmount).toLocaleString()}</p>
+                        </div>
+                      </div>
+                      <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-600 whitespace-pre-wrap font-mono border border-slate-100">
+                        {log.details}
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-2 border-t border-slate-100 mt-1">
+                        <UserCog className="w-3.5 h-3.5" /> בוצע ע"י: <span className="font-semibold text-slate-700">{log.user}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-10">
+                  <History className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500 font-medium">אין היסטוריית פעולות לספק זה במערכת עדיין.</p>
                 </div>
               )}
             </div>
