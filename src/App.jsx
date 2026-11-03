@@ -4,7 +4,8 @@ import {
   TrendingUp, FileText, PenTool, Printer, Truck, Store, Users, Search, X, 
   Image as ImageIcon, Upload, Receipt, Plus, DollarSign, Paperclip, Mail, 
   Megaphone, Settings, RefreshCw, Share2, Download, Edit, Phone, Menu, Trash2, 
-  Settings2, UserPlus, Send, UserCog, Info, StickyNote, History, Clock
+  Settings2, UserPlus, Send, UserCog, Info, StickyNote, History, Clock,
+  ShoppingCart, MapPin, CheckSquare
 } from 'lucide-react';
 
 // ==========================================
@@ -124,6 +125,15 @@ const initialNotes = [
   { id: '2', text: 'פגישה עם עורכת הלשון ביום חמישי ב-10:00.', color: 'bg-green-100', date: '02/11/2026' }
 ];
 
+const initialOrders = [
+  { 
+    id: '1', orderId: '#12345', customerName: 'ישראל ישראלי', 
+    address: 'רחוב הרצל 15, דירה 4, תל אביב', shippingMethod: 'שליח עד הבית', 
+    total: '120.00', date: '03/11/2026', time: '14:30',
+    items: [{ name: 'סודות המטבח האיטלקי', quantity: 1 }] 
+  }
+];
+
 export default function PublisherApp() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [userRole, setUserRole] = useState(null); 
@@ -216,6 +226,9 @@ export default function PublisherApp() {
   const [isSupplierHistoryModalOpen, setIsSupplierHistoryModalOpen] = useState(false);
   const [selectedSupplierForHistory, setSelectedSupplierForHistory] = useState(null);
 
+  // --- Orders State ---
+  const [ordersList, setOrdersList] = useState(initialOrders);
+
   const tasks = {
     in_progress: tasksList.filter(t => t.status === 'in_progress'),
     published: tasksList.filter(t => t.status === 'published')
@@ -303,6 +316,7 @@ export default function PublisherApp() {
           for (const item of initialTasksFlat) await addDoc(getCollRef('tasks'), item);
           for (const item of initialValidUsers) await addDoc(getCollRef('users'), item);
           for (const item of initialNotes) await addDoc(getCollRef('notes'), item);
+          for (const item of initialOrders) await addDoc(getCollRef('orders'), item);
         }
         return true;
       } catch (e) {
@@ -327,6 +341,7 @@ export default function PublisherApp() {
         unsubs.push(onSnapshot(getCollRef('prCopies'), snap => setPrCopies(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
         unsubs.push(onSnapshot(getCollRef('tasks'), snap => setTasksList(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
         unsubs.push(onSnapshot(getCollRef('notes'), snap => setNotesList(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
+        unsubs.push(onSnapshot(getCollRef('orders'), snap => setOrdersList(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
         unsubs.push(onSnapshot(getCollRef('supplier_logs'), snap => setSupplierLogs(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
         unsubs.push(onSnapshot(getCollRef('users'), snap => {
           if (!snap.empty) setUsersList(snap.docs.map(d => ({id: d.id, ...d.data()})));
@@ -460,6 +475,21 @@ export default function PublisherApp() {
       setNotesList(notesList.filter(n => n.id !== id));
     }
     showToast("הפתק נמחק", "info");
+  };
+
+  // Orders Handlers
+  const handleMarkOrderPacked = (id) => {
+    setConfirmDialog({
+      message: "האם ארזת את ההזמנה והיא מוכנה למשלוח? פעולה זו תסיר את ההזמנה מהרשימה הפתוחה.",
+      onConfirm: async () => {
+        if (db) {
+          await deleteDoc(getDocRef('orders', id));
+        } else {
+          setOrdersList(ordersList.filter(o => o.id !== id));
+        }
+        showToast("ההזמנה סומנה כנארזה והוסרה!", "success");
+      }
+    });
   };
 
   // Stock Calc
@@ -771,6 +801,7 @@ export default function PublisherApp() {
 
   const navItems = [
     { id: 'dashboard', label: 'דאשבורד', icon: LayoutDashboard },
+    { id: 'orders', label: 'הזמנות חנות (אתר)', icon: ShoppingCart },
     { id: 'inventory', label: 'ניהול מלאי', icon: Package },
     { id: 'suppliers', label: 'ספקים והפצה', icon: Truck },
     { id: 'production', label: 'הפקת ספרים', icon: KanbanSquare },
@@ -930,6 +961,72 @@ export default function PublisherApp() {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* STORE ORDERS VIEW */}
+          {activeTab === 'orders' && (
+            <div className="space-y-6 animate-in fade-in duration-300 h-full flex flex-col">
+              <div className="flex justify-between items-center shrink-0">
+                <div>
+                  <h3 className="text-lg md:text-xl font-bold text-slate-800">הזמנות מהחנות האינטרנטית</h3>
+                  <p className="text-slate-500 text-xs md:text-sm mt-1">הזמנות שמגיעות אוטומטית מאתר WooCommerce ברגע שלקוח משלם</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-10 overflow-y-auto">
+                {ordersList.sort((a, b) => new Date(b.orderId) - new Date(a.orderId)).map((order) => (
+                  <div key={order.id} className="bg-white p-5 rounded-2xl shadow-sm border border-indigo-100 flex flex-col relative group transition-all hover:shadow-md">
+                    <div className="flex justify-between items-start mb-4 pb-4 border-b border-slate-100">
+                      <div>
+                        <span className="bg-indigo-100 text-indigo-700 text-[10px] md:text-xs font-bold px-2 py-1 rounded-md mb-2 inline-block">הזמנה #{order.orderId}</span>
+                        <h4 className="font-bold text-base md:text-lg text-slate-800">{order.customerName}</h4>
+                        <div className="text-xs text-slate-400 mt-1 flex items-center gap-1.5"><Clock className="w-3 h-3" /> {order.date} בשעה {order.time}</div>
+                      </div>
+                      <div className="text-left">
+                        <span className="text-emerald-600 font-bold text-sm md:text-base">₪{order.total}</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 mb-6 flex-1">
+                      <div>
+                        <p className="text-xs text-slate-500 font-medium mb-1.5 flex items-center gap-1"><BookOpen className="w-3.5 h-3.5" /> ספרים בהזמנה:</p>
+                        <ul className="text-sm text-slate-700 space-y-1 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                          {order.items?.map((item, i) => (
+                            <li key={i} className="flex justify-between border-b border-slate-200/50 last:border-0 pb-1 last:pb-0">
+                              <span className="font-semibold">{item.name}</span>
+                              <span className="text-indigo-600 font-bold bg-indigo-50 px-1.5 rounded text-xs">x{item.quantity}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div className="flex gap-2 items-start bg-amber-50/50 p-2.5 rounded-lg border border-amber-100">
+                        <MapPin className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs text-amber-800 font-bold">{order.shippingMethod}</p>
+                          <p className="text-sm text-slate-700 mt-0.5">{order.address}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button 
+                      onClick={() => handleMarkOrderPacked(order.id)}
+                      className="w-full bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 hover:border-emerald-600 transition-colors py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2 group-hover:shadow-sm"
+                    >
+                      <CheckSquare className="w-4 h-4" /> סמן כנארז ומחק
+                    </button>
+                  </div>
+                ))}
+
+                {ordersList.length === 0 && (
+                  <div className="col-span-full py-16 flex flex-col items-center justify-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200">
+                    <ShoppingCart className="w-16 h-16 mb-4 opacity-30 text-indigo-500" />
+                    <p className="text-lg font-medium text-slate-600">אין הזמנות פתוחות כרגע.</p>
+                    <p className="text-sm mt-1">ברגע שלקוח ירכוש משהו באתר, ההזמנה תקפוץ לכאן אוטומטית.</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
