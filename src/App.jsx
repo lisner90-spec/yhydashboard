@@ -940,13 +940,15 @@ export default function PublisherApp() {
                 <table className="w-full text-right min-w-[900px]">
                   <thead className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
                     <tr>
-                      <th className="py-4 px-4 font-medium">שם הספר / דאנאק</th>
-                      <th className="py-4 px-4 font-medium">מהדורות שהודפסו</th>
-                      <th className="py-4 px-4 font-medium text-center bg-indigo-50/50">מחסן ההוצאה</th>
-                      <th className="py-4 px-4 font-medium">פירוט אצל ספקים/חנויות</th>
-                      <th className="py-4 px-4 font-medium text-center bg-emerald-50/50">סה"כ מלאי זמין</th>
-                      <th className="py-4 px-4 font-medium text-center">סטטוס</th>
-                      {userRole === 'admin' && <th className="py-4 px-4 font-medium text-center print:hidden">פעולות</th>}
+                      <th className="py-4 px-4 md:px-6 font-medium whitespace-nowrap min-w-[250px]">שם הספר</th>
+                      <th className="py-4 px-4 md:px-6 font-medium min-w-[150px]">מחבר / דאנאק</th>
+                      <th className="py-4 px-4 md:px-6 font-medium min-w-[150px]">מחירון (כללי / ספק / ישיבה)</th>
+                      <th className="py-4 px-4 md:px-6 font-medium text-center">סה"כ במלאי</th>
+                      <th className="py-4 px-4 md:px-6 font-medium min-w-[200px]">פירוט לפי ספק/מחסן</th>
+                      <th className="py-4 px-4 md:px-6 font-medium text-center">סטטוס</th>
+                      {userRole === 'admin' && (
+                        <th className="py-4 px-4 md:px-6 font-medium text-center print:hidden">פעולות</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
