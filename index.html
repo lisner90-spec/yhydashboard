@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     
-    <!-- הגדרות חזותיות מקוריות -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- הגדרות תצוגה חכמות שמונעות זום בטלפון ומונעות התנגשות עם ה"פוני" של האייפון -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     
-    <!-- הגדרות האפליקציה (PWA) -->
+    <!-- הגדרות התקנת האפליקציה (PWA) -->
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#4f46e5" />
+    <meta name="theme-color" content="#ffffff" />
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="apple-touch-icon" href="https://placehold.co/512x512/4f46e5/ffffff/png?text=ERP">
     
     <title>הוצאה לאור - מערכת ניהול</title>
@@ -20,7 +20,7 @@
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     
-    <!-- הפעלת מנגנון ההתקנה לטלפון -->
+    <!-- הפעלת מנוע הרקע של האפליקציה -->
     <script>
       if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.protocol === 'http:')) {
         window.addEventListener('load', () => {
