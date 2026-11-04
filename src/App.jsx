@@ -799,6 +799,32 @@ export default function PublisherApp() {
     showToast("קובץ מקור התעדכן", "success");
   };
 
+  const handleImportContact = async () => {
+    try {
+      const supported = ('contacts' in navigator && 'ContactsManager' in window);
+      if (!supported) {
+         showToast("הדפדפן שלך אינו תומך בייבוא אנשי קשר אוטומטי.", "warning");
+         return;
+      }
+      const props = ['name', 'tel', 'email'];
+      const contacts = await navigator.contacts.select(props, { multiple: false });
+      if (contacts && contacts.length > 0) {
+         const c = contacts[0];
+         setNewSupplier(prev => ({
+           ...prev,
+           name: c.name && c.name.length > 0 ? c.name[0] : prev.name,
+           contact: c.name && c.name.length > 0 ? c.name[0] : prev.contact,
+           phone: c.tel && c.tel.length > 0 ? c.tel[0] : prev.phone,
+           email: c.email && c.email.length > 0 ? c.email[0] : prev.email
+         }));
+         showToast("איש הקשר יובא בהצלחה", "success");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("הייבוא בוטל או נכשל.", "error");
+    }
+  };
+
   const navItems = [
     { id: 'dashboard', label: 'דאשבורד', icon: LayoutDashboard },
     { id: 'orders', label: 'הזמנות חנות (אתר)', icon: ShoppingCart },
@@ -857,7 +883,7 @@ export default function PublisherApp() {
   ];
 
   return (
-    <div dir="rtl" className="flex h-screen w-full bg-slate-50 text-slate-800 font-sans overflow-hidden relative">
+    <div dir="rtl" className="flex h-[100dvh] w-full bg-slate-50 text-slate-800 font-sans overflow-hidden relative">
       
       {/* --- Global Toast Notifications --- */}
       {toastMessage.text && (
@@ -910,7 +936,7 @@ export default function PublisherApp() {
         </nav>
       </aside>
 
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
+      <main className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
         <header className="bg-white p-3 md:p-6 shadow-sm border-b border-slate-200 flex justify-between items-center z-10 print:hidden">
           <div className="flex items-center gap-3">
             <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden text-slate-500 hover:text-indigo-600 p-2 rounded-lg hover:bg-indigo-50 transition-colors"><Menu className="w-6 h-6" /></button>
@@ -1633,6 +1659,11 @@ export default function PublisherApp() {
             </div>
             <div className="p-4 md:p-6 overflow-y-auto">
               <form onSubmit={handleAddSupplier} className="space-y-4">
+                {'contacts' in navigator && (
+                   <button type="button" onClick={handleImportContact} className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 py-2.5 rounded-lg border border-blue-200 text-sm font-medium flex items-center justify-center gap-2 transition-colors">
+                     <Users className="w-4 h-4" /> ייבא מאנשי הקשר בטלפון
+                   </button>
+                )}
                 <div><label className="block text-sm font-medium mb-1">שם הספק</label><input required type="text" value={newSupplier.name} onChange={e => setNewSupplier({...newSupplier, name: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50" /></div>
                 <div><label className="block text-sm font-medium mb-1">סוג</label><select value={newSupplier.type} onChange={e => setNewSupplier({...newSupplier, type: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50"><option>רשת קמעונאית</option><option>הפצה</option><option>מחסן לוגיסטי</option><option>בית דפוס</option></select></div>
                 <div><label className="block text-sm font-medium mb-1">סטטוס</label><select value={newSupplier.status} onChange={e => setNewSupplier({...newSupplier, status: e.target.value})} className="w-full p-2.5 md:p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 bg-slate-50"><option>פעיל - יש הסכם</option><option>ללא הסכם מכירה</option><option>ממתין לספרים</option><option>אין שיתוף פעולה</option></select></div>
