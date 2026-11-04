@@ -1,42 +1,18 @@
-const CACHE_NAME = 'publisher-erp-v6';
+const CACHE_NAME = 'publisher-erp-v1';
 
 self.addEventListener('install', (event) => {
+  // מכריח את הדפדפן להתקין את הגרסה החדשה מיד
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(clients.claim());
+  // מפעיל את ה-Service Worker מיד ללא המתנה
+  event.waitUntil(self.clients.claim());
 });
 
 self.addEventListener('fetch', (event) => {
-  // אסטרטגיה מינימלית: פשוט מעביר את הבקשה לרשת. 
-  // מספיק לחלוטין כדי שהדפדפן יזהה Service Worker ויאפשר התקנה.
-  event.respondWith(fetch(event.request));
-});
-
-// 2. הפעלה וניקוי מוחלט של כל קאש או אפליקציה ישנה שתקועה בטלפון
-self.addEventListener('activate', (event) => {
-  event.waitUntil(clients.claim());
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-  );
-});
-
-// 3. אסטרטגיית רשת פשוטה: בלי לשמור בכוח דברים שעלולים להפיל את ההתקנה
-self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
-  
+  // מעביר את כל הבקשות לרשת כרגיל (חובה כדי לאפשר התקנת PWA)
   event.respondWith(
-    fetch(event.request).catch(() => {
-      return caches.match(event.request);
-    })
+    fetch(event.request).catch(() => new Response('Offline'))
   );
 });
