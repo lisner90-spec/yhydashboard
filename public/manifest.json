@@ -1,15 +1,15 @@
 {
-"name": "מערכת ניהול - הוצאה לאור",
-"short_name": "ניהול הוצאה",
+"name": "הוצאת הספרים שע"י מוסדות ישיבת ההסדר ירוחם",
+"short_name": "הוצאת ירוחם",
 "start_url": "/",
 "display": "standalone",
-"background_color": "#f8fafc",
-"theme_color": "#4f46e5",
+"background_color": "#FDFBF7",
+"theme_color": "#4b5320",
 "icons": [
 {
-"src": "https://placehold.co/512x512/4f46e5/ffffff/png?text=ERP",
-"sizes": "512x512",
-"type": "image/png",
+"src": "/image_e2684a.jpg",
+"sizes": "192x192 512x512",
+"type": "image/jpeg",
 "purpose": "any maskable"
 }
 ]
