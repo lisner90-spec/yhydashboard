@@ -407,7 +407,6 @@ export default function PublisherApp() {
 
     if (newUser.email) {
       const subject = "פרטי התחברות למערכת ניהול הוצאה לאור";
-      // מתקן את הקישור שיישלח למייל - מוודא שיש לוכסן שמפריד נכון
       const appUrl = `${window.location.origin}/?user=${userObj.username}`; 
       
       const body = `שלום ${newUser.name},\n\nנוצר עבורך משתמש חדש למערכת הניהול.\n\nשם משתמש: ${userObj.username}\nסיסמה: ${userObj.password}\n\nלכניסה למערכת לחץ על הקישור הבא (שם המשתמש כבר יוזן עבורך):\n${appUrl}\n\nבברכה,\nצוות המערכת`;
@@ -838,7 +837,7 @@ export default function PublisherApp() {
 
   if (!userRole) {
     return (
-      <div dir="rtl" className="flex h-screen w-full items-center justify-center bg-slate-50 font-sans p-4 relative">
+      <div dir="rtl" className="flex h-screen w-full items-center justify-center bg-slate-50 font-sans p-4 relative pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
         {toastMessage.text && (
           <div className={`absolute top-6 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 rounded-lg shadow-lg font-medium text-sm animate-in slide-in-from-top-4 fade-in duration-300 ${toastMessage.type === 'error' ? 'bg-red-500 text-white' : toastMessage.type === 'warning' ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white'}`}>
             {toastMessage.text}
@@ -883,7 +882,7 @@ export default function PublisherApp() {
   ];
 
   return (
-    <div dir="rtl" className="flex h-screen w-full bg-slate-50 text-slate-800 font-sans overflow-hidden relative">
+    <div dir="rtl" className="flex h-screen w-full bg-slate-50 text-slate-800 font-sans overflow-hidden relative pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       
       {/* --- Global Toast Notifications --- */}
       {toastMessage.text && (
@@ -936,7 +935,7 @@ export default function PublisherApp() {
         </nav>
       </aside>
 
-      <main className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
+      <main className="flex-1 flex flex-col h-full overflow-hidden w-full relative">
         <header className="bg-white p-3 md:p-6 shadow-sm border-b border-slate-200 flex justify-between items-center z-10 print:hidden">
           <div className="flex items-center gap-3">
             <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden text-slate-500 hover:text-indigo-600 p-2 rounded-lg hover:bg-indigo-50 transition-colors"><Menu className="w-6 h-6" /></button>
