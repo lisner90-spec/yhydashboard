@@ -1,15 +1,34 @@
 <!doctype html>
-<html lang="en">
+<html lang="he" dir="rtl">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Publisher App</title>
-    <!-- שורת הקסם של העיצוב: -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- הגדרות חזותיות לטלפון (מונע זום בטעות ומגדיר צבעים) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    
+    <!-- הגדרות האפליקציה (PWA) -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#4f46e5" />
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://placehold.co/512x512/4f46e5/ffffff/png?text=ERP">
+    
+    <title>הוצאה לאור - מערכת ניהול</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    
+    <!-- הפעלת מנגנון ההתקנה לטלפון -->
+    <script>
+      if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.protocol === 'http:')) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch((err) => {
+            console.log('Service Worker registration skipped/failed in this environment:', err.message);
+          });
+        });
+      }
+    </script>
   </body>
 </html>
