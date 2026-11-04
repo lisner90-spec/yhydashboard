@@ -1,22 +1,11 @@
-const CACHE_NAME = 'publisher-erp-v3';
-const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/image_e2684a.jpg'
-];
+const CACHE_NAME = 'publisher-erp-v5'; // העלינו גרסה כדי לאפס לחלוטין את הטלפון
 
-// התקנה ושמירה במטמון של קבצי החובה כדי שהדפדפן יאשר התקנה
+// 1. התקנה חלקה ומיידית ברקע
 self.addEventListener('install', (event) => {
   self.skipWaiting();
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    }).catch(err => console.log('Cache error', err))
-  );
 });
 
-// מחיקת גרסאות ישנות כדי לוודא שהאייקון החדש עולה
+// 2. הפעלה וניקוי מוחלט של כל קאש או אפליקציה ישנה שתקועה בטלפון
 self.addEventListener('activate', (event) => {
   event.waitUntil(clients.claim());
   event.waitUntil(
@@ -32,8 +21,10 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// חסימת נפילות רשת
+// 3. אסטרטגיית רשת פשוטה: בלי לשמור בכוח דברים שעלולים להפיל את ההתקנה
 self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+  
   event.respondWith(
     fetch(event.request).catch(() => {
       return caches.match(event.request);
