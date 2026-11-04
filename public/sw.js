@@ -1,8 +1,17 @@
-const CACHE_NAME = 'publisher-erp-v5'; // העלינו גרסה כדי לאפס לחלוטין את הטלפון
+const CACHE_NAME = 'publisher-erp-v6';
 
-// 1. התקנה חלקה ומיידית ברקע
 self.addEventListener('install', (event) => {
   self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(clients.claim());
+});
+
+self.addEventListener('fetch', (event) => {
+  // אסטרטגיה מינימלית: פשוט מעביר את הבקשה לרשת. 
+  // מספיק לחלוטין כדי שהדפדפן יזהה Service Worker ויאפשר התקנה.
+  event.respondWith(fetch(event.request));
 });
 
 // 2. הפעלה וניקוי מוחלט של כל קאש או אפליקציה ישנה שתקועה בטלפון
