@@ -883,7 +883,7 @@ export default function PublisherApp() {
   ];
 
   return (
-    <div dir="rtl" className="flex h-[100dvh] w-full bg-slate-50 text-slate-800 font-sans overflow-hidden relative">
+    <div dir="rtl" className="flex h-screen w-full bg-slate-50 text-slate-800 font-sans overflow-hidden relative">
       
       {/* --- Global Toast Notifications --- */}
       {toastMessage.text && (
