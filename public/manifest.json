@@ -1,21 +1,20 @@
 {
-"name": "הוצאת הספרים שע"י מוסדות ישיבת ההסדר ירוחם",
-"short_name": "הוצאה לאור",
-"start_url": "/?v=new_png_icon",
-"display": "standalone",
-"background_color": "#FDFBF7",
-"theme_color": "#4b5320",
-"description": "מערכת לניהול הוצאה לאור ומלאי",
-"icons": [
-{
-"src": "/icon.png.png",
-"sizes": "192x192",
-"type": "image/png"
-},
-{
-"src": "/icon.png.png",
-"sizes": "512x512",
-"type": "image/png"
-}
-]
+  "name": "דאשבורד ישיבת ירוחם",
+  "short_name": "דאשבורד",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FDFBF7",
+  "theme_color": "#4B5320",
+  "icons": [
+    {
+      "src": "/icon.png.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon.png.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
 }
