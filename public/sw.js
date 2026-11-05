@@ -1,12 +1,13 @@
-self.addEventListener('install', (e) => {
+const CACHE_NAME = 'dashboard-cache-v4';
+
+self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-self.addEventListener('activate', (e) => {
-  e.waitUntil(self.clients.claim());
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
 });
 
-self.addEventListener('fetch', (e) => {
-  // נוכחות של הפונקציה הזו מספיקה כדי שהטלפון יאשר התקנה (PWA).
-  // אין כאן שום לוגיקה שיכולה לחסום את הרשת או להתנגש עם הקאש.
+self.addEventListener('fetch', (event) => {
+  event.respondWith(fetch(event.request).catch(() => new Response('Offline')));
 });
