@@ -2,23 +2,18 @@
 <html lang="he" dir="rtl">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     
-    <!-- הגדרות תצוגה חכמות שמונעות זום בטלפון ומונעות התנגשות עם ה"פוני" של האייפון -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    
-    <!-- טעינת מנוע העיצוב (Tailwind CSS) -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- הגדרות התקנת האפליקציה (PWA) -->
-    <link rel="manifest" href="/manifest.json" />
+    <!-- צבע שורת הסטטוס בטלפון -->
     <meta name="theme-color" content="#4b5320" />
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="הוצאת ירוחם">
     
     <!-- חיבור התמונה כאייקון לכל סוגי המכשירים (אייפון ואנדרואיד) -->
-    <link rel="apple-touch-icon" href="/image_e2684a.jpg">
-    <link rel="icon" type="image/jpeg" href="/image_e2684a.jpg" />
+    <link rel="apple-touch-icon" href="/icon.png.png">
+    <link rel="icon" type="image/png" href="/icon.png.png" />
+    <link rel="manifest" href="/manifest.json" />
     
     <title>הוצאת הספרים שע"י מוסדות ישיבת ההסדר ירוחם</title>
   </head>
@@ -26,12 +21,12 @@
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     
-    <!-- הפעלת מנוע הרקע של האפליקציה -->
+    <!-- רישום ה-Service Worker שמאפשר התקנה -->
     <script>
-      if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.protocol === 'http:')) {
+      if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch((err) => {
-            console.log('Service Worker registration skipped/failed in this environment:', err.message);
+          navigator.serviceWorker.register('/sw.js').catch(err => {
+            console.log('SW registration failed: ', err);
           });
         });
       }
