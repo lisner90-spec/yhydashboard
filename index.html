@@ -1,33 +1,21 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="he" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    
-    <!-- צבע שורת הסטטוס בטלפון -->
-    <meta name="theme-color" content="#4b5320" />
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="הוצאת ירוחם">
-    
-    <!-- חיבור התמונה כאייקון לכל סוגי המכשירים (אייפון ואנדרואיד) -->
-    <link rel="apple-touch-icon" href="/icon.png.png">
     <link rel="icon" type="image/png" href="/icon.png.png" />
+    <link rel="apple-touch-icon" href="/icon.png.png" />
+    <meta name="theme-color" content="#4B5320" />
     <link rel="manifest" href="/manifest.json" />
-    
-    <title>הוצאת הספרים שע"י מוסדות ישיבת ההסדר ירוחם</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>דאשבורד ישיבת ירוחם</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
-    
-    <!-- רישום ה-Service Worker שמאפשר התקנה -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(err => {
-            console.log('SW registration failed: ', err);
-          });
+          navigator.serviceWorker.register('/sw.js');
         });
       }
     </script>
