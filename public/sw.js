@@ -1,4 +1,4 @@
-const CACHE_NAME = 'publisher-erp-v4-force-update'; // השם השתנה כאן!
+const CACHE_NAME = 'publisher-erp-v5-clean'; // Updated cache name
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
