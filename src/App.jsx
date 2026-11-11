@@ -134,6 +134,21 @@ const initialOrders = [
   }
 ];
 
+const yhyCatalog = [
+  { title: "שערים למשנתו של הרב יהודא ליאון אשכנזי (מניטו)", price: 98, author: "הרב אוריאל עיטם / ישיבת ירוחם" },
+  { title: "והתהלכתי בתוככם - סט", price: 120, author: "ישיבת ירוחם" },
+  { title: "אותך אבקש - שערים חסידיים לימי התשובה", price: 59, author: "הרב חיים וולפסון" },
+  { title: "ונהר יוצא מעדן - האכילה ומצוותיה", price: 69, author: "הרב אוריאל עיטם" },
+  { title: "ונהר יוצא מעדן (סט - ג' כרכים)", price: 160, author: "הרב אוריאל עיטם" },
+  { title: "ונהר יוצא מעדן - מועדי החורף", price: 60, author: "הרב אוריאל עיטם" },
+  { title: "להשקות את הגן | סוגיות במסכת סוכה", price: 59, author: "הרב חיים וולפסון" },
+  { title: "להשקות את הגן | יסודות מסכת סנהדרין", price: 69, author: "הרב חיים וולפסון" },
+  { title: "שובו אלי", price: 29, author: "ישיבת ירוחם" },
+  { title: "כעץ שתול", price: 40, author: "ישיבת ירוחם" },
+  { title: "ונהר יוצא מעדן - חגי האביב", price: 60, author: "הרב אוריאל עיטם" },
+  { title: "ונהר יוצא מעדן - חגי תשרי", price: 60, author: "הרב אוריאל עיטם" }
+];
+
 export default function PublisherApp() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [userRole, setUserRole] = useState(null); 
@@ -716,6 +731,38 @@ export default function PublisherApp() {
     });
   };
 
+  // פונקציית הקסם - ייבוא קטלוג
+  const handleImportYhyCatalog = async () => {
+    if (!db) {
+      showToast("חיבור למסד הנתונים חסר, המתן מספר שניות.", "warning");
+      return;
+    }
+    showToast("מייבא ספרים מהאתר...", "info");
+    let added = 0;
+    try {
+      for (const book of yhyCatalog) {
+        if (!inventoryList.some(b => b.title === book.title)) {
+          await addDoc(getCollRef('inventory'), {
+            title: book.title,
+            author: book.author,
+            isbn: "",
+            threshold: 30,
+            publisherStock: 0,
+            prices: { general: book.price, supplier: 0, yeshiva: 0 },
+            editions: [{ name: 'מהדורה 1', printRun: 0 }],
+            breakdown: []
+          });
+          added++;
+        }
+      }
+      if (added > 0) showToast(`הייבוא הושלם! ${added} ספרים מהאתר נוספו למלאי.`, "success");
+      else showToast("כל הספרים מהאתר כבר קיימים במערכת.", "info");
+    } catch (error) {
+      console.error(error);
+      showToast("שגיאה בייבוא הספרים", "error");
+    }
+  };
+
   const handleManualStockUpdate = async (e) => {
     e.preventDefault();
     const amount = Number(stockUpdateForm.amount);
@@ -1071,6 +1118,7 @@ export default function PublisherApp() {
                     <button onClick={handleExportCSV} className="bg-slate-100 hover:bg-slate-200 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap"><Download className="w-3.5 h-3.5 md:w-4 md:h-4" /> ייצוא</button>
                     {userRole === 'admin' && (
                       <>
+                        <button onClick={handleImportYhyCatalog} className="bg-pink-100 hover:bg-pink-200 text-pink-700 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap transition-colors font-medium"><Download className="w-3.5 h-3.5 md:w-4 md:h-4" /> ייבוא מהאתר</button>
                         <button onClick={() => setIsUpdateStockModalOpen(true)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap"><RefreshCw className="w-3.5 h-3.5 md:w-4 md:h-4" /> עדכון ידני</button>
                         <button onClick={() => setIsAddBookModalOpen(true)} className="col-span-2 sm:col-span-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 shadow-sm whitespace-nowrap"><Plus className="w-3.5 h-3.5 md:w-4 md:h-4" /> הוסף ספר</button>
                       </>
