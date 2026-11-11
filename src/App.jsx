@@ -156,6 +156,10 @@ export default function PublisherApp() {
   const [dashboardPeriod, setDashboardPeriod] = useState('monthly'); 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // --- Sorting States ---
+  const [inventorySort, setInventorySort] = useState('alphabetical');
+  const [suppliersSort, setSuppliersSort] = useState('alphabetical');
+
   // --- UI System States (Toasts & Confirms) ---
   const [toastMessage, setToastMessage] = useState({ text: '', type: '' });
   const [confirmDialog, setConfirmDialog] = useState(null);
@@ -560,8 +564,9 @@ export default function PublisherApp() {
   // Suppliers
   const handleAddSupplier = async (e) => {
     e.preventDefault();
-    if (db) await addDoc(getCollRef('suppliers'), newSupplier);
-    else setSuppliersList([...suppliersList, { ...newSupplier, id: Date.now().toString() }]);
+    const supplierData = { ...newSupplier, updatedAt: Date.now() };
+    if (db) await addDoc(getCollRef('suppliers'), supplierData);
+    else setSuppliersList([...suppliersList, { ...supplierData, id: Date.now().toString() }]);
     setIsAddSupplierModalOpen(false);
     setNewSupplier({ name: '', type: 'רשת קמעונאית', contact: '', phone: '', email: '', status: 'פעיל - יש הסכם' });
     showToast("ספק חדש נוסף למערכת", "success");
@@ -569,8 +574,9 @@ export default function PublisherApp() {
 
   const handleEditSupplierSubmit = async (e) => {
     e.preventDefault();
-    if (db) await updateDoc(getDocRef('suppliers', editingSupplier.id), editingSupplier);
-    else setSuppliersList(suppliersList.map(s => s.id === editingSupplier.id ? editingSupplier : s));
+    const supplierData = { ...editingSupplier, updatedAt: Date.now() };
+    if (db) await updateDoc(getDocRef('suppliers', supplierData.id), supplierData);
+    else setSuppliersList(suppliersList.map(s => s.id === supplierData.id ? supplierData : s));
     setIsEditSupplierModalOpen(false);
     showToast("פרטי הספק עודכנו", "success");
   };
@@ -683,8 +689,9 @@ export default function PublisherApp() {
 
   const handleAddBook = async (e) => {
     e.preventDefault();
-    if (db) await addDoc(getCollRef('inventory'), newBookForm);
-    else setInventoryList([...inventoryList, { ...newBookForm, id: Date.now().toString() }]);
+    const bookData = { ...newBookForm, updatedAt: Date.now() };
+    if (db) await addDoc(getCollRef('inventory'), bookData);
+    else setInventoryList([...inventoryList, { ...bookData, id: Date.now().toString() }]);
     setIsAddBookModalOpen(false);
     setNewBookForm(initialBookFormState);
     showToast("ספר חדש התווסף בהצלחה למלאי", "success");
@@ -705,8 +712,9 @@ export default function PublisherApp() {
 
   const handleEditBookSubmit = async (e) => {
     e.preventDefault();
-    if (db) await updateDoc(getDocRef('inventory', editingBook.id), editingBook);
-    else setInventoryList(inventoryList.map(b => b.id === editingBook.id ? editingBook : b));
+    const bookData = { ...editingBook, updatedAt: Date.now() };
+    if (db) await updateDoc(getDocRef('inventory', bookData.id), bookData);
+    else setInventoryList(inventoryList.map(b => b.id === bookData.id ? bookData : b));
     setIsEditBookModalOpen(false);
     setEditingBook(null);
     showToast("פרטי הספר ומלאי המהדורות עודכנו", "success");
@@ -750,7 +758,8 @@ export default function PublisherApp() {
             publisherStock: 0,
             prices: { general: book.price, supplier: 0, yeshiva: 0 },
             editions: [{ name: 'מהדורה 1', printRun: 0 }],
-            breakdown: []
+            breakdown: [],
+            updatedAt: Date.now()
           });
           added++;
         }
@@ -770,10 +779,10 @@ export default function PublisherApp() {
     
     if (db) {
       const book = inventoryList.find(b => b.id === stockUpdateForm.bookId);
-      if (book) await updateDoc(getDocRef('inventory', book.id), { publisherStock: Math.max(0, Number(book.publisherStock) + amount) });
+      if (book) await updateDoc(getDocRef('inventory', book.id), { publisherStock: Math.max(0, Number(book.publisherStock) + amount), updatedAt: Date.now() });
     } else {
       setInventoryList(inventoryList.map(book => 
-        book.id === stockUpdateForm.bookId ? { ...book, publisherStock: Math.max(0, Number(book.publisherStock) + amount) } : book
+        book.id === stockUpdateForm.bookId ? { ...book, publisherStock: Math.max(0, Number(book.publisherStock) + amount), updatedAt: Date.now() } : book
       ));
     }
     
@@ -802,6 +811,18 @@ export default function PublisherApp() {
     }, 1500);
   };
 
+  const handleDeleteTask = (id) => {
+    setConfirmDialog({
+      message: "האם אתה בטוח שברצונך למחוק פרויקט הפקה זה לצמיתות?",
+      onConfirm: async () => {
+        if (db) await deleteDoc(getDocRef('tasks', id));
+        else setTasksList(tasksList.filter(t => t.id !== id));
+        setSelectedTask(null);
+        showToast("הפרויקט נמחק בהצלחה", "info");
+      }
+    });
+  };
+
   const getSupplierStock = (supplierName) => {
     return inventoryList.reduce((acc, book) => {
       const found = (book.breakdown || []).find(b => b.supplier === supplierName);
@@ -817,6 +838,18 @@ export default function PublisherApp() {
     book.author.includes(searchQuery) ||
     book.isbn.includes(searchQuery)
   );
+
+  const sortedInventory = [...filteredInventory].sort((a, b) => {
+    if (inventorySort === 'alphabetical') return a.title.localeCompare(b.title, 'he');
+    if (inventorySort === 'date') return (b.updatedAt || 0) - (a.updatedAt || 0);
+    return 0;
+  });
+
+  const sortedSuppliers = [...suppliersList].sort((a, b) => {
+    if (suppliersSort === 'alphabetical') return a.name.localeCompare(b.name, 'he');
+    if (suppliersSort === 'date') return (b.updatedAt || 0) - (a.updatedAt || 0);
+    return 0;
+  });
 
   const handleAddInvoice = async (e) => {
     e.preventDefault();
@@ -1109,9 +1142,15 @@ export default function PublisherApp() {
               <div className="p-4 md:p-6 border-b border-slate-100 flex flex-col gap-4 shrink-0">
                 <h3 className="text-lg font-bold text-slate-800">מצב מלאי מחסנים ורשתות</h3>
                 <div className="flex flex-col lg:flex-row gap-3 lg:items-center justify-between">
-                  <div className="relative w-full lg:w-96 print:hidden">
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none"><Search className="h-5 w-5 text-slate-400" /></div>
-                    <input type="text" placeholder="חיפוש..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="block w-full pr-10 pl-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 text-sm" />
+                  <div className="relative w-full lg:w-96 print:hidden flex gap-2">
+                    <div className="relative flex-1">
+                      <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none"><Search className="h-5 w-5 text-slate-400" /></div>
+                      <input type="text" placeholder="חיפוש..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="block w-full pr-10 pl-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 text-sm" />
+                    </div>
+                    <select value={inventorySort} onChange={(e) => setInventorySort(e.target.value)} className="p-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 text-sm outline-none w-32 shrink-0">
+                      <option value="alphabetical">אלף-בית</option>
+                      <option value="date">תאריך עדכון</option>
+                    </select>
                   </div>
                   <div className="grid grid-cols-2 sm:flex sm:flex-row gap-2 w-full lg:w-auto print:hidden">
                     <button onClick={() => window.print()} className="bg-white border border-slate-200 hover:bg-slate-50 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap"><Printer className="w-3.5 h-3.5 md:w-4 md:h-4" /> הדפס</button>
@@ -1143,7 +1182,7 @@ export default function PublisherApp() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredInventory.map((book) => {
+                    {sortedInventory.map((book) => {
                       const totalAvailableStock = calculateTotalStock(book);
                       const isLowStock = totalAvailableStock <= book.threshold;
                       return (
@@ -1206,13 +1245,19 @@ export default function PublisherApp() {
             <div className="space-y-6 animate-in fade-in duration-300">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <h3 className="text-lg md:text-xl font-bold text-slate-800">ניהול ספקים, מחסנים ורשתות הפצה</h3>
-                {userRole === 'admin' && (
-                  <button onClick={() => setIsAddSupplierModalOpen(true)} className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg font-medium flex justify-center items-center gap-2"><Plus className="w-4 h-4" /> הוסף ספק חדש</button>
-                )}
+                <div className="flex w-full md:w-auto gap-2">
+                  <select value={suppliersSort} onChange={(e) => setSuppliersSort(e.target.value)} className="p-2.5 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 text-sm outline-none flex-1 md:flex-none">
+                    <option value="alphabetical">מיון: אלף-בית</option>
+                    <option value="date">מיון: עודכן לאחרונה</option>
+                  </select>
+                  {userRole === 'admin' && (
+                    <button onClick={() => setIsAddSupplierModalOpen(true)} className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg font-medium flex justify-center items-center gap-2"><Plus className="w-4 h-4" /> הוסף ספק חדש</button>
+                  )}
+                </div>
               </div>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
-                {suppliersList.map((supplier) => (
+                {sortedSuppliers.map((supplier) => (
                   <div key={supplier.id} className="bg-white rounded-2xl p-5 md:p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow flex flex-col relative group">
                     {userRole === 'admin' && (
                       <button onClick={() => { setEditingSupplier(supplier); setIsEditSupplierModalOpen(true); }} className="absolute top-4 left-4 p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100">
@@ -2077,9 +2122,16 @@ export default function PublisherApp() {
                 <h2 className="text-xl md:text-2xl font-bold text-slate-800 mb-1">{selectedTask.title}</h2>
                 <p className="text-sm md:text-base text-slate-500">מאת: {selectedTask.author} | יעד לסיום: {selectedTask.date}</p>
               </div>
-              <button onClick={() => setSelectedTask(null)} className="text-slate-400 hover:text-slate-600 bg-white p-2 rounded-md shadow-sm border border-slate-200">
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex gap-2">
+                {userRole === 'admin' && (
+                  <button onClick={() => handleDeleteTask(selectedTask.id)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 bg-white p-2 rounded-md shadow-sm border border-slate-200 transition-colors" title="מחק פרויקט">
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                )}
+                <button onClick={() => setSelectedTask(null)} className="text-slate-400 hover:text-slate-600 bg-white p-2 rounded-md shadow-sm border border-slate-200">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 md:space-y-8">
