@@ -491,13 +491,27 @@ export default function PublisherApp() {
     showToast("הפתק נשמר בהצלחה", "success");
   };
 
-  const handleDeleteNote = async (id) => {
-    if (db) {
-      await deleteDoc(getDocRef('notes', id));
-    } else {
-      setNotesList(notesList.filter(n => n.id !== id));
-    }
-    showToast("הפתק נמחק", "info");
+  const handleDeleteNote = (id) => {
+    setConfirmDialog({
+      title: "מחיקת פתק",
+      message: "האם אתה בטוח שברצונך למחוק את הפתק הזה?",
+      confirmText: "מחק פתק",
+      icon: <Trash2 className="w-6 h-6" />,
+      iconStyle: "bg-red-100 text-red-600",
+      onConfirm: async () => {
+        // עדכון אופטימי מיידי למחיקה חלקה
+        setNotesList(prev => prev.filter(n => n.id !== id));
+        
+        if (db) {
+          try {
+            await deleteDoc(getDocRef('notes', id));
+          } catch (e) {
+            console.error("שגיאה במחיקת פתק מהשרת:", e);
+          }
+        }
+        showToast("הפתק נמחק", "info");
+      }
+    });
   };
 
   // Orders Handlers
@@ -1518,7 +1532,7 @@ export default function PublisherApp() {
                   <div key={note.id} className={`${note.color} p-4 rounded-xl shadow-sm border border-black/5 hover:shadow-md transition-all flex flex-col min-h-[140px] group relative`}>
                     <button 
                       onClick={() => handleDeleteNote(note.id)}
-                      className="absolute top-2 left-2 p-1.5 bg-white/40 hover:bg-red-500 hover:text-white text-slate-600 rounded-md opacity-0 group-hover:opacity-100 transition-all"
+                      className="absolute top-2 left-2 p-1.5 bg-white/60 hover:bg-red-500 hover:text-white text-slate-700 rounded-md md:opacity-0 md:group-hover:opacity-100 transition-all shadow-sm md:shadow-none"
                       title="מחק פתק"
                     >
                       <X className="w-4 h-4" />
