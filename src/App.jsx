@@ -97,6 +97,7 @@ const initialInventory = [
     title: 'המדריך השלם לבינה מלאכותית', author: 'עמית שרון', isbn: '978-965-123-456-7', threshold: 200, 
     editions: [{ name: 'מהדורה 1', printRun: 2000 }], publisherStock: 250,
     prices: { general: 110, supplier: 55, yeshiva: 70 },
+    productionCost: 24500,
     breakdown: [
       { supplier: 'מחסן ראשי - פתח תקווה', amount: 800 },
       { supplier: 'צומת ספרים - מרלו״ג', amount: 250 },
@@ -107,6 +108,7 @@ const initialInventory = [
     title: 'סודות המטבח האיטלקי', author: 'מיכל אהרוני', isbn: '978-965-456-789-0', threshold: 150, 
     editions: [{ name: 'מהדורה 1', printRun: 1500 }, { name: 'מהדורה 2', printRun: 1000 }], publisherStock: 100,
     prices: { general: 120, supplier: 60, yeshiva: 80 },
+    productionCost: 18200,
     breakdown: [
       { supplier: 'מחסן ראשי - פתח תקווה', amount: 400 },
       { supplier: 'צומת ספרים - מרלו״ג', amount: 300 },
@@ -130,7 +132,8 @@ const initialOrders = [
     id: '1', orderId: '#12345', customerName: 'ישראל ישראלי', 
     address: 'רחוב הרצל 15, דירה 4, תל אביב', shippingMethod: 'שליח עד הבית', 
     total: '120.00', date: '03/11/2026', time: '14:30',
-    items: [{ name: 'סודות המטבח האיטלקי', quantity: 1 }] 
+    items: [{ name: 'סודות המטבח האיטלקי', quantity: 1 }],
+    status: 'pending'
   }
 ];
 
@@ -224,6 +227,7 @@ export default function PublisherApp() {
     editions: [{ name: 'מהדורה 1', printRun: 1000 }],
     publisherStock: 0,
     prices: { general: 0, supplier: 0, yeshiva: 0 },
+    productionCost: 0,
     breakdown: []
   };
 
@@ -247,6 +251,7 @@ export default function PublisherApp() {
 
   // --- Orders State ---
   const [ordersList, setOrdersList] = useState(initialOrders);
+  const [orderViewTab, setOrderViewTab] = useState('pending');
 
   const tasks = {
     in_progress: tasksList.filter(t => t.status === 'in_progress'),
@@ -498,14 +503,14 @@ export default function PublisherApp() {
   // Orders Handlers
   const handleMarkOrderPacked = (id) => {
     setConfirmDialog({
-      message: "האם ארזת את ההזמנה והיא מוכנה למשלוח? פעולה זו תסיר את ההזמנה מהרשימה הפתוחה.",
+      message: "האם ארזת את ההזמנה והיא מוכנה למשלוח? ההזמנה תעבור ללשונית 'הזמנות שנשלחו'.",
       onConfirm: async () => {
         if (db) {
-          await deleteDoc(getDocRef('orders', id));
+          await updateDoc(getDocRef('orders', id), { status: 'shipped' });
         } else {
-          setOrdersList(ordersList.filter(o => o.id !== id));
+          setOrdersList(ordersList.map(o => o.id === id ? { ...o, status: 'shipped' } : o));
         }
-        showToast("ההזמנה סומנה כנארזה והוסרה!", "success");
+        showToast("ההזמנה סומנה כנשלחה!", "success");
       }
     });
   };
@@ -757,6 +762,7 @@ export default function PublisherApp() {
             threshold: 30,
             publisherStock: 0,
             prices: { general: book.price, supplier: 0, yeshiva: 0 },
+            productionCost: 0,
             editions: [{ name: 'מהדורה 1', printRun: 0 }],
             breakdown: [],
             updatedAt: Date.now()
@@ -1073,19 +1079,23 @@ export default function PublisherApp() {
           {/* STORE ORDERS VIEW */}
           {activeTab === 'orders' && (
             <div className="space-y-6 animate-in fade-in duration-300 h-full flex flex-col">
-              <div className="flex justify-between items-center shrink-0">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
                 <div>
                   <h3 className="text-lg md:text-xl font-bold text-slate-800">הזמנות מהחנות האינטרנטית</h3>
                   <p className="text-slate-500 text-xs md:text-sm mt-1">הזמנות שמגיעות אוטומטית מאתר WooCommerce ברגע שלקוח משלם</p>
                 </div>
+                <div className="bg-slate-200/60 p-1 rounded-xl flex items-center border border-slate-200 w-full sm:w-auto">
+                  <button onClick={() => setOrderViewTab('pending')} className={`flex-1 sm:flex-none px-3 md:px-5 py-2 rounded-lg text-xs md:text-sm font-medium transition-all duration-200 text-center ${orderViewTab === 'pending' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}>הזמנות פתוחות</button>
+                  <button onClick={() => setOrderViewTab('shipped')} className={`flex-1 sm:flex-none px-3 md:px-5 py-2 rounded-lg text-xs md:text-sm font-medium transition-all duration-200 text-center ${orderViewTab === 'shipped' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}>הזמנות שנשלחו</button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-10 overflow-y-auto">
-                {ordersList.sort((a, b) => new Date(b.orderId) - new Date(a.orderId)).map((order) => (
-                  <div key={order.id} className="bg-white p-5 rounded-2xl shadow-sm border border-indigo-100 flex flex-col relative group transition-all hover:shadow-md">
+                {ordersList.filter(o => (o.status || 'pending') === orderViewTab).sort((a, b) => new Date(b.orderId) - new Date(a.orderId)).map((order) => (
+                  <div key={order.id} className={`bg-white p-5 rounded-2xl shadow-sm border flex flex-col relative group transition-all hover:shadow-md ${orderViewTab === 'shipped' ? 'border-emerald-100 opacity-80' : 'border-indigo-100'}`}>
                     <div className="flex justify-between items-start mb-4 pb-4 border-b border-slate-100">
                       <div>
-                        <span className="bg-indigo-100 text-indigo-700 text-[10px] md:text-xs font-bold px-2 py-1 rounded-md mb-2 inline-block">הזמנה #{order.orderId}</span>
+                        <span className={`${orderViewTab === 'shipped' ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'} text-[10px] md:text-xs font-bold px-2 py-1 rounded-md mb-2 inline-block`}>הזמנה #{order.orderId}</span>
                         <h4 className="font-bold text-base md:text-lg text-slate-800">{order.customerName}</h4>
                         <div className="text-xs text-slate-400 mt-1 flex items-center gap-1.5"><Clock className="w-3 h-3" /> {order.date} בשעה {order.time}</div>
                       </div>
@@ -1116,20 +1126,26 @@ export default function PublisherApp() {
                       </div>
                     </div>
 
-                    <button 
-                      onClick={() => handleMarkOrderPacked(order.id)}
-                      className="w-full bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 hover:border-emerald-600 transition-colors py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2 group-hover:shadow-sm"
-                    >
-                      <CheckSquare className="w-4 h-4" /> סמן כנארז ומחק
-                    </button>
+                    {orderViewTab === 'pending' ? (
+                        <button 
+                          onClick={() => handleMarkOrderPacked(order.id)}
+                          className="w-full bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 hover:border-emerald-600 transition-colors py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2 group-hover:shadow-sm"
+                        >
+                          <CheckSquare className="w-4 h-4" /> סמן כנארז ונשלח
+                        </button>
+                    ) : (
+                        <div className="w-full bg-slate-50 text-slate-500 border border-slate-200 py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2">
+                          <CheckCircle className="w-4 h-4 text-emerald-500" /> ההזמנה נשלחה בהצלחה
+                        </div>
+                    )}
                   </div>
                 ))}
 
-                {ordersList.length === 0 && (
+                {ordersList.filter(o => (o.status || 'pending') === orderViewTab).length === 0 && (
                   <div className="col-span-full py-16 flex flex-col items-center justify-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200">
                     <ShoppingCart className="w-16 h-16 mb-4 opacity-30 text-indigo-500" />
-                    <p className="text-lg font-medium text-slate-600">אין הזמנות פתוחות כרגע.</p>
-                    <p className="text-sm mt-1">ברגע שלקוח ירכוש משהו באתר, ההזמנה תקפוץ לכאן אוטומטית.</p>
+                    <p className="text-lg font-medium text-slate-600">אין הזמנות {orderViewTab === 'pending' ? 'פתוחות' : 'שנשלחו'} כרגע.</p>
+                    {orderViewTab === 'pending' && <p className="text-sm mt-1">ברגע שלקוח ירכוש משהו באתר, ההזמנה תקפוץ לכאן אוטומטית.</p>}
                   </div>
                 )}
               </div>
@@ -1170,11 +1186,12 @@ export default function PublisherApp() {
                 <table className="w-full text-right min-w-[900px]">
                   <thead className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
                     <tr>
-                      <th className="py-4 px-4 md:px-6 font-medium whitespace-nowrap min-w-[250px]">שם הספר</th>
-                      <th className="py-4 px-4 md:px-6 font-medium min-w-[150px]">מחבר / דאנאק</th>
-                      <th className="py-4 px-4 md:px-6 font-medium min-w-[150px]">מחירון (כללי / ספק / ישיבה)</th>
-                      <th className="py-4 px-4 md:px-6 font-medium text-center">סה"כ במלאי</th>
-                      <th className="py-4 px-4 md:px-6 font-medium min-w-[200px]">פירוט לפי ספק/מחסן</th>
+                      <th className="py-4 px-4 md:px-6 font-medium whitespace-nowrap min-w-[250px]">שם הספר ופרטים</th>
+                      <th className="py-4 px-4 md:px-6 font-medium min-w-[150px]">מהדורות</th>
+                      <th className="py-4 px-4 md:px-6 font-medium text-center min-w-[120px]">עלות הפקה</th>
+                      <th className="py-4 px-4 md:px-6 font-medium text-center">במחסן ראשי</th>
+                      <th className="py-4 px-4 md:px-6 font-medium min-w-[200px]">פירוט אצל ספקים</th>
+                      <th className="py-4 px-4 md:px-6 font-medium text-center">סה"כ זמין</th>
                       <th className="py-4 px-4 md:px-6 font-medium text-center">סטטוס</th>
                       {userRole === 'admin' && (
                         <th className="py-4 px-4 md:px-6 font-medium text-center print:hidden">פעולות</th>
@@ -1200,6 +1217,9 @@ export default function PublisherApp() {
                                 </div>
                               ))}
                             </div>
+                          </td>
+                          <td className="py-4 px-4 text-center bg-rose-50/40 border-x border-slate-100">
+                            <div className="font-bold text-rose-700 text-lg">₪{Number(book.productionCost || 0).toLocaleString()}</div>
                           </td>
                           <td className="py-4 px-4 text-center bg-indigo-50/30">
                             <div className="font-bold text-indigo-700 text-xl">{Number(book.publisherStock).toLocaleString()}</div>
@@ -1963,8 +1983,9 @@ export default function PublisherApp() {
                 </div>
 
                 <div>
-                  <h4 className="font-bold text-sm md:text-base text-slate-700 mb-2 md:mb-3 border-b border-slate-100 pb-2">מחירונים (₪)</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <h4 className="font-bold text-sm md:text-base text-slate-700 mb-2 md:mb-3 border-b border-slate-100 pb-2">מחירונים ועלויות (₪)</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div><label className="block text-xs font-medium text-slate-600 mb-1">עלות הפקה כוללת</label><input type="number" value={newBookForm.productionCost || ''} onChange={e => setNewBookForm({...newBookForm, productionCost: Number(e.target.value)})} className="w-full p-2.5 md:p-2 border border-rose-200 bg-rose-50 rounded-lg focus:ring-2 focus:ring-rose-500 font-semibold text-rose-700" placeholder="0" /></div>
                     <div><label className="block text-xs font-medium text-slate-600 mb-1">מחיר לצרכן</label><input type="number" value={newBookForm.prices.general} onChange={e => setNewBookForm({...newBookForm, prices: {...newBookForm.prices, general: e.target.value}})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50" /></div>
                     <div><label className="block text-xs font-medium text-slate-600 mb-1">מחיר לחנויות</label><input type="number" value={newBookForm.prices.supplier} onChange={e => setNewBookForm({...newBookForm, prices: {...newBookForm.prices, supplier: e.target.value}})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50" /></div>
                     <div><label className="block text-xs font-medium text-slate-600 mb-1">מחיר מיוחד</label><input type="number" value={newBookForm.prices.yeshiva} onChange={e => setNewBookForm({...newBookForm, prices: {...newBookForm.prices, yeshiva: e.target.value}})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50" /></div>
@@ -2052,8 +2073,9 @@ export default function PublisherApp() {
                 </div>
 
                 <div>
-                   <h4 className="font-bold text-sm md:text-base text-slate-700 mb-2 md:mb-3 border-b border-slate-100 pb-2">מחירונים (₪)</h4>
-                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                   <h4 className="font-bold text-sm md:text-base text-slate-700 mb-2 md:mb-3 border-b border-slate-100 pb-2">מחירונים ועלויות (₪)</h4>
+                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                     <div><label className="block text-xs font-medium text-slate-600 mb-1">עלות הפקה כוללת</label><input required type="number" min="0" value={editingBook.productionCost || 0} onChange={e => setEditingBook({...editingBook, productionCost: Number(e.target.value)})} className="w-full p-2.5 md:p-2 border border-rose-200 bg-rose-50 rounded-lg focus:ring-2 focus:ring-rose-500 font-semibold text-rose-700" dir="ltr" /></div>
                      <div><label className="block text-xs font-medium text-slate-600 mb-1">מחיר כללי</label><input required type="number" min="0" value={editingBook.prices.general} onChange={e => setEditingBook({...editingBook, prices: {...editingBook.prices, general: Number(e.target.value)}})} className="w-full p-2.5 md:p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" dir="ltr" /></div>
                      <div><label className="block text-xs font-medium text-slate-600 mb-1">מחיר ספק</label><input required type="number" min="0" value={editingBook.prices.supplier} onChange={e => setEditingBook({...editingBook, prices: {...editingBook.prices, supplier: Number(e.target.value)}})} className="w-full p-2.5 md:p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" dir="ltr" /></div>
                      <div><label className="block text-xs font-medium text-slate-600 mb-1">מחיר ישיבות</label><input required type="number" min="0" value={editingBook.prices.yeshiva} onChange={e => setEditingBook({...editingBook, prices: {...editingBook.prices, yeshiva: Number(e.target.value)}})} className="w-full p-2.5 md:p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" dir="ltr" /></div>
