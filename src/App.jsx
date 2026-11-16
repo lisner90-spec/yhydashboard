@@ -2242,3 +2242,93 @@ export default function PublisherApp() {
     </div>
   );
 }
+<!-- ... existing code ... -->
+  // פונקציית הקסם - ייבוא קטלוג
+  const handleImportYhyCatalog = async () => {
+    if (!db) {
+      showToast("חיבור למסד הנתונים חסר, המתן מספר שניות.", "warning");
+      return;
+    }
+    showToast("סורק ומעדכן מחירים מהאתר (שומר על נתונים קיימים)...", "info");
+    try {
+      let updatedCount = 0;
+      let addedCount = 0;
+
+      for (const catalogBook of initialInventory) {
+        const existingBook = inventoryList.find(b => b.title === catalogBook.title);
+        
+        if (existingBook) {
+          // עדכון מחירים ועלות הפקה בלבד, ללא דריסת המלאי או המהדורות
+          await updateDoc(getDocRef('inventory', existingBook.id), {
+            prices: catalogBook.prices,
+            productionCost: catalogBook.productionCost,
+            updatedAt: Date.now()
+          });
+          updatedCount++;
+        } else {
+          // הוספת ספר שחסר לגמרי במערכת
+          await addDoc(getCollRef('inventory'), {
+            ...catalogBook,
+            updatedAt: Date.now()
+          });
+          addedCount++;
+        }
+      }
+      
+      showToast(`סנכרון מחירון הושלם! ${updatedCount} עודכנו, ${addedCount} חדשים.`, "success");
+    } catch (error) {
+      console.error(error);
+      showToast("שגיאה בעדכון הספרים", "error");
+    }
+  };
+
+  const handleManualStockUpdate = async (e) => {
+<!-- ... existing code ... -->
+                          <td className="py-4 px-4 text-center bg-rose-50/40 border-x border-slate-100">
+                            <div className="font-bold text-rose-700 text-lg">₪{Number(book.productionCost || 0).toLocaleString()}</div>
+                          </td>
+                          <td className="py-4 px-4 text-center bg-indigo-50/30">
+                            {userRole === 'admin' ? (
+                              <input 
+                                type="number" 
+                                min="0"
+                                value={book.publisherStock} 
+                                onChange={async (e) => {
+                                  const val = Number(e.target.value);
+                                  if (db) await updateDoc(getDocRef('inventory', book.id), { publisherStock: val, updatedAt: Date.now() });
+                                }}
+                                className="w-16 md:w-20 font-bold text-indigo-700 text-lg md:text-xl text-center bg-transparent border-b-2 border-transparent hover:border-indigo-300 focus:border-indigo-600 focus:bg-white outline-none transition-all"
+                                dir="ltr"
+                              />
+                            ) : (
+                              <div className="font-bold text-indigo-700 text-xl">{Number(book.publisherStock).toLocaleString()}</div>
+                            )}
+                            <div className="text-[10px] text-indigo-400">במחסן הראשי</div>
+                          </td>
+                          <td className="py-4 px-4">
+<!-- ... existing code ... -->
+                            <span className="text-xs md:text-sm text-slate-500">כמות מודפסת:</span>
+                            <div className="flex items-center gap-2">
+                                <input required type="number" min="0" value={ed.printRun} onChange={(e) => handleUpdateEdition(setNewBookForm, newBookForm, idx, 'printRun', e.target.value)} className="w-20 md:w-24 p-2 md:p-1.5 border border-slate-200 rounded text-sm focus:border-indigo-500 outline-none" dir="ltr" />
+                                <button type="button" onClick={() => handleRemoveEdition(setNewBookForm, newBookForm, idx)} className="text-slate-400 hover:text-red-500 p-1 bg-slate-50 rounded md:bg-transparent"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
+                            </div>
+<!-- ... existing code ... -->
+                              <span className="text-xs md:text-sm text-slate-500">עותקים:</span>
+                              <div className="flex items-center gap-2">
+                                <input required type="number" min="0" value={item.amount} onChange={(e) => handleUpdateBookBreakdownRow(idx, 'amount', e.target.value)} className="w-20 md:w-24 p-2 border border-slate-200 rounded-md text-sm outline-none" dir="ltr" />
+                                <button type="button" onClick={() => handleRemoveBookBreakdownRow(idx)} className="text-slate-400 hover:text-red-500 p-1 bg-slate-50 rounded md:bg-transparent"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
+                              </div>
+<!-- ... existing code ... -->
+                            <span className="text-xs md:text-sm text-slate-500">כמות:</span>
+                            <div className="flex items-center gap-2">
+                                <input required type="number" min="0" value={ed.printRun} onChange={(e) => handleUpdateEdition(setEditingBook, editingBook, idx, 'printRun', e.target.value)} className="w-20 md:w-24 p-2 md:p-1.5 border border-slate-200 rounded text-sm outline-none" dir="ltr" />
+                                <button type="button" onClick={() => handleRemoveEdition(setEditingBook, editingBook, idx)} className="text-slate-400 hover:text-red-500 p-1 bg-slate-50 rounded md:bg-transparent"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
+                            </div>
+<!-- ... existing code ... -->
+                            <span className="text-xs md:text-sm text-slate-500">עותקים:</span>
+                            <div className="flex items-center gap-2">
+                                <input required type="number" min="0" value={item.amount} onChange={(e) => handleUpdateEditBookBreakdownRow(idx, 'amount', e.target.value)} className="w-20 md:w-24 p-2 border border-slate-200 rounded-md text-sm outline-none" dir="ltr" />
+                                <button type="button" onClick={() => handleRemoveEditBookBreakdownRow(idx)} className="text-slate-400 hover:text-red-500 p-1 bg-slate-50 rounded md:bg-transparent"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
+                            </div>
+<!-- ... existing code ... -->
+```eof
