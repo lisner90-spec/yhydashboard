@@ -803,35 +803,6 @@ export default function PublisherApp() {
     showToast("הוספת מלאי ידנית הושלמה", "success");
   };
 
-  const handleUpdatePricesFromExcel = async () => {
-    if (!db && inventoryList.length === 0) return;
-    showToast("מעדכן מחירים ועלויות מול מסד הנתונים...", "info");
-    
-    let updatedCount = 0;
-    const updatedList = [...inventoryList];
-    
-    for (const currentBook of updatedList) {
-      const excelData = initialInventory.find(b => b.title === currentBook.title);
-      if (excelData) {
-        currentBook.prices = excelData.prices;
-        currentBook.productionCost = excelData.productionCost;
-        updatedCount++;
-        
-        if (db) {
-          try {
-            await updateDoc(getDocRef('inventory', currentBook.id), {
-              prices: excelData.prices,
-              productionCost: excelData.productionCost
-            });
-          } catch(e) { console.error(e); }
-        }
-      }
-    }
-    
-    if (!db) setInventoryList(updatedList);
-    showToast(`עודכנו מחירים ועלויות עבור ${updatedCount} ספרים בהצלחה!`, "success");
-  };
-
   const handleToggleIntegration = (id) => {
     if (userRole !== 'admin') return;
     setIntegrations(integrations.map(int => 
@@ -1210,7 +1181,6 @@ export default function PublisherApp() {
                     <button onClick={handleExportCSV} className="bg-slate-100 hover:bg-slate-200 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap"><Download className="w-3.5 h-3.5 md:w-4 md:h-4" /> ייצוא</button>
                     {userRole === 'admin' && (
                       <>
-                        <button onClick={handleUpdatePricesFromExcel} className="bg-amber-100 hover:bg-amber-200 text-amber-700 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap transition-colors font-medium"><DollarSign className="w-3.5 h-3.5 md:w-4 md:h-4" /> עדכן מחירון</button>
                         <button onClick={handleImportYhyCatalog} className="bg-pink-100 hover:bg-pink-200 text-pink-700 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap transition-colors font-medium"><Download className="w-3.5 h-3.5 md:w-4 md:h-4" /> ייבוא מהאתר</button>
                         <button onClick={() => setIsUpdateStockModalOpen(true)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap"><RefreshCw className="w-3.5 h-3.5 md:w-4 md:h-4" /> עדכון ידני</button>
                         <button onClick={() => setIsAddBookModalOpen(true)} className="col-span-2 sm:col-span-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 shadow-sm whitespace-nowrap"><Plus className="w-3.5 h-3.5 md:w-4 md:h-4" /> הוסף ספר</button>
