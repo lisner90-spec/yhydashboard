@@ -1195,6 +1195,7 @@ export default function PublisherApp() {
                   <thead className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
                     <tr>
                       <th className="py-4 px-4 md:px-6 font-medium whitespace-nowrap min-w-[250px]">שם הספר ופרטים</th>
+                      <th className="py-4 px-4 md:px-6 font-medium text-center min-w-[120px]">מחירים (צרכן/ספק)</th>
                       <th className="py-4 px-4 md:px-6 font-medium min-w-[150px]">מהדורות</th>
                       <th className="py-4 px-4 md:px-6 font-medium text-center min-w-[120px]">עלות הפקה</th>
                       <th className="py-4 px-4 md:px-6 font-medium text-center">במחסן ראשי</th>
@@ -1216,6 +1217,12 @@ export default function PublisherApp() {
                             <div className="font-bold text-slate-800">{book.title}</div>
                             <div className="text-sm">{book.author}</div>
                             <div className="text-slate-400 font-mono text-xs mt-1">{book.isbn}</div>
+                          </td>
+                          <td className="py-4 px-4 text-center text-sm border-x border-slate-50">
+                            <div className="flex flex-col gap-1">
+                              <span className="text-slate-500">צרכן: ₪{book.prices?.general || 0}</span>
+                              <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">ספק: ₪{book.prices?.supplier || 0}</span>
+                            </div>
                           </td>
                           <td className="py-4 px-4">
                             <div className="flex flex-col gap-1">
@@ -1720,7 +1727,7 @@ export default function PublisherApp() {
                         <label className="text-[10px] md:text-xs text-slate-500">כמות:</label><input type="number" min="1" value={item.amount} onChange={(e) => handleInvoiceItemChange(idx, 'amount', e.target.value)} className="w-16 p-2 border border-slate-200 rounded-lg text-sm text-center bg-white" dir="ltr" />
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <label className="text-[10px] md:text-xs text-slate-500">מחיר (₪):</label><input type="number" min="0" value={item.price} onChange={(e) => handleInvoiceItemChange(idx, 'price', e.target.value)} className="w-20 p-2 border border-slate-200 rounded-lg text-sm text-center bg-white text-indigo-600 font-bold" dir="ltr" />
+                        <label className="text-[10px] md:text-xs text-slate-500">מחיר ספק ליחידה (₪):</label><input type="number" min="0" value={item.price} onChange={(e) => handleInvoiceItemChange(idx, 'price', e.target.value)} className="w-20 p-2 border border-slate-200 rounded-lg text-sm text-center bg-white text-indigo-600 font-bold" dir="ltr" />
                       </div>
                       <button type="button" onClick={() => removeInvoiceItemRow(idx)} className="text-slate-400 hover:text-red-500 p-1.5 bg-white rounded border border-slate-200"><Trash2 className="w-4 h-4" /></button>
                     </div>
@@ -1730,7 +1737,7 @@ export default function PublisherApp() {
               </div>
 
               <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100 flex justify-between items-center mb-6">
-                <span className="font-bold text-emerald-900 text-sm md:text-base">סה"כ הזמנה לתשלום:</span>
+                <span className="font-bold text-emerald-900 text-sm md:text-base">סה"כ הזמנה לתשלום (לפי מחירי ספק):</span>
                 <span className="text-xl md:text-2xl font-bold text-emerald-600">₪{invoiceItems.reduce((acc, item) => acc + (item.amount * item.price), 0).toLocaleString()}</span>
               </div>
 
