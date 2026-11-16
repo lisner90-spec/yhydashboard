@@ -756,31 +756,24 @@ export default function PublisherApp() {
       showToast("חיבור למסד הנתונים חסר, המתן מספר שניות.", "warning");
       return;
     }
-    showToast("מייבא ספרים מהאתר...", "info");
-    let added = 0;
+    showToast("מייבא ומעדכן נתונים מהאתר...", "info");
     try {
-      for (const book of yhyCatalog) {
-        if (!inventoryList.some(b => b.title === book.title)) {
-          await addDoc(getCollRef('inventory'), {
-            title: book.title,
-            author: book.author,
-            isbn: "",
-            threshold: 30,
-            publisherStock: 0,
-            prices: { general: book.price, supplier: 0, yeshiva: 0 },
-            productionCost: 0,
-            editions: [{ name: 'מהדורה 1', printRun: 0 }],
-            breakdown: [],
-            updatedAt: Date.now()
-          });
-          added++;
-        }
-      }
-      if (added > 0) showToast(`הייבוא הושלם! ${added} ספרים מהאתר נוספו למלאי.`, "success");
-      else showToast("כל הספרים מהאתר כבר קיימים במערכת.", "info");
+      // 1. קודם כל נמחוק את כל המלאי הישן מהענן
+      const querySnapshot = await getDocs(getCollRef('inventory'));
+      const deletePromises = querySnapshot.docs.map(docSnap => deleteDoc(getDocRef('inventory', docSnap.id)));
+      await Promise.all(deletePromises);
+
+      // 2. נזרים את כל הרשימה המעודכנת שלנו לתוך הענן
+      const addPromises = initialInventory.map(book => addDoc(getCollRef('inventory'), book));
+      await Promise.all(addPromises);
+
+      // 3. לעדכן את הממשק המקומי כדי שלא נצטרך לרענן
+      setInventoryList(initialInventory);
+      
+      showToast("סנכרון מלא הושלם! כל המחירים וספרי החנות עודכנו.", "success");
     } catch (error) {
       console.error(error);
-      showToast("שגיאה בייבוא הספרים", "error");
+      showToast("שגיאה בעדכון הספרים", "error");
     }
   };
 
@@ -1927,8 +1920,9 @@ export default function PublisherApp() {
               <h3 className="font-bold text-base md:text-lg text-slate-800">הוספת ספר חדש למלאי</h3>
               <button onClick={() => setIsAddBookModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-white p-1.5 rounded-md shadow-sm border border-slate-200"><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-4 md:p-6 overflow-y-auto">
-              <form onSubmit={handleAddBook} className="space-y-5 md:space-y-6">
+            
+            <form onSubmit={handleAddBook} className="flex flex-col h-full overflow-hidden">
+              <div className="p-4 md:p-6 overflow-y-auto flex-1 space-y-5 md:space-y-6">
                 
                 <div>
                   <h4 className="font-bold text-sm md:text-base text-slate-700 mb-2 md:mb-3 border-b border-slate-100 pb-2">פרטי הספר</h4>
@@ -2006,10 +2000,12 @@ export default function PublisherApp() {
                     <div><label className="block text-xs font-medium text-slate-600 mb-1">מחיר מיוחד</label><input type="number" value={newBookForm.prices.yeshiva} onChange={e => setNewBookForm({...newBookForm, prices: {...newBookForm.prices, yeshiva: e.target.value}})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50" /></div>
                   </div>
                 </div>
+              </div>
 
-                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 md:py-3.5 rounded-xl font-bold mt-4 md:mt-6 shadow-sm">שמור פריט מלאי חדש</button>
-              </form>
-            </div>
+              <div className="p-4 md:p-6 border-t border-slate-100 bg-slate-50 shrink-0">
+                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 md:py-3.5 rounded-xl font-bold shadow-sm">שמור פריט מלאי חדש</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -2021,8 +2017,9 @@ export default function PublisherApp() {
               <h3 className="font-bold text-base md:text-lg text-slate-800">עריכת ספר: <span className="text-indigo-600 block md:inline text-sm md:text-lg truncate">{editingBook.title}</span></h3>
               <button onClick={() => {setIsEditBookModalOpen(false); setEditingBook(null);}} className="text-slate-400 hover:text-slate-600 bg-white p-1.5 rounded-md"><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-4 md:p-6 overflow-y-auto">
-              <form onSubmit={handleEditBookSubmit} className="space-y-5 md:space-y-6">
+            
+            <form onSubmit={handleEditBookSubmit} className="flex flex-col h-full overflow-hidden">
+              <div className="p-4 md:p-6 overflow-y-auto flex-1 space-y-5 md:space-y-6">
                 
                 <div>
                    <h4 className="font-bold text-sm md:text-base text-slate-700 mb-2 md:mb-3 border-b border-slate-100 pb-2">פרטי הספר</h4>
@@ -2096,10 +2093,12 @@ export default function PublisherApp() {
                      <div><label className="block text-xs font-medium text-slate-600 mb-1">מחיר ישיבות</label><input required type="number" min="0" value={editingBook.prices.yeshiva} onChange={e => setEditingBook({...editingBook, prices: {...editingBook.prices, yeshiva: Number(e.target.value)}})} className="w-full p-2.5 md:p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500" dir="ltr" /></div>
                    </div>
                 </div>
+              </div>
 
-                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3.5 md:py-3 rounded-xl font-bold mt-4 md:mt-6 shadow-sm">עדכן וסיים</button>
-              </form>
-            </div>
+              <div className="p-4 md:p-6 border-t border-slate-100 bg-slate-50 shrink-0">
+                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3.5 md:py-3 rounded-xl font-bold shadow-sm">עדכן וסיים</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
