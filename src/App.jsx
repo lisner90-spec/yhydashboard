@@ -620,16 +620,16 @@ export default function PublisherApp() {
       return;
     }
     let totalOrderPrice = 0;
-    let itemsText = invoiceItems.map(item => {
+    let itemsText = invoiceItems.map((item, index) => {
       const book = inventoryList.find(b => b.id === item.bookId);
       if (!book) return '';
       const lineTotal = item.amount * item.price;
       totalOrderPrice += lineTotal;
-      return `- ${book.title} | כמות: ${item.amount} | מחיר יחידה: ₪${item.price} | סה"כ שורה: ₪${lineTotal}`;
-    }).join('\n');
+      return `${index + 1}. ${book.title}\n   כמות: ${item.amount} יח' | מחיר ליחידה: ₪${item.price.toLocaleString()} | סה"כ: ₪${lineTotal.toLocaleString()}`;
+    }).join('\n\n');
 
-    const subject = `הזמנה / סיכום פרטי הפצה - ${invoiceSupplier.name}`;
-    const body = `שלום ${invoiceSupplier.contact},\n\nלהלן סיכום הזמנת ספרים / תעודת משלוח מול ההוצאה לאור:\n\n${itemsText}\n\n--------------------------------\nסה"כ לתשלום / חיוב: ₪${totalOrderPrice.toLocaleString()}\n--------------------------------\n\nנא לאשר קבלת המייל וההזמנה.\n\nבברכה,\nהוצאה לאור.`;
+    const subject = `הזמנת ספרים חדשה - הוצאת ספרי ישיבת ירוחם (${new Date().toLocaleDateString('he-IL')})`;
+    const body = `לכבוד ${invoiceSupplier.name},\nשלום ${invoiceSupplier.contact},\n\nמצ"ב סיכום הזמנת ספרים / תעודת משלוח מטעם הוצאת ספרי ישיבת ירוחם.\n\nפירוט ההזמנה:\n--------------------------------------------------\n${itemsText}\n--------------------------------------------------\n\nסה"כ לתשלום / לחיוב: ₪${totalOrderPrice.toLocaleString()}\n\nנודה לאישור קבלת ההזמנה במייל חוזר.\n\nבברכה,\nהוצאת ספרי ישיבת ירוחם.`;
     
     showToast("שולח מייל לספק ברקע...", "info");
     sendEmailBackground(invoiceSupplier.email, subject, body);
@@ -756,21 +756,33 @@ export default function PublisherApp() {
       showToast("חיבור למסד הנתונים חסר, המתן מספר שניות.", "warning");
       return;
     }
-    showToast("מייבא ומעדכן נתונים מהאתר...", "info");
+    showToast("סורק ומעדכן מחירים מהאתר (שומר על נתונים קיימים)...", "info");
     try {
-      // 1. קודם כל נמחוק את כל המלאי הישן מהענן
-      const querySnapshot = await getDocs(getCollRef('inventory'));
-      const deletePromises = querySnapshot.docs.map(docSnap => deleteDoc(getDocRef('inventory', docSnap.id)));
-      await Promise.all(deletePromises);
+      let updatedCount = 0;
+      let addedCount = 0;
 
-      // 2. נזרים את כל הרשימה המעודכנת שלנו לתוך הענן
-      const addPromises = initialInventory.map(book => addDoc(getCollRef('inventory'), book));
-      await Promise.all(addPromises);
-
-      // 3. לעדכן את הממשק המקומי כדי שלא נצטרך לרענן
-      setInventoryList(initialInventory);
+      for (const catalogBook of initialInventory) {
+        const existingBook = inventoryList.find(b => b.title === catalogBook.title);
+        
+        if (existingBook) {
+          // עדכון מחירים ועלות הפקה בלבד, ללא דריסת המלאי או המהדורות
+          await updateDoc(getDocRef('inventory', existingBook.id), {
+            prices: catalogBook.prices,
+            productionCost: catalogBook.productionCost,
+            updatedAt: Date.now()
+          });
+          updatedCount++;
+        } else {
+          // הוספת ספר שחסר לגמרי במערכת
+          await addDoc(getCollRef('inventory'), {
+            ...catalogBook,
+            updatedAt: Date.now()
+          });
+          addedCount++;
+        }
+      }
       
-      showToast("סנכרון מלא הושלם! כל המחירים וספרי החנות עודכנו.", "success");
+      showToast(`סנכרון מחירון הושלם! ${updatedCount} עודכנו, ${addedCount} חדשים.`, "success");
     } catch (error) {
       console.error(error);
       showToast("שגיאה בעדכון הספרים", "error");
@@ -1230,7 +1242,24 @@ export default function PublisherApp() {
                             <div className="font-bold text-rose-700 text-lg">₪{Number(book.productionCost || 0).toLocaleString()}</div>
                           </td>
                           <td className="py-4 px-4 text-center bg-indigo-50/30">
-                            <div className="font-bold text-indigo-700 text-xl">{Number(book.publisherStock).toLocaleString()}</div>
+                            {userRole === 'admin' ? (
+                              <input 
+                                type="number" 
+                                min="0"
+                                value={book.publisherStock} 
+                                onChange={async (e) => {
+                                  const val = Number(e.target.value);
+                                  if (db) await updateDoc(getDocRef('inventory', book.id), { publisherStock: val, updatedAt: Date.now() });
+                                  else {
+                                    setInventoryList(inventoryList.map(b => b.id === book.id ? { ...b, publisherStock: val, updatedAt: Date.now() } : b));
+                                  }
+                                }}
+                                className="w-16 md:w-20 font-bold text-indigo-700 text-lg md:text-xl text-center bg-transparent border-b-2 border-transparent hover:border-indigo-300 focus:border-indigo-600 focus:bg-white outline-none transition-all"
+                                dir="ltr"
+                              />
+                            ) : (
+                              <div className="font-bold text-indigo-700 text-xl">{Number(book.publisherStock).toLocaleString()}</div>
+                            )}
                             <div className="text-[10px] text-indigo-400">במחסן הראשי</div>
                           </td>
                           <td className="py-4 px-4">
@@ -1620,7 +1649,7 @@ export default function PublisherApp() {
                           <p className="text-sm font-bold text-indigo-600">₪{Number(log.totalAmount).toLocaleString()}</p>
                         </div>
                       </div>
-                      <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-600 whitespace-pre-wrap font-mono border border-slate-100">
+                      <div className="bg-white rounded-lg p-3 text-sm text-slate-700 whitespace-pre-wrap border border-slate-200/60 leading-relaxed shadow-sm">
                         {log.details}
                       </div>
                       <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-2 border-t border-slate-100 mt-1">
@@ -1946,7 +1975,7 @@ export default function PublisherApp() {
                         <div className="flex items-center gap-2 w-full md:w-auto justify-between">
                             <span className="text-xs md:text-sm text-slate-500">כמות מודפסת:</span>
                             <div className="flex items-center gap-2">
-                                <input required type="number" min="1" value={ed.printRun || ''} onChange={(e) => handleUpdateEdition(setNewBookForm, newBookForm, idx, 'printRun', e.target.value)} className="w-20 md:w-24 p-2 md:p-1.5 border border-slate-200 rounded text-sm focus:border-indigo-500 outline-none" dir="ltr" />
+                                <input required type="number" min="0" value={ed.printRun || ''} onChange={(e) => handleUpdateEdition(setNewBookForm, newBookForm, idx, 'printRun', e.target.value)} className="w-20 md:w-24 p-2 md:p-1.5 border border-slate-200 rounded text-sm focus:border-indigo-500 outline-none" dir="ltr" />
                                 <button type="button" onClick={() => handleRemoveEdition(setNewBookForm, newBookForm, idx)} className="text-slate-400 hover:text-red-500 p-1 bg-slate-50 rounded md:bg-transparent"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
                             </div>
                         </div>
@@ -1981,7 +2010,7 @@ export default function PublisherApp() {
                           <div className="flex items-center gap-2 w-full md:w-auto justify-between">
                               <span className="text-xs md:text-sm text-slate-500">עותקים:</span>
                               <div className="flex items-center gap-2">
-                                <input required type="number" min="1" value={item.amount || ''} onChange={(e) => handleUpdateBookBreakdownRow(idx, 'amount', e.target.value)} className="w-20 md:w-24 p-2 border border-slate-200 rounded-md text-sm outline-none" dir="ltr" />
+                                <input required type="number" min="0" value={item.amount || ''} onChange={(e) => handleUpdateBookBreakdownRow(idx, 'amount', e.target.value)} className="w-20 md:w-24 p-2 border border-slate-200 rounded-md text-sm outline-none" dir="ltr" />
                                 <button type="button" onClick={() => handleRemoveBookBreakdownRow(idx)} className="text-slate-400 hover:text-red-500 p-1 bg-slate-50 rounded md:bg-transparent"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
                               </div>
                           </div>
@@ -2043,7 +2072,7 @@ export default function PublisherApp() {
                         <div className="flex items-center gap-2 w-full md:w-auto justify-between">
                             <span className="text-xs md:text-sm text-slate-500">כמות:</span>
                             <div className="flex items-center gap-2">
-                                <input required type="number" min="1" value={ed.printRun || ''} onChange={(e) => handleUpdateEdition(setEditingBook, editingBook, idx, 'printRun', e.target.value)} className="w-20 md:w-24 p-2 md:p-1.5 border border-slate-200 rounded text-sm outline-none" dir="ltr" />
+                                <input required type="number" min="0" value={ed.printRun || ''} onChange={(e) => handleUpdateEdition(setEditingBook, editingBook, idx, 'printRun', e.target.value)} className="w-20 md:w-24 p-2 md:p-1.5 border border-slate-200 rounded text-sm outline-none" dir="ltr" />
                                 <button type="button" onClick={() => handleRemoveEdition(setEditingBook, editingBook, idx)} className="text-slate-400 hover:text-red-500 p-1 bg-slate-50 rounded md:bg-transparent"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
                             </div>
                         </div>
@@ -2075,7 +2104,7 @@ export default function PublisherApp() {
                         <div className="flex items-center gap-2 w-full md:w-auto justify-between">
                             <span className="text-xs md:text-sm text-slate-500">עותקים:</span>
                             <div className="flex items-center gap-2">
-                                <input required type="number" min="1" value={item.amount || ''} onChange={(e) => handleUpdateEditBookBreakdownRow(idx, 'amount', e.target.value)} className="w-20 md:w-24 p-2 border border-slate-200 rounded-md text-sm outline-none" dir="ltr" />
+                                <input required type="number" min="0" value={item.amount || ''} onChange={(e) => handleUpdateEditBookBreakdownRow(idx, 'amount', e.target.value)} className="w-20 md:w-24 p-2 border border-slate-200 rounded-md text-sm outline-none" dir="ltr" />
                                 <button type="button" onClick={() => handleRemoveEditBookBreakdownRow(idx)} className="text-slate-400 hover:text-red-500 p-1 bg-slate-50 rounded md:bg-transparent"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
                             </div>
                         </div>
@@ -2242,93 +2271,3 @@ export default function PublisherApp() {
     </div>
   );
 }
-<!-- ... existing code ... -->
-  // פונקציית הקסם - ייבוא קטלוג
-  const handleImportYhyCatalog = async () => {
-    if (!db) {
-      showToast("חיבור למסד הנתונים חסר, המתן מספר שניות.", "warning");
-      return;
-    }
-    showToast("סורק ומעדכן מחירים מהאתר (שומר על נתונים קיימים)...", "info");
-    try {
-      let updatedCount = 0;
-      let addedCount = 0;
-
-      for (const catalogBook of initialInventory) {
-        const existingBook = inventoryList.find(b => b.title === catalogBook.title);
-        
-        if (existingBook) {
-          // עדכון מחירים ועלות הפקה בלבד, ללא דריסת המלאי או המהדורות
-          await updateDoc(getDocRef('inventory', existingBook.id), {
-            prices: catalogBook.prices,
-            productionCost: catalogBook.productionCost,
-            updatedAt: Date.now()
-          });
-          updatedCount++;
-        } else {
-          // הוספת ספר שחסר לגמרי במערכת
-          await addDoc(getCollRef('inventory'), {
-            ...catalogBook,
-            updatedAt: Date.now()
-          });
-          addedCount++;
-        }
-      }
-      
-      showToast(`סנכרון מחירון הושלם! ${updatedCount} עודכנו, ${addedCount} חדשים.`, "success");
-    } catch (error) {
-      console.error(error);
-      showToast("שגיאה בעדכון הספרים", "error");
-    }
-  };
-
-  const handleManualStockUpdate = async (e) => {
-<!-- ... existing code ... -->
-                          <td className="py-4 px-4 text-center bg-rose-50/40 border-x border-slate-100">
-                            <div className="font-bold text-rose-700 text-lg">₪{Number(book.productionCost || 0).toLocaleString()}</div>
-                          </td>
-                          <td className="py-4 px-4 text-center bg-indigo-50/30">
-                            {userRole === 'admin' ? (
-                              <input 
-                                type="number" 
-                                min="0"
-                                value={book.publisherStock} 
-                                onChange={async (e) => {
-                                  const val = Number(e.target.value);
-                                  if (db) await updateDoc(getDocRef('inventory', book.id), { publisherStock: val, updatedAt: Date.now() });
-                                }}
-                                className="w-16 md:w-20 font-bold text-indigo-700 text-lg md:text-xl text-center bg-transparent border-b-2 border-transparent hover:border-indigo-300 focus:border-indigo-600 focus:bg-white outline-none transition-all"
-                                dir="ltr"
-                              />
-                            ) : (
-                              <div className="font-bold text-indigo-700 text-xl">{Number(book.publisherStock).toLocaleString()}</div>
-                            )}
-                            <div className="text-[10px] text-indigo-400">במחסן הראשי</div>
-                          </td>
-                          <td className="py-4 px-4">
-<!-- ... existing code ... -->
-                            <span className="text-xs md:text-sm text-slate-500">כמות מודפסת:</span>
-                            <div className="flex items-center gap-2">
-                                <input required type="number" min="0" value={ed.printRun} onChange={(e) => handleUpdateEdition(setNewBookForm, newBookForm, idx, 'printRun', e.target.value)} className="w-20 md:w-24 p-2 md:p-1.5 border border-slate-200 rounded text-sm focus:border-indigo-500 outline-none" dir="ltr" />
-                                <button type="button" onClick={() => handleRemoveEdition(setNewBookForm, newBookForm, idx)} className="text-slate-400 hover:text-red-500 p-1 bg-slate-50 rounded md:bg-transparent"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
-                            </div>
-<!-- ... existing code ... -->
-                              <span className="text-xs md:text-sm text-slate-500">עותקים:</span>
-                              <div className="flex items-center gap-2">
-                                <input required type="number" min="0" value={item.amount} onChange={(e) => handleUpdateBookBreakdownRow(idx, 'amount', e.target.value)} className="w-20 md:w-24 p-2 border border-slate-200 rounded-md text-sm outline-none" dir="ltr" />
-                                <button type="button" onClick={() => handleRemoveBookBreakdownRow(idx)} className="text-slate-400 hover:text-red-500 p-1 bg-slate-50 rounded md:bg-transparent"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
-                              </div>
-<!-- ... existing code ... -->
-                            <span className="text-xs md:text-sm text-slate-500">כמות:</span>
-                            <div className="flex items-center gap-2">
-                                <input required type="number" min="0" value={ed.printRun} onChange={(e) => handleUpdateEdition(setEditingBook, editingBook, idx, 'printRun', e.target.value)} className="w-20 md:w-24 p-2 md:p-1.5 border border-slate-200 rounded text-sm outline-none" dir="ltr" />
-                                <button type="button" onClick={() => handleRemoveEdition(setEditingBook, editingBook, idx)} className="text-slate-400 hover:text-red-500 p-1 bg-slate-50 rounded md:bg-transparent"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
-                            </div>
-<!-- ... existing code ... -->
-                            <span className="text-xs md:text-sm text-slate-500">עותקים:</span>
-                            <div className="flex items-center gap-2">
-                                <input required type="number" min="0" value={item.amount} onChange={(e) => handleUpdateEditBookBreakdownRow(idx, 'amount', e.target.value)} className="w-20 md:w-24 p-2 border border-slate-200 rounded-md text-sm outline-none" dir="ltr" />
-                                <button type="button" onClick={() => handleRemoveEditBookBreakdownRow(idx)} className="text-slate-400 hover:text-red-500 p-1 bg-slate-50 rounded md:bg-transparent"><X className="w-4 h-4 md:w-5 md:h-5" /></button>
-                            </div>
-<!-- ... existing code ... -->
-```eof
