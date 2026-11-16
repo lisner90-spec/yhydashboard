@@ -40,7 +40,7 @@ const EMAILJS_TEMPLATE_ID = "template_ye1ep37";
 const EMAILJS_PUBLIC_KEY = "7Xb1V_hTF9rs61RxX";
 
 // ==========================================
-// 3. נתוני הדגמה 
+// 3. נתוני הדגמה התחלתיים
 // ==========================================
 const initialStatsData = {
   monthly: { inProduction: '12', completed: '145', sold: '3,240', revenue: '142,500', trend: '+18.5%', alerts: '3' },
@@ -53,18 +53,12 @@ const kanbanColumns = [
 ];
 
 const initialTasksFlat = [
-  { status: 'in_progress', title: 'מסע אל הלא נודע', author: 'יעל כהן', date: '15/10/2026', coverFile: null, bookFile: 'טיוטה_ראשונית.docx', dedicationFile: null, invoices: [{ id: 1, desc: 'קריאת לקטורה', amount: 450, receiptFile: null }] },
-  { status: 'in_progress', title: 'סודות המטבח האיטלקי', author: 'מיכל אהרוני', date: '01/11/2026', coverFile: null, bookFile: 'מטבח_איטלקי_עריכה.pdf', dedicationFile: null, invoices: [{ id: 2, desc: 'מקדמה לעורכת', amount: 1500, receiptFile: 'קבלה_עורכת.pdf' }] },
   { status: 'in_progress', title: 'כלכלת המחר', author: 'פרופ׳ יצחק לוי', date: '10/11/2026', coverFile: 'cover_draft_v2.jpg', bookFile: 'כלכלת_המחר_סופי.pdf', dedicationFile: null, invoices: [{ id: 3, desc: 'עריכה לשונית', amount: 2200, receiptFile: null }, { id: 4, desc: 'עיצוב כריכה', amount: 1800, receiptFile: null }] },
-  { status: 'published', title: 'המדריך השלם לבינה מלאכותית', author: 'עמית שרון', date: '15/11/2026', coverFile: 'ai_cover_final.pdf', bookFile: 'ai_book_print.pdf', dedicationFile: 'ai_dedications.pdf', invoices: [{ id: 5, desc: 'עריכה ועימוד', amount: 5500, receiptFile: 'חשבונית_עימוד.pdf' }] }
 ];
 
 const initialSuppliers = [
-  { name: 'מחסן ראשי - פתח תקווה', type: 'מחסן לוגיסטי', contact: 'אבי כהן', phone: '050-1234567', email: 'avi@publisher-logistics.co.il', status: 'פעיל - יש הסכם' },
-  { name: 'צומת ספרים - מרלו״ג', type: 'רשת קמעונאית', contact: 'רונית לוי', phone: '052-7654321', email: 'ronit@zomet.co.il', status: 'פעיל - יש הסכם' },
-  { name: 'סטימצקי - הפצה', type: 'רשת קמעונאית', contact: 'דני אלמגור', phone: '054-9876543', email: 'dani@steimatzky.co.il', status: 'ממתין לספרים' },
-  { name: 'דפוס קורן בע"מ', type: 'בית דפוס', contact: 'שמואל קורן', phone: '02-6543210', email: 'office@koren-print.co.il', status: 'פעיל - יש הסכם' },
-  { name: 'חנויות עצמאיות (הפצה מרוכזת)', type: 'הפצה', contact: 'יעל מזרחי', phone: '050-9988776', email: 'indie-dist@publisher.co.il', status: 'אין שיתוף פעולה' }
+  { name: 'מחסן ראשי - ישיבת ירוחם', type: 'מחסן לוגיסטי', contact: 'מנהל הפצה', phone: '050-0000000', email: 'office@yhy.co.il', status: 'פעיל - יש הסכם' },
+  { name: 'דברי שיר', type: 'רשת קמעונאית', contact: 'נציג רשת', phone: '052-0000000', email: 'info@dshir.co.il', status: 'פעיל - יש הסכם' }
 ];
 
 const getStatusColor = (status) => {
@@ -77,44 +71,33 @@ const getStatusColor = (status) => {
   }
 };
 
-const initialCampaigns = [
-  { name: 'קמפיין חגים - פייסבוק ואינסטגרם', book: 'סודות המטבח האיטלקי', budget: 4500, spent: 2100, roas: '2.4x' },
-  { name: 'קידום ממומן גוגל (Search)', book: 'המדריך השלם לבינה מלאכותית', budget: 2000, spent: 1850, roas: '3.1x' }
-];
-
-const initialPrCopies = [
-  { recipient: 'עמית סגל (חדשות 12)', book: 'כלכלת המחר', date: '10/11/2026', status: 'נמסר ליעד' },
-  { recipient: 'מוסף ספרים - הארץ', book: 'מסע אל הלא נודע', date: '01/11/2026', status: 'פורסמה ביקורת' }
-];
+const initialCampaigns = [];
+const initialPrCopies = [];
 
 const initialIntegrations = [
   { id: 'morning', name: 'Morning (חשבונית ירוקה)', type: 'הנהלת חשבונות ומסמכים', connected: true, lastSync: 'לפני 15 דקות', logo: 'M' },
-  { id: 'shopify', name: 'Shopify (אתר ההוצאה)', type: 'פלטפורמת מסחר / חנות אונליין', connected: true, lastSync: 'לפני שעתיים', logo: 'S' }
+  { id: 'shopify', name: 'WooCommerce (אתר ההוצאה)', type: 'פלטפורמת מסחר / חנות אונליין', connected: true, lastSync: 'לפני שעתיים', logo: 'W' }
 ];
 
+// מחירון ומלאי מעודכן לפי קובץ האקסל
 const initialInventory = [
-  { 
-    title: 'המדריך השלם לבינה מלאכותית', author: 'עמית שרון', isbn: '978-965-123-456-7', threshold: 200, 
-    editions: [{ name: 'מהדורה 1', printRun: 2000 }], publisherStock: 250,
-    prices: { general: 110, supplier: 55, yeshiva: 70 },
-    productionCost: 24500,
-    breakdown: [
-      { supplier: 'מחסן ראשי - פתח תקווה', amount: 800 },
-      { supplier: 'צומת ספרים - מרלו״ג', amount: 250 },
-      { supplier: 'סטימצקי - הפצה', amount: 200 }
-    ]
-  },
-  { 
-    title: 'סודות המטבח האיטלקי', author: 'מיכל אהרוני', isbn: '978-965-456-789-0', threshold: 150, 
-    editions: [{ name: 'מהדורה 1', printRun: 1500 }, { name: 'מהדורה 2', printRun: 1000 }], publisherStock: 100,
-    prices: { general: 120, supplier: 60, yeshiva: 80 },
-    productionCost: 18200,
-    breakdown: [
-      { supplier: 'מחסן ראשי - פתח תקווה', amount: 400 },
-      { supplier: 'צומת ספרים - מרלו״ג', amount: 300 },
-      { supplier: 'סטימצקי - הפצה', amount: 150 }
-    ]
-  }
+  { id: '1', title: "אותך אבקש - שערים לימי התשובה", author: "הרב חיים וולפסון", isbn: "", threshold: 30, publisherStock: 0, prices: { general: 59, supplier: 29, yeshiva: 59 }, productionCost: 10.03, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: '2', title: "ונהר יוצא מעדן - חגי תשרי", author: "הרב אוריאל עיטם", isbn: "", threshold: 30, publisherStock: 0, prices: { general: 60, supplier: 30, yeshiva: 60 }, productionCost: 14.04, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: '3', title: "ונהר יוצא מעדן - מועדי חורף", author: "הרב אוריאל עיטם", isbn: "", threshold: 30, publisherStock: 0, prices: { general: 60, supplier: 30, yeshiva: 60 }, productionCost: 14.04, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: '4', title: "ונהר יוצא מעדן - חגי האביב", author: "הרב אוריאל עיטם", isbn: "", threshold: 30, publisherStock: 0, prices: { general: 60, supplier: 30, yeshiva: 60 }, productionCost: 14.04, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: '5', title: "ונהר יוצא מעדן סט", author: "הרב אוריאל עיטם", isbn: "", threshold: 30, publisherStock: 0, prices: { general: 160, supplier: 90, yeshiva: 160 }, productionCost: 42.13, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: '6', title: "ונהר יוצא מעדן - אכילה ומצוותיה", author: "הרב אוריאל עיטם", isbn: "", threshold: 30, publisherStock: 0, prices: { general: 69, supplier: 32, yeshiva: 69 }, productionCost: 16.52, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: '7', title: "להשקות את הגן - סנהדרין", author: "הרב חיים וולפסון", isbn: "", threshold: 30, publisherStock: 0, prices: { general: 69, supplier: 30, yeshiva: 69 }, productionCost: 17.84, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: '8', title: "להשקות את הגן - סוכה", author: "הרב חיים וולפסון", isbn: "", threshold: 30, publisherStock: 0, prices: { general: 59, supplier: 28, yeshiva: 59 }, productionCost: 12.50, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: '9', title: "שערים למשנתו של מניטו", author: "הרב אוריאל עיטם / ישיבת ירוחם", isbn: "", threshold: 30, publisherStock: 0, prices: { general: 83, supplier: 42, yeshiva: 83 }, productionCost: 12.66, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: '10', title: "והתהלכתי בתוככם א", author: "ישיבת ירוחם", isbn: "", threshold: 30, publisherStock: 0, prices: { general: 65, supplier: 35, yeshiva: 65 }, productionCost: 0, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: '11', title: "והתהלכתי בתוככם ב", author: "ישיבת ירוחם", isbn: "", threshold: 30, publisherStock: 0, prices: { general: 65, supplier: 35, yeshiva: 65 }, productionCost: 0, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: '12', title: "והתהלכתי בתוככם סט", author: "ישיבת ירוחם", isbn: "", threshold: 30, publisherStock: 0, prices: { general: 120, supplier: 68, yeshiva: 120 }, productionCost: 0, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: '13', title: "חוברת שובו אליי - הרב בלומנצווייג", author: "הרב בלומנצווייג", isbn: "", threshold: 30, publisherStock: 0, prices: { general: 29, supplier: 19, yeshiva: 29 }, productionCost: 0, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: '14', title: "חוברת כעץ שתול - תפילה", author: "ישיבת ירוחם", isbn: "", threshold: 30, publisherStock: 0, prices: { general: 20, supplier: 16, yeshiva: 20 }, productionCost: 0, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: '15', title: "חוברת כעץ שתול - עיון", author: "ישיבת ירוחם", isbn: "", threshold: 30, publisherStock: 0, prices: { general: 20, supplier: 16, yeshiva: 20 }, productionCost: 0, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: '16', title: "חוברת כעץ שתול - אמונה", author: "ישיבת ירוחם", isbn: "", threshold: 30, publisherStock: 0, prices: { general: 20, supplier: 16, yeshiva: 20 }, productionCost: 0, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: '17', title: "שמיטה", author: "ישיבת ירוחם", isbn: "", threshold: 30, publisherStock: 0, prices: { general: 0, supplier: 23, yeshiva: 0 }, productionCost: 0, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() }
 ];
 
 const initialValidUsers = [
@@ -123,16 +106,15 @@ const initialValidUsers = [
 ];
 
 const initialNotes = [
-  { id: '1', text: 'לבדוק מלאי חסר של "כלכלת המחר" בצומת ספרים.', color: 'bg-yellow-100', date: '03/11/2026' },
-  { id: '2', text: 'פגישה עם עורכת הלשון ביום חמישי ב-10:00.', color: 'bg-green-100', date: '02/11/2026' }
+  { id: '1', text: 'לבדוק מלאי חסר בצומת ספרים.', color: 'bg-yellow-100', date: '03/11/2026' }
 ];
 
 const initialOrders = [
   { 
     id: '1', orderId: '#12345', customerName: 'ישראל ישראלי', 
-    address: 'רחוב הרצל 15, דירה 4, תל אביב', shippingMethod: 'שליח עד הבית', 
+    address: 'רחוב הרצל 15, תל אביב', shippingMethod: 'שליח עד הבית', 
     total: '120.00', date: '03/11/2026', time: '14:30',
-    items: [{ name: 'סודות המטבח האיטלקי', quantity: 1 }],
+    items: [{ name: 'שערים למשנתו של מניטו', quantity: 1 }],
     status: 'pending'
   }
 ];
@@ -217,7 +199,7 @@ export default function PublisherApp() {
 
   // --- Inventory States ---
   const [searchQuery, setSearchQuery] = useState('');
-  const [inventoryList, setInventoryList] = useState(initialInventory.map((b, i) => ({ id: i.toString(), ...b })));
+  const [inventoryList, setInventoryList] = useState(initialInventory);
   
   const [isUpdateStockModalOpen, setIsUpdateStockModalOpen] = useState(false);
   const [stockUpdateForm, setStockUpdateForm] = useState({ bookId: '', amount: 0 });
@@ -333,7 +315,7 @@ export default function PublisherApp() {
         if (snap.empty) {
           console.log("Seeding initial mock data to Database...");
           await setDoc(getDocRef('globals', 'stats'), initialStatsData);
-          for (const item of initialInventory) await addDoc(getCollRef('inventory'), item);
+          for (const item of initialInventory) await setDoc(doc(db, 'erp', appId, 'inventory', item.id), item);
           for (const item of initialSuppliers) await addDoc(getCollRef('suppliers'), item);
           for (const item of initialCampaigns) await addDoc(getCollRef('campaigns'), item);
           for (const item of initialPrCopies) await addDoc(getCollRef('prCopies'), item);
