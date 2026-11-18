@@ -9,7 +9,8 @@ import {
   Mail, Megaphone, Settings, RefreshCw, Download, Edit, Phone, Menu, Trash2,
   UserCog, StickyNote, History, Clock, ShoppingCart, MessageCircle, Gift,
   ArrowLeftRight, Calculator, ClipboardList, Copy, CreditCard, Database,
-  Minus, Wallet, BookMarked, Scale, Award, Eye, Check, Send
+  Minus, Wallet, BookMarked, Scale, Award, Eye, Check, Send,
+  LogIn, LogOut, Lock, Shield, KeyRound
 } from 'lucide-react';
 
 // ==========================================
@@ -64,6 +65,10 @@ const KANBAN_COLUMNS = [
   { id: 'done', title: 'הושלם', color: 'bg-emerald-50/70 border-emerald-200', badge: 'bg-emerald-100 text-emerald-700' },
 ];
 
+const initialUsers = [
+  { id: 'user_admin', username: 'admin', password: '1234', name: 'מנהל ההוצאה', role: 'admin', createdAt: Date.now() }
+];
+
 const loadLocal = (key, fallback) => {
   try {
     const raw = localStorage.getItem(key);
@@ -82,13 +87,24 @@ const formatWhatsAppPhone = (rawPhone) => {
 };
 
 export default function App() {
-  // --- Navigation & User State ---
+  // --- Navigation & Auth State ---
   const [activeTab, setActiveTab] = useState('inventory');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [userRole, setUserRole] = useState('admin');
-  const [username] = useState('admin');
-  const [currentUserName] = useState('מנהל ההוצאה');
   const [dbConnected, setDbConnected] = useState(false);
+
+  // --- Users & Session State ---
+  const [usersList, setUsersList] = useState(() => {
+    const saved = loadLocal('yhy_erp_users', initialUsers);
+    return Array.isArray(saved) && saved.length > 0 ? saved : initialUsers;
+  });
+  const [currentUser, setCurrentUser] = useState(() => loadLocal('yhy_erp_session', null));
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+  const [loginError, setLoginError] = useState('');
+  const [newUserForm, setNewUserForm] = useState({ name: '', username: '', password: '', role: 'viewer' });
+  const [editingUser, setEditingUser] = useState(null);
+
+  const userRole = currentUser?.role || 'viewer';
+  const currentUserName = currentUser?.name || 'אורח';
 
   // --- Core Data States ---
   const [inventoryList, setInventoryList] = useState(() => loadLocal('yhy_erp_inventory', initialInventory));
@@ -143,6 +159,11 @@ export default function App() {
       unsubs.push(onSnapshot(getCollRef('print_quotes'), snap => setPrintQuotes(snap.docs.map(d => ({ id: d.id, ...d.data() }))), handleDbError));
       unsubs.push(onSnapshot(getCollRef('campaigns'), snap => setCampaignsList(snap.docs.map(d => ({ id: d.id, ...d.data() }))), handleDbError));
       unsubs.push(onSnapshot(getCollRef('pr_copies'), snap => setPrCopies(snap.docs.map(d => ({ id: d.id, ...d.data() }))), handleDbError));
+      unsubs.push(onSnapshot(getCollRef('users'), snap => {
+        if (!snap.empty) {
+          setUsersList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }
+      }, handleDbError));
     } catch (err) {
       handleDbError(err);
     }
@@ -150,6 +171,13 @@ export default function App() {
   }, []);
 
   // --- Save Local Backup on every change ---
+  useEffect(() => { try { localStorage.setItem('yhy_erp_users', JSON.stringify(usersList)); } catch {} }, [usersList]);
+  useEffect(() => {
+    try {
+      if (currentUser) localStorage.setItem('yhy_erp_session', JSON.stringify(currentUser));
+      else localStorage.removeItem('yhy_erp_session');
+    } catch {}
+  }, [currentUser]);
   useEffect(() => { try { localStorage.setItem('yhy_erp_inventory', JSON.stringify(inventoryList)); } catch {} }, [inventoryList]);
   useEffect(() => { try { localStorage.setItem('yhy_erp_suppliers', JSON.stringify(suppliersList)); } catch {} }, [suppliersList]);
   useEffect(() => { try { localStorage.setItem('yhy_erp_tasks', JSON.stringify(tasksList)); } catch {} }, [tasksList]);
@@ -163,97 +191,113 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem('yhy_erp_pr_copies', JSON.stringify(prCopies)); } catch {} }, [prCopies]);
 
   // ==========================================
-  // UI States & Modals
+  // התחברות וניהול משתמשים
   // ==========================================
-  const [searchQuery, setSearchQuery] = useState('');
-  const [inventorySort, setInventorySort] = useState('alphabetical');
-  const [supplierSearch, setSupplierSearch] = useState('');
-  const [supplierSort, setSupplierSort] = useState('alphabetical');
-  const [ordersSubTab, setOrdersSubTab] = useState('pending');
-
-  // Warehouse Mode
-  const [isWarehouseMode, setIsWarehouseMode] = useState(false);
-  const [warehouseBoxSize, setWarehouseBoxSize] = useState(20);
-
-  // Book Modals
-  const emptyBookForm = {
-    title: '', author: '', isbn: '', threshold: 30, publisherStock: 0, productionCost: 0,
-    prices: { catalog: 0, general: 0, supplier: 0, yeshiva: 0 },
-    editions: [{ name: 'מהדורה 1', printRun: 0 }],
-    breakdown: []
+  const handleLogin = (e) => {
+    e.preventDefault();
+    const uname = loginForm.username.trim().toLowerCase();
+    const pwd = loginForm.password;
+    const found = usersList.find(
+      u => (u.username || '').trim().toLowerCase() === uname && String(u.password) === String(pwd)
+    );
+    if (!found) {
+      setLoginError('שם משתמש או סיסמה שגויים. אנא נסה שנית.');
+      return;
+    }
+    setCurrentUser({ id: found.id, username: found.username, name: found.name, role: found.role });
+    setLoginForm({ username: '', password: '' });
+    setLoginError('');
+    setActiveTab('inventory');
+    showToast(`שלום ${found.name}, התחברת בהצלחה!`, 'success');
   };
-  const [isAddBookModalOpen, setIsAddBookModalOpen] = useState(false);
-  const [newBookForm, setNewBookForm] = useState(emptyBookForm);
-  const [editingBook, setEditingBook] = useState(null);
 
-  // Gifts / Donors Modal
-  const [isGiftModalOpen, setIsGiftModalOpen] = useState(false);
-  const [isGiftHistoryOpen, setIsGiftHistoryOpen] = useState(false);
-  const [giftForm, setGiftForm] = useState({ bookId: '', quantity: 1, recipient: '', category: 'תורם', notes: '' });
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setMobileMenuOpen(false);
+    setActiveTab('inventory');
+    showToast('התנתקת מהמערכת.', 'info');
+  };
 
-  // Suppliers Modals
-  const emptySupplierForm = { name: '', contact: '', phone: '', email: '', address: '', notes: '' };
-  const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
-  const [editingSupplier, setEditingSupplier] = useState(null);
-  const [supplierForm, setSupplierForm] = useState(emptySupplierForm);
-  const [viewingSupplierStock, setViewingSupplierStock] = useState(null);
+  const handleAddUser = async (e) => {
+    e.preventDefault();
+    const uname = newUserForm.username.trim().toLowerCase();
+    if (!newUserForm.name.trim() || !uname || !newUserForm.password) return;
+    if (usersList.some(u => (u.username || '').trim().toLowerCase() === uname)) {
+      showToast('שם המשתמש כבר קיים במערכת.', 'warning');
+      return;
+    }
+    const userObj = {
+      name: newUserForm.name.trim(),
+      username: uname,
+      password: newUserForm.password,
+      role: newUserForm.role,
+      createdAt: Date.now()
+    };
+    if (db && dbConnected) {
+      try {
+        await addDoc(getCollRef('users'), userObj);
+      } catch {
+        setUsersList(prev => [...prev, { ...userObj, id: 'user_' + Date.now() }]);
+      }
+    } else {
+      setUsersList(prev => [...prev, { ...userObj, id: 'user_' + Date.now() }]);
+    }
+    setNewUserForm({ name: '', username: '', password: '', role: 'viewer' });
+    showToast(`המשתמש "${userObj.name}" נוסף בהצלחה!`, 'success');
+  };
 
-  // Supplier Order / Invoice Modal
-  const [isSupplierInvoiceModalOpen, setIsSupplierInvoiceModalOpen] = useState(false);
-  const [invoiceSupplier, setInvoiceSupplier] = useState(null);
-  const [invoiceItems, setInvoiceItems] = useState([{ bookId: '', quantity: 1 }]);
-  const [deductFromWarehouse, setDeductFromWarehouse] = useState(true);
-  const [invoiceNotes, setInvoiceNotes] = useState('');
+  const handleSaveEditUser = async (e) => {
+    e.preventDefault();
+    if (!editingUser || !editingUser.name.trim() || !editingUser.username.trim()) return;
+    const uname = editingUser.username.trim().toLowerCase();
+    const duplicate = usersList.find(u => u.id !== editingUser.id && (u.username || '').trim().toLowerCase() === uname);
+    if (duplicate) {
+      showToast('שם משתמש זה כבר תפוס.', 'warning');
+      return;
+    }
+    const updatedFields = {
+      name: editingUser.name.trim(),
+      username: uname,
+      role: editingUser.role,
+      ...(editingUser.newPassword ? { password: editingUser.newPassword } : {})
+    };
+    setUsersList(prev => prev.map(u => u.id === editingUser.id ? { ...u, ...updatedFields } : u));
+    if (currentUser?.id === editingUser.id) {
+      setCurrentUser(prev => ({ ...prev, name: updatedFields.name, username: updatedFields.username, role: updatedFields.role }));
+    }
+    if (db && dbConnected && editingUser.id) {
+      try { await updateDoc(getDocRef('users', editingUser.id), updatedFields); } catch {}
+    }
+    setEditingUser(null);
+    showToast('פרטי המשתמש עודכנו בהצלחה!', 'success');
+  };
 
-  // Consignment Settlement Modal
-  const [isConsignmentModalOpen, setIsConsignmentModalOpen] = useState(false);
-  const [consignmentSupplier, setConsignmentSupplier] = useState(null);
-  const [consignmentForm, setConsignmentForm] = useState({ type: 'sale', bookId: '', quantity: 1, unitPrice: 0, notes: '' });
-
-  // Supplier History & Debt
-  const [isSupplierHistoryModalOpen, setIsSupplierHistoryModalOpen] = useState(false);
-  const [selectedSupplierForHistory, setSelectedSupplierForHistory] = useState(null);
-  const [partialPayInputs, setPartialPayInputs] = useState({});
-
-  // POS State
-  const [posCart, setPosCart] = useState([]);
-  const [posPriceMode, setPosPriceMode] = useState('yeshiva');
-  const [posPaymentMethod, setPosPaymentMethod] = useState('מזומן');
-  const [posBuyerNote, setPosBuyerNote] = useState('');
-  const [posSearch, setPosSearch] = useState('');
-
-  // Production Kanban Modals
-  const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
-  const [newTaskForm, setNewTaskForm] = useState({ title: '', author: '', status: 'planned', notes: '' });
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [taskInvoiceForm, setTaskInvoiceForm] = useState({ description: '', amount: '' });
-
-  // Break-Even Calculator
-  const [isBreakEvenModalOpen, setIsBreakEvenModalOpen] = useState(false);
-  const [breakEvenForm, setBreakEvenForm] = useState({ bookTitle: '', totalCost: 15000, printRun: 1000, sellPrice: 60 });
-
-  // Digital Catalog Modal
-  const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false);
-  const [catalogPriceTier, setCatalogPriceTier] = useState('general');
-  const [catalogOnlyInStock, setCatalogOnlyInStock] = useState(false);
-
-  // Print Document Modal
-  const [printDoc, setPrintDoc] = useState(null);
-
-  // Print Quotes Comparison State
-  const [selectedQuoteProject, setSelectedQuoteProject] = useState('ALL');
-  const [isAddQuoteModalOpen, setIsAddQuoteModalOpen] = useState(false);
-  const [previewQuoteDoc, setPreviewQuoteDoc] = useState(null);
-  const [quoteForm, setQuoteForm] = useState({
-    projectTitle: '', printerName: '', copies: 1000, totalPrice: '', includesVat: true,
-    pages: '', coverType: 'כריכה קשה', paperType: 'נטול עץ 80 גרם', deliveryDays: '',
-    notes: '', fileName: '', fileType: '', fileData: ''
-  });
-
-  // Notes & Marketing Forms
-  const [newNoteText, setNewNoteText] = useState('');
-  const [newCampaignForm, setNewCampaignForm] = useState({ name: '', budget: '', spent: '', channel: 'וואטסאפ / בוגרים' });
-  const [newPrForm, setNewPrForm] = useState({ bookTitle: '', recipient: '', role: 'מבקר / עיתונאי' });
+  const handleDeleteUser = (user) => {
+    if (user.id === currentUser?.id) {
+      showToast('לא ניתן למחוק את המשתמש המחובר כרגע.', 'warning');
+      return;
+    }
+    const adminsCount = usersList.filter(u => u.role === 'admin').length;
+    if (user.role === 'admin' && adminsCount <= 1) {
+      showToast('חייב להישאר לפחות מנהל אחד במערכת.', 'warning');
+      return;
+    }
+    setConfirmDialog({
+      title: 'מחיקת משתמש',
+      message: `האם למחוק את המשתמש "${user.name}" (${user.username}) מהמערכת?`,
+      confirmText: 'מחק משתמש',
+      confirmStyle: 'bg-red-600 hover:bg-red-700',
+      icon: <Trash2 className="w-6 h-6" />,
+      iconStyle: 'bg-red-100 text-red-600',
+      onConfirm: async () => {
+        setUsersList(prev => prev.filter(u => u.id !== user.id));
+        if (db && dbConnected && user.id) {
+          try { await deleteDoc(getDocRef('users', user.id)); } catch {}
+        }
+        showToast('המשתמש נמחק.', 'info');
+      }
+    });
+  };
 
   // ==========================================
   // חישובים ועזרים
@@ -1236,7 +1280,82 @@ export default function App() {
     { id: 'marketing', label: 'שיווק ויח״צ', icon: Megaphone },
     { id: 'integrations', label: 'אוטומציה וגיבוי', icon: Settings },
     { id: 'notes', label: 'פתקים ומשימות', icon: StickyNote },
+    ...(userRole === 'admin' ? [{ id: 'users', label: 'ניהול משתמשים', icon: UserCog }] : []),
   ];
+
+  // ==========================================
+  // מסך התחברות (כאשר המשתמש אינו מחובר)
+  // ==========================================
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-[#1E293B] to-[#2c3518] flex items-center justify-center p-4 font-sans" dir="rtl">
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/60">
+          <div className="bg-[#1E293B] p-8 text-center text-white space-y-3">
+            <div className="w-16 h-16 rounded-2xl bg-[#4B5320] mx-auto flex items-center justify-center shadow-lg border border-amber-200/30">
+              <BookOpen className="w-8 h-8 text-amber-100" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-extrabold tracking-tight">הוצאת ספרי הישיבה</h1>
+              <p className="text-xs text-slate-300 mt-1">מערכת ניהול מלאי, הפצה והפקה — ישיבת ההסדר ירוחם</p>
+            </div>
+          </div>
+
+          <form onSubmit={handleLogin} className="p-7 space-y-4">
+            <div className="space-y-1">
+              <label className="block text-xs font-bold text-slate-600">שם משתמש</label>
+              <div className="relative">
+                <UserCog className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  required
+                  type="text"
+                  autoFocus
+                  value={loginForm.username}
+                  onChange={e => { setLoginForm({ ...loginForm, username: e.target.value }); setLoginError(''); }}
+                  placeholder="הזן שם משתמש..."
+                  className="w-full pr-10 pl-3 py-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 text-sm outline-none"
+                  dir="ltr"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-xs font-bold text-slate-600">סיסמה</label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  required
+                  type="password"
+                  value={loginForm.password}
+                  onChange={e => { setLoginForm({ ...loginForm, password: e.target.value }); setLoginError(''); }}
+                  placeholder="••••••••"
+                  className="w-full pr-10 pl-3 py-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 text-sm outline-none"
+                  dir="ltr"
+                />
+              </div>
+            </div>
+
+            {loginError && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold p-3 rounded-xl flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{loginError}</span>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3.5 rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-colors"
+            >
+              <LogIn className="w-4 h-4" /> כניסה למערכת
+            </button>
+
+            <p className="text-[11px] text-center text-slate-400 pt-2">
+              {dbConnected ? 'מחובר למסד הנתונים בענן' : 'מוכן לעבודה (מצב מקומי / ענן)'}
+            </p>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   // ==========================================
   // תצוגה ראשית
@@ -1280,22 +1399,22 @@ export default function App() {
               >
                 <span className="flex items-center gap-3"><Icon className="w-4 h-4" />{item.label}</span>
                 {item.badge > 0 && (
-                  <span className="bg-rose-500 text-white text-[11px] font-bold px-2 py-0.5 rounded-full">{item.badge}</span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-        <div className="p-4 border-t border-slate-700/80 text-xs text-slate-400 flex items-center justify-between">
-          <span className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${dbConnected ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-            {dbConnected ? 'מחובר לענן' : 'מצב מקומי'}
-          </span>
+        <div className="p-4 border-t border-slate-700/80 space-y-3">
+          <div className="flex items-center justify-between text-xs">
+            <div>
+              <p className="font-bold text-white">{currentUserName}</p>
+              <p className="text-[11px] text-slate-400">{userRole === 'admin' ? 'מנהל מערכת' : 'צופה בלבד'}</p>
+            </div>
+            <span className="flex items-center gap-1.5 text-[11px] text-slate-400">
+              <span className={`w-2 h-2 rounded-full ${dbConnected ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+              {dbConnected ? 'ענן' : 'מקומי'}
+            </span>
+          </div>
           <button
-            onClick={() => setUserRole(prev => prev === 'admin' ? 'viewer' : 'admin')}
-            className="text-indigo-300 hover:text-white font-medium"
+            onClick={handleLogout}
+            className="w-full bg-slate-800 hover:bg-rose-600/90 text-slate-200 hover:text-white py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors"
           >
-            {userRole === 'admin' ? 'מצב מנהל' : 'מצב צפייה'}
+            <LogOut className="w-3.5 h-3.5" /> התנתק מהמערכת
           </button>
         </div>
       </aside>
@@ -1334,6 +1453,17 @@ export default function App() {
                 </button>
               );
             })}
+            <div className="pt-4 mt-4 border-t border-slate-700 space-y-2">
+              <div className="px-3 text-xs text-slate-300">
+                מחובר כ: <strong className="text-white">{currentUserName}</strong> ({userRole === 'admin' ? 'מנהל' : 'צופה'})
+              </div>
+              <button
+                onClick={handleLogout}
+                className="w-full bg-rose-600/90 hover:bg-rose-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2"
+              >
+                <LogOut className="w-4 h-4" /> התנתק מהמערכת
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2261,6 +2391,104 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* ==================== 11. USER MANAGEMENT (ADMIN ONLY) ==================== */}
+        {activeTab === 'users' && userRole === 'admin' && (
+          <div className="space-y-6">
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <UserCog className="w-5 h-5 text-indigo-600" /> ניהול משתמשים והרשאות
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">הוסף חברי צוות, קבע הרשאות (מנהל מלא או צופה בלבד) ועדכן סיסמאות</p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Add User Form */}
+              <form onSubmit={handleAddUser} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-3 h-fit">
+                <h3 className="font-bold text-slate-800 text-base flex items-center gap-2 border-b border-slate-100 pb-3">
+                  <Plus className="w-4 h-4 text-indigo-600" /> הוספת משתמש חדש
+                </h3>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">שם מלא *</label>
+                  <input required type="text" placeholder="למשל: דוד כהן" value={newUserForm.name} onChange={e => setNewUserForm({ ...newUserForm, name: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">שם משתמש להתחברות *</label>
+                  <input required type="text" placeholder="username" value={newUserForm.username} onChange={e => setNewUserForm({ ...newUserForm, username: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">סיסמה *</label>
+                  <input required type="password" placeholder="בחר סיסמה..." value={newUserForm.password} onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">רמת הרשאה</label>
+                  <select value={newUserForm.role} onChange={e => setNewUserForm({ ...newUserForm, role: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50">
+                    <option value="viewer">צופה בלבד (ללא עריכה ומחיקה)</option>
+                    <option value="admin">מנהל מערכת (גישה מלאה)</option>
+                  </select>
+                </div>
+                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center justify-center gap-2">
+                  <Plus className="w-4 h-4" /> צור משתמש
+                </button>
+              </form>
+
+              {/* Users List */}
+              <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                  <h3 className="font-bold text-slate-800 text-sm">משתמשים רשומים במערכת ({usersList.length})</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-right text-sm">
+                    <thead className="bg-slate-50/70 text-xs text-slate-600 border-b">
+                      <tr>
+                        <th className="p-3.5 font-bold">שם מלא</th>
+                        <th className="p-3.5 font-bold">שם משתמש</th>
+                        <th className="p-3.5 font-bold text-center">הרשאה</th>
+                        <th className="p-3.5 font-bold text-center">פעולות</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {usersList.map(u => (
+                        <tr key={u.id} className="hover:bg-slate-50/70">
+                          <td className="p-3.5 font-bold text-slate-800">
+                            {u.name}
+                            {u.id === currentUser?.id && <span className="mr-2 text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">אתה</span>}
+                          </td>
+                          <td className="p-3.5 text-slate-600 font-mono text-xs" dir="ltr">{u.username}</td>
+                          <td className="p-3.5 text-center">
+                            <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full ${u.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'}`}>
+                              <Shield className="w-3 h-3" />
+                              {u.role === 'admin' ? 'מנהל מערכת' : 'צופה בלבד'}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-center">
+                            <div className="flex justify-center gap-1">
+                              <button
+                                onClick={() => setEditingUser({ ...u, newPassword: '' })}
+                                className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                                title="ערוך משתמש / שנה סיסמה"
+                              >
+                                <KeyRound className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteUser(u)}
+                                disabled={u.id === currentUser?.id}
+                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed"
+                                title="מחק משתמש"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* ===================================================================== */}
@@ -3031,39 +3259,39 @@ export default function App() {
                       </>
                     ) : (
                       <>
-                        <th className="border border-slate-200 p-2 text-center">כמות</th>
-                        {printDoc.type === 'supplier_delivery' && <th className="border border-slate-200 p-2 text-center">מחיר יח'</th>}
-                        {printDoc.type === 'supplier_delivery' && <th className="border border-slate-200 p-2 text-center">סה"כ</th>}
-                      </>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {printDoc.items.map((item, idx) => (
-                    <tr key={idx}>
-                      <td className="border border-slate-200 p-2">{idx + 1}</td>
-                      <td className="border border-slate-200 p-2 font-medium">{item.name}</td>
-                      {printDoc.type === 'catalog' ? (
-                        <>
-                          <td className="border border-slate-200 p-2 text-slate-600">{item.author}</td>
-                          <td className="border border-slate-200 p-2 text-center font-bold">{item.price > 0 ? `₪${Number(item.price).toLocaleString()}` : 'בתיאום'}</td>
-                        </>
-                      ) : (
-                        <>
-                          <td className="border border-slate-200 p-2 text-center font-bold">{item.quantity}</td>
-                          {printDoc.type === 'supplier_delivery' && <td className="border border-slate-200 p-2 text-center">₪{Number(item.price || 0).toLocaleString()}</td>}
-                          {printDoc.type === 'supplier_delivery' && <td className="border border-slate-200 p-2 text-center font-bold">₪{Number(item.lineTotal || 0).toLocaleString()}</td>}
-                        </>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {printDoc.totalAmount > 0 && (
-                <div className="text-left font-extrabold text-lg text-slate-800">סה"כ לתשלום: ₪{Number(printDoc.totalAmount).toLocaleString()}</div>
-              )}
-              {printDoc.notes && <p className="text-xs text-slate-500">הערות: {printDoc.notes}</p>}
+      {/* Edit User Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50 flex justify-between items-center">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2"><KeyRound className="w-5 h-5 text-indigo-600" /> עריכת משתמש: {editingUser.name}</h3>
+              <button onClick={() => setEditingUser(null)}><X className="w-5 h-5 text-slate-400" /></button>
             </div>
+            <form onSubmit={handleSaveEditUser} className="p-5 space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">שם מלא</label>
+                <input required type="text" value={editingUser.name} onChange={e => setEditingUser({ ...editingUser, name: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">שם משתמש</label>
+                <input required type="text" value={editingUser.username} onChange={e => setEditingUser({ ...editingUser, username: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" dir="ltr" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">סיסמה חדשה (השאר ריק כדי לא לשנות)</label>
+                <input type="password" placeholder="••••••••" value={editingUser.newPassword || ''} onChange={e => setEditingUser({ ...editingUser, newPassword: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" dir="ltr" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">רמת הרשאה</label>
+                <select value={editingUser.role} onChange={e => setEditingUser({ ...editingUser, role: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm bg-slate-50">
+                  <option value="viewer">צופה בלבד</option>
+                  <option value="admin">מנהל מערכת</option>
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setEditingUser(null)} className="px-4 py-2 text-sm text-slate-600">ביטול</button>
+                <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl font-bold text-sm">שמור שינויים</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
