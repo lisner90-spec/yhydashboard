@@ -183,6 +183,7 @@ export default function PublisherApp() {
   const [isSupplierInvoiceModalOpen, setIsSupplierInvoiceModalOpen] = useState(false);
   const [invoiceSupplier, setInvoiceSupplier] = useState(null);
   const [invoiceItems, setInvoiceItems] = useState([]);
+  const [deductFromWarehouse, setDeductFromWarehouse] = useState(true);
 
   // --- Marketing & PR States ---
   const [campaignsList, setCampaignsList] = useState(initialCampaigns.map((c, i) => ({ id: i.toString(), ...c })));
@@ -596,6 +597,7 @@ export default function PublisherApp() {
   const openSupplierInvoice = (supplier) => {
     setInvoiceSupplier(supplier);
     setInvoiceItems([{ bookId: '', amount: 1, price: 0 }]);
+    setDeductFromWarehouse(true);
     setIsSupplierInvoiceModalOpen(true);
   };
 
@@ -614,37 +616,107 @@ export default function PublisherApp() {
   const addInvoiceItemRow = () => setInvoiceItems([...invoiceItems, { bookId: '', amount: 1, price: 0 }]);
   const removeInvoiceItemRow = (index) => setInvoiceItems(invoiceItems.filter((_, i) => i !== index));
 
-  const sendInvoiceEmail = () => {
-    if (!invoiceSupplier || !invoiceSupplier.email) {
+  // פונקציה מרכזית לעיבוד הזמנת ספק: מעדכנת מלאי אצל הספק (ואופציונלית מורידה מהמחסן הראשי), מתעדת בהיסטוריה ושולחת מייל
+  const handleProcessSupplierOrder = async (shouldSendEmail = true) => {
+    if (!invoiceSupplier) return;
+
+    const validItems = invoiceItems.filter(item => item.bookId && Number(item.amount) > 0);
+    if (validItems.length === 0) {
+      showToast("אנא בחר לפחות ספר אחד עם כמות גדולה מ-0.", "warning");
+      return;
+    }
+
+    if (shouldSendEmail && !invoiceSupplier.email) {
       showToast("לספק זה לא מוגדרת כתובת דוא״ל במערכת.", "error");
       return;
     }
+
+    // 1. איחוד כמויות לפי ספר (למקרה שאותו ספר נבחר ביותר משורה אחת)
+    const qtyByBookId = {};
+    validItems.forEach(item => {
+      qtyByBookId[item.bookId] = (qtyByBookId[item.bookId] || 0) + Number(item.amount);
+    });
+
+    // 2. עדכון המלאי של הספק (וההוצאה) במערכת ובמסד הנתונים
+    const updatedBooksMap = {};
+    const updatedInventoryList = inventoryList.map(book => {
+      const addedQty = qtyByBookId[book.id];
+      if (!addedQty) return book;
+
+      const currentBreakdown = (book.breakdown || []).map(b => ({ ...b }));
+      const existingSupplierIdx = currentBreakdown.findIndex(b => b.supplier === invoiceSupplier.name);
+
+      if (existingSupplierIdx > -1) {
+        currentBreakdown[existingSupplierIdx].amount = Number(currentBreakdown[existingSupplierIdx].amount || 0) + addedQty;
+      } else {
+        currentBreakdown.push({ supplier: invoiceSupplier.name, amount: addedQty });
+      }
+
+      const newPublisherStock = deductFromWarehouse
+        ? Math.max(0, Number(book.publisherStock || 0) - addedQty)
+        : Number(book.publisherStock || 0);
+
+      const updatedBook = {
+        ...book,
+        breakdown: currentBreakdown,
+        publisherStock: newPublisherStock,
+        updatedAt: Date.now()
+      };
+      updatedBooksMap[book.id] = updatedBook;
+      return updatedBook;
+    });
+
+    // עדכון אופטימי מיידי בממשק
+    setInventoryList(updatedInventoryList);
+
+    // שמירה בענן (Firebase)
+    if (db) {
+      try {
+        await Promise.all(
+          Object.values(updatedBooksMap).map(updatedBook =>
+            updateDoc(getDocRef('inventory', updatedBook.id), {
+              breakdown: updatedBook.breakdown,
+              publisherStock: updatedBook.publisherStock,
+              updatedAt: updatedBook.updatedAt
+            })
+          )
+        );
+      } catch (err) {
+        console.error("שגיאה בעדכון מלאי הספק בענן:", err);
+        showToast("שגיאה בשמירת עדכון המלאי בענן.", "error");
+      }
+    }
+
+    // 3. הכנת טקסט הפירוט למייל ולהיסטוריה
     let totalOrderPrice = 0;
-    let itemsText = invoiceItems.map((item, index) => {
+    let itemsText = validItems.map((item, index) => {
       const book = inventoryList.find(b => b.id === item.bookId);
       if (!book) return '';
       const lineTotal = item.amount * item.price;
       totalOrderPrice += lineTotal;
       return `${index + 1}. ${book.title}\n   כמות: ${item.amount} יח' | מחיר ליחידה: ₪${item.price.toLocaleString()} | סה"כ: ₪${lineTotal.toLocaleString()}`;
-    }).join('\n\n');
+    }).filter(Boolean).join('\n\n');
 
-    const subject = `הזמנת ספרים חדשה - הוצאת ספרי ישיבת ירוחם (${new Date().toLocaleDateString('he-IL')})`;
-    const body = `לכבוד ${invoiceSupplier.name},\nשלום ${invoiceSupplier.contact},\n\nמצ"ב סיכום הזמנת ספרים / תעודת משלוח מטעם הוצאת ספרי ישיבת ירוחם.\n\nפירוט ההזמנה:\n--------------------------------------------------\n${itemsText}\n--------------------------------------------------\n\nסה"כ לתשלום / לחיוב: ₪${totalOrderPrice.toLocaleString()}\n\nנודה לאישור קבלת ההזמנה במייל חוזר.\n\nבברכה,\nהוצאת ספרי ישיבת ירוחם.`;
-    
-    showToast("שולח מייל לספק ברקע...", "info");
-    sendEmailBackground(invoiceSupplier.email, subject, body);
-    
-    // --- Logging the action to history ---
+    if (shouldSendEmail) {
+      const subject = `הזמנת ספרים חדשה - הוצאת ספרי ישיבת ירוחם (${new Date().toLocaleDateString('he-IL')})`;
+      const body = `לכבוד ${invoiceSupplier.name},\nשלום ${invoiceSupplier.contact},\n\nמצ"ב סיכום הזמנת ספרים / תעודת משלוח מטעם הוצאת ספרי ישיבת ירוחם.\n\nפירוט ההזמנה:\n--------------------------------------------------\n${itemsText}\n--------------------------------------------------\n\nסה"כ לתשלום / לחיוב: ₪${totalOrderPrice.toLocaleString()}\n\nנודה לאישור קבלת ההזמנה במייל חוזר.\n\nבברכה,\nהוצאת ספרי ישיבת ירוחם.`;
+      showToast("מלאי הספק עודכן! שולח מייל ברקע...", "info");
+      sendEmailBackground(invoiceSupplier.email, subject, body);
+    } else {
+      showToast(`מלאי הספק "${invoiceSupplier.name}" עודכן בהצלחה!`, "success");
+    }
+
+    // 4. תיעוד הפעולה בהיסטוריית הספק
     const logObj = {
       supplierName: invoiceSupplier.name,
-      action: 'הפקת הזמנה ומייל',
+      action: shouldSendEmail ? 'הפקת הזמנה, עדכון מלאי ומייל' : 'הפקת הזמנה ועדכון מלאי',
       user: currentUserName || username,
       date: new Date().toLocaleString('he-IL'),
       totalAmount: totalOrderPrice,
       details: itemsText
     };
     if (db) addDoc(getCollRef('supplier_logs'), logObj);
-    else setSupplierLogs([{...logObj, id: Date.now().toString()}, ...supplierLogs]);
+    else setSupplierLogs([{ ...logObj, id: Date.now().toString() }, ...supplierLogs]);
 
     setIsSupplierInvoiceModalOpen(false);
   };
@@ -1586,25 +1658,33 @@ export default function PublisherApp() {
             </div>
             <div className="p-6 max-h-[60vh] overflow-y-auto">
               {getSupplierStock(selectedSupplierForStock.name).length > 0 ? (
-                <div className="border border-slate-100 rounded-xl overflow-hidden">
-                  <table className="w-full text-right">
-                    <thead className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
-                      <tr>
-                        <th className="py-3 px-4 font-medium">שם הספר</th>
-                        <th className="py-3 px-4 font-medium">מחבר</th>
-                        <th className="py-3 px-4 font-medium text-center">כמות במלאי</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {getSupplierStock(selectedSupplierForStock.name).map((item, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50/50">
-                          <td className="py-3 px-4 font-medium text-slate-700">{item.title}</td>
-                          <td className="py-3 px-4 text-slate-600 text-sm">{item.author}</td>
-                          <td className="py-3 px-4 font-bold text-indigo-600 text-center">{item.amount.toLocaleString()}</td>
+                <div className="space-y-4">
+                  <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 flex justify-between items-center text-sm">
+                    <span className="font-medium text-indigo-900">סה"כ עותקים אצל הספק:</span>
+                    <span className="font-bold text-indigo-700 text-base">
+                      {getSupplierStock(selectedSupplierForStock.name).reduce((sum, item) => sum + Number(item.amount || 0), 0).toLocaleString()} עותקים
+                    </span>
+                  </div>
+                  <div className="border border-slate-100 rounded-xl overflow-hidden">
+                    <table className="w-full text-right">
+                      <thead className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
+                        <tr>
+                          <th className="py-3 px-4 font-medium">שם הספר</th>
+                          <th className="py-3 px-4 font-medium">מחבר</th>
+                          <th className="py-3 px-4 font-medium text-center">כמות במלאי</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {getSupplierStock(selectedSupplierForStock.name).map((item, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/50">
+                            <td className="py-3 px-4 font-medium text-slate-700">{item.title}</td>
+                            <td className="py-3 px-4 text-slate-600 text-sm">{item.author}</td>
+                            <td className="py-3 px-4 font-bold text-indigo-600 text-center">{item.amount.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center py-10">
@@ -1735,39 +1815,39 @@ export default function PublisherApp() {
                 <h4 className="font-bold text-sm text-slate-700">פירוט ספרים בהזמנה</h4>
                 <button type="button" onClick={addInvoiceItemRow} className="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg transition-colors font-medium flex items-center gap-1"><Plus className="w-3 h-3" /> הוסף שורה</button>
               </div>
-
-              <div className="space-y-3 mb-6">
-                {invoiceItems.map((item, idx) => (
-                  <div key={idx} className="flex flex-wrap md:flex-nowrap gap-2 items-center bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                    <select value={item.bookId} onChange={(e) => handleInvoiceItemChange(idx, 'bookId', e.target.value)} className="w-full md:flex-1 p-2 border border-slate-200 rounded-lg text-sm bg-white outline-none">
-                      <option value="" disabled>-- בחר ספר --</option>
-                      {inventoryList.map(book => <option key={book.id} value={book.id}>{book.title}</option>)}
-                    </select>
-                    
-                    <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
-                      <div className="flex items-center gap-1.5">
-                        <label className="text-[10px] md:text-xs text-slate-500">כמות:</label><input type="number" min="1" value={item.amount} onChange={(e) => handleInvoiceItemChange(idx, 'amount', e.target.value)} className="w-16 p-2 border border-slate-200 rounded-lg text-sm text-center bg-white" dir="ltr" />
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <label className="text-[10px] md:text-xs text-slate-500">מחיר ספק ליחידה (₪):</label><input type="number" min="0" value={item.price} onChange={(e) => handleInvoiceItemChange(idx, 'price', e.target.value)} className="w-20 p-2 border border-slate-200 rounded-lg text-sm text-center bg-white text-indigo-600 font-bold" dir="ltr" />
-                      </div>
-                      <button type="button" onClick={() => removeInvoiceItemRow(idx)} className="text-slate-400 hover:text-red-500 p-1.5 bg-white rounded border border-slate-200"><Trash2 className="w-4 h-4" /></button>
-                    </div>
-                  </div>
-                ))}
-                {invoiceItems.length === 0 && <p className="text-sm text-slate-500 text-center py-4 bg-slate-50 rounded-lg border border-dashed border-slate-200">לא נבחרו ספרים להזמנה.</p>}
-              </div>
-
-              <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100 flex justify-between items-center mb-6">
+              <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100 flex justify-between items-center mb-4">
                 <span className="font-bold text-emerald-900 text-sm md:text-base">סה"כ הזמנה לתשלום (לפי מחירי ספק):</span>
                 <span className="text-xl md:text-2xl font-bold text-emerald-600">₪{invoiceItems.reduce((acc, item) => acc + (item.amount * item.price), 0).toLocaleString()}</span>
               </div>
 
-              <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100">
-                <h4 className="font-bold text-sm text-blue-900 mb-2">שליחה לספק</h4>
-                <p className="text-xs text-slate-600 mb-3">הודעת דוא״ל תשלח אוטומטית ברקע לכתובת <strong>{invoiceSupplier.email}</strong>.</p>
-                <button onClick={sendInvoiceEmail} disabled={invoiceItems.length === 0 || !invoiceItems[0].bookId} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-slate-300 disabled:cursor-not-allowed py-3 rounded-xl font-medium flex justify-center items-center gap-2 transition-colors">
-                  <Send className="w-4 h-4" /> צור ושלח פירוט הזמנה למייל
+              <label className="flex items-center gap-2.5 bg-slate-50 p-3 rounded-xl border border-slate-200 mb-6 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={deductFromWarehouse}
+                  onChange={(e) => setDeductFromWarehouse(e.target.checked)}
+                  className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                />
+                <span className="text-xs md:text-sm font-medium text-slate-700">
+                  הפחת את הכמויות האלו אוטומטית גם מ"מחסן ראשי" (המלאי יעבור למלאי הספק)
+                </span>
+              </label>
+
+              <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100 space-y-2.5">
+                <h4 className="font-bold text-sm text-blue-900">אישור הזמנה ועדכון מלאי</h4>
+                <p className="text-xs text-slate-600">לחיצה על אחד הכפתורים תעדכן מיד את המלאי תחת "צפה במלאי" של <strong>{invoiceSupplier.name}</strong> ותתעד בהיסטוריה.</p>
+                <button
+                  onClick={() => handleProcessSupplierOrder(true)}
+                  disabled={invoiceItems.length === 0 || !invoiceItems.some(i => i.bookId)}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-slate-300 disabled:cursor-not-allowed py-3 rounded-xl font-medium flex justify-center items-center gap-2 transition-colors"
+                >
+                  <Send className="w-4 h-4" /> עדכן מלאי ושלח פירוט הזמנה למייל ({invoiceSupplier.email || 'ללא מייל'})
+                </button>
+                <button
+                  onClick={() => handleProcessSupplierOrder(false)}
+                  disabled={invoiceItems.length === 0 || !invoiceItems.some(i => i.bookId)}
+                  className="w-full bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 disabled:opacity-50 disabled:cursor-not-allowed py-2.5 rounded-xl font-medium text-sm flex justify-center items-center gap-2 transition-colors"
+                >
+                  <CheckCircle className="w-4 h-4 text-emerald-600" /> שמור הזמנה ועדכן מלאי בלבד (ללא שליחת מייל)
                 </button>
               </div>
             </div>
