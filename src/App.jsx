@@ -1089,14 +1089,34 @@ export default function PublisherApp() {
 
   // פונקציית הקסם - ייבוא קטלוג
   const handleImportYhyCatalog = async () => {
-    if (!db) {
-      showToast("חיבור למסד הנתונים חסר, המתן מספר שניות.", "warning");
-      return;
-    }
     showToast("סורק ומעדכן מחירים מהאתר (שומר על נתונים קיימים)...", "info");
     try {
       let updatedCount = 0;
       let addedCount = 0;
+
+      if (!db) {
+        setInventoryList(prev => {
+          const next = [...prev];
+          for (const catalogBook of initialInventory) {
+            const idx = next.findIndex(b => b.title === catalogBook.title);
+            if (idx > -1) {
+              next[idx] = {
+                ...next[idx],
+                prices: catalogBook.prices,
+                productionCost: catalogBook.productionCost,
+                updatedAt: Date.now()
+              };
+              updatedCount++;
+            } else {
+              next.push({ ...catalogBook, id: Date.now().toString() + Math.random(), updatedAt: Date.now() });
+              addedCount++;
+            }
+          }
+          return next;
+        });
+        showToast(`סנכרון מחירון הושלם! ${updatedCount} עודכנו, ${addedCount} חדשים.`, "success");
+        return;
+      }
 
       for (const catalogBook of initialInventory) {
         const existingBook = inventoryList.find(b => b.title === catalogBook.title);
@@ -1569,7 +1589,7 @@ export default function PublisherApp() {
                   <div key={order.id} className={`bg-white p-5 rounded-2xl shadow-sm border flex flex-col relative group transition-all hover:shadow-md ${orderViewTab === 'shipped' ? 'border-emerald-100 opacity-80' : 'border-indigo-100'}`}>
                     <div className="flex justify-between items-start mb-4 pb-4 border-b border-slate-100">
                       <div>
-                        <span className={`${orderViewTab === 'shipped' ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'} text-[10px] md:text-xs font-bold px-2 py-1 rounded-md mb-2 inline-block`}>הזמנה #{order.orderId}</span>
+                        <span className={`${orderViewTab === 'shipped' ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'} text-[10px] md:text-xs font-bold px-2 py-1 rounded-md mb-2 inline-block`}>הזמנה #{String(order.orderId).replace(/^#/, '')}</span>
                         <h4 className="font-bold text-base md:text-lg text-slate-800">{order.customerName}</h4>
                         <div className="text-xs text-slate-400 mt-1 flex items-center gap-1.5"><Clock className="w-3 h-3" /> {order.date} בשעה {order.time}</div>
                       </div>
@@ -1635,159 +1655,50 @@ export default function PublisherApp() {
 
                 {ordersList.filter(o => (o.status || 'pending') === orderViewTab).length === 0 && (
                   <div className="col-span-full py-16 flex flex-col items-center justify-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200">
-                  <div className="grid grid-cols-2 sm:flex sm:flex-row sm:flex-wrap gap-2 w-full lg:w-auto print:hidden">
-                    <button onClick={() => window.print()} className="bg-white border border-slate-200 hover:bg-slate-50 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap"><Printer className="w-3.5 h-3.5 md:w-4 md:h-4" /> הדפס</button>
-                    <button onClick={handleExportCSV} className="bg-slate-100 hover:bg-slate-200 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap"><Download className="w-3.5 h-3.5 md:w-4 md:h-4" /> ייצוא</button>
-                    <button onClick={() => setIsGiftHistoryOpen(true)} className="bg-purple-50 hover:bg-purple-100 text-purple-700 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap font-medium"><History className="w-3.5 h-3.5 md:w-4 md:h-4" /> מעקב מתנות ({giftLogs.length})</button>
-                    {userRole === 'admin' && (
-                      <>
-                        <button onClick={() => setIsGiftModalOpen(true)} className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap font-medium shadow-sm"><Gift className="w-3.5 h-3.5 md:w-4 md:h-4" /> חלוקה לתורמים</button>
-                        <button onClick={handleImportYhyCatalog} className="bg-pink-100 hover:bg-pink-200 text-pink-700 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap transition-colors font-medium"><Download className="w-3.5 h-3.5 md:w-4 md:h-4" /> ייבוא מהאתר</button>
-                        <button onClick={() => setIsUpdateStockModalOpen(true)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap"><RefreshCw className="w-3.5 h-3.5 md:w-4 md:h-4" /> עדכון ידני</button>
-                        <button onClick={() => setIsAddBookModalOpen(true)} className="col-span-2 sm:col-span-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 shadow-sm whitespace-nowrap"><Plus className="w-3.5 h-3.5 md:w-4 md:h-4" /> הוסף ספר</button>
-                      </>
-                    )}
+                    <ShoppingCart className="w-12 h-12 mb-3 opacity-40" />
+                    <p className="font-medium text-sm">{orderViewTab === 'pending' ? 'אין כרגע הזמנות פתוחות מהאתר.' : 'עדיין לא נרשמו הזמנות שנשלחו.'}</p>
                   </div>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-right min-w-[1050px]">
-                  <thead className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
-                    <tr>
-                      <th className="py-4 px-4 md:px-6 font-medium whitespace-nowrap min-w-[240px]">שם הספר ופרטים</th>
-                      <th className="py-4 px-4 md:px-6 font-medium text-center min-w-[120px]">מחירים (צרכן/ספק)</th>
-                      <th className="py-4 px-4 md:px-6 font-medium text-center min-w-[140px]">רווחיות לעותק</th>
-                      <th className="py-4 px-4 md:px-6 font-medium min-w-[150px]">מהדורות</th>
-                      <th className="py-4 px-4 md:px-6 font-medium text-center min-w-[110px]">עלות הפקה</th>
-                      <th className="py-4 px-4 md:px-6 font-medium text-center">במחסן ראשי</th>
-                      <th className="py-4 px-4 md:px-6 font-medium min-w-[200px]">פירוט אצל ספקים</th>
-                      <th className="py-4 px-4 md:px-6 font-medium text-center">סה"כ זמין</th>
-                      <th className="py-4 px-4 md:px-6 font-medium text-center">סטטוס</th>
-                      {userRole === 'admin' && (
-                        <th className="py-4 px-4 md:px-6 font-medium text-center print:hidden">פעולות</th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {sortedInventory.map((book) => {
-                      const totalAvailableStock = calculateTotalStock(book);
-                      const isLowStock = totalAvailableStock <= book.threshold;
-                      const prodCost = Number(book.productionCost || 0);
-                      const generalPrice = Number(book.prices?.general || 0);
-                      const supplierPrice = Number(book.prices?.supplier || 0);
-                      const directProfit = generalPrice > 0 ? generalPrice - prodCost : 0;
-                      const supplierProfit = supplierPrice > 0 ? supplierPrice - prodCost : 0;
-                      const directMargin = generalPrice > 0 ? Math.round((directProfit / generalPrice) * 100) : 0;
-                      const supplierMargin = supplierPrice > 0 ? Math.round((supplierProfit / supplierPrice) * 100) : 0;
-
-                      return (
-                        <tr key={book.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="py-4 px-4 text-slate-600">
-                            <div className="font-bold text-slate-800">{book.title}</div>
-                            <div className="text-sm">{book.author}</div>
-                            <div className="text-slate-400 font-mono text-xs mt-1">{book.isbn}</div>
-                          </td>
-                          <td className="py-4 px-4 text-center text-sm border-x border-slate-50">
-                            <div className="flex flex-col gap-1">
-                              <span className="text-slate-500">צרכן: ₪{generalPrice}</span>
-                              <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">ספק: ₪{supplierPrice}</span>
-                            </div>
-                          </td>
-                          <td className="py-4 px-4 text-center text-xs bg-emerald-50/20 border-l border-slate-100">
-                            {prodCost > 0 ? (
-                              <div className="flex flex-col gap-1">
-                                <span className={`font-semibold ${directProfit >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                                  אתר: ₪{directProfit.toFixed(1)} ({directMargin}%)
-                                </span>
-                                <span className={`font-semibold ${supplierProfit >= 0 ? 'text-teal-700' : 'text-red-600'}`}>
-                                  ספק: ₪{supplierProfit.toFixed(1)} ({supplierMargin}%)
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-slate-400">הזן עלות הפקה</span>
-                            )}
-                          </td>
-                          <td className="py-4 px-4">
-                            <div className="flex flex-col gap-1">
-                              {book.editions?.map((ed, i) => (
-                                <div key={i} className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-600 flex justify-between gap-2">
-                                  <span>{ed.name}</span><span className="font-bold">{ed.printRun.toLocaleString()} עותקים</span>
-                                </div>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="py-4 px-4 text-center bg-rose-50/40 border-x border-slate-100">
-                            <div className="font-bold text-rose-700 text-lg">₪{Number(book.productionCost || 0).toLocaleString()}</div>
-                          </td>
-                          <td className="py-4 px-4 text-center bg-indigo-50/30">
-                            {userRole === 'admin' ? (
-                              <input 
-                                type="number" 
-                                min="0"
-                                value={book.publisherStock} 
-                                onChange={async (e) => {
-                                  const val = Number(e.target.value);
-                                  if (db) await updateDoc(getDocRef('inventory', book.id), { publisherStock: val, updatedAt: Date.now() });
-                                  else {
-                                    setInventoryList(inventoryList.map(b => b.id === book.id ? { ...b, publisherStock: val, updatedAt: Date.now() } : b));
-                                  }
-                                }}
-                                className="w-16 md:w-20 font-bold text-indigo-700 text-lg md:text-xl text-center bg-transparent border-b-2 border-transparent hover:border-indigo-300 focus:border-indigo-600 focus:bg-white outline-none transition-all"
-                                dir="ltr"
-                              />
-                            ) : (
-                              <div className="font-bold text-indigo-700 text-xl">{Number(book.publisherStock).toLocaleString()}</div>
-                            )}
-                            <div className="text-[10px] text-indigo-400">במחסן הראשי</div>
-                          </td>
-                          <td className="py-4 px-4">
-                            <div className="flex flex-col gap-1.5 min-w-[180px]">
-                              {book.breakdown && book.breakdown.length > 0 ? book.breakdown.map((item, idx) => (
-                                <div key={idx} className="flex justify-between items-center text-xs md:text-sm border-b border-slate-100/50 pb-1 last:border-0 last:pb-0 gap-2">
-                                  <span className="text-slate-500 truncate">{item.supplier}</span>
-                                  <span className="font-semibold text-slate-700 bg-white border border-slate-200 px-2 py-0.5 rounded text-xs">{item.amount.toLocaleString()}</span>
-                                </div>
-                              )) : <span className="text-xs text-slate-400">לא משויך לספקים</span>}
-                            </div>
-                          </td>
-                          <td className="py-4 px-4 text-center bg-emerald-50/30">
-                            <div className="font-bold text-emerald-700 text-xl md:text-2xl">{totalAvailableStock.toLocaleString()}</div>
-                          </td>
-                          <td className="py-4 px-4 text-center">
-                            {isLowStock ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] md:text-xs font-medium bg-red-100 text-red-700 whitespace-nowrap"><AlertTriangle className="w-3 h-3" /> להדפיס</span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] md:text-xs font-medium bg-emerald-100 text-emerald-700 whitespace-nowrap"><CheckCircle className="w-3 h-3" /> תקין</span>
-                            )}
-                          </td>
-                          {userRole === 'admin' && (
-                            <td className="py-4 px-2 md:px-4 text-center print:hidden whitespace-nowrap">
-                              <button onClick={() => openEditBook(book)} className="text-slate-400 hover:text-indigo-600 p-1.5 md:p-2 md:mx-1 rounded-lg hover:bg-indigo-50"><Edit className="w-4 h-4 md:w-5 md:h-5" /></button>
-                              <button onClick={() => handleDeleteBook(book.id)} className="text-slate-400 hover:text-red-500 p-1.5 md:p-2 md:mx-1 rounded-lg hover:bg-red-50"><Trash2 className="w-4 h-4 md:w-5 md:h-5" /></button>
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                )}
               </div>
             </div>
           )}
 
-          {/* SUPPLIERS VIEW */}
-          {activeTab === 'suppliers' && (
-            <div className="space-y-6 animate-in fade-in duration-300">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <h3 className="text-lg md:text-xl font-bold text-slate-800">ניהול ספקים, מחסנים ורשתות הפצה</h3>
-                <div className="flex w-full md:w-auto gap-2">
-                  <select value={suppliersSort} onChange={(e) => setSuppliersSort(e.target.value)} className="p-2.5 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 text-sm outline-none flex-1 md:flex-none">
+          {/* INVENTORY VIEW */}
+          {activeTab === 'inventory' && (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden animate-in fade-in duration-300">
+              <div className="p-4 md:p-6 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
+                <div className="flex flex-col sm:flex-row gap-2 flex-1">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="חיפוש לפי שם ספר, מחבר או דאנאק..."
+                      className="w-full pr-9 pl-3 py-2 md:py-2.5 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 text-sm outline-none"
+                    />
+                  </div>
+                  <select
+                    value={inventorySort}
+                    onChange={(e) => setInventorySort(e.target.value)}
+                    className="p-2 md:p-2.5 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 text-sm outline-none"
+                  >
                     <option value="alphabetical">מיון: אלף-בית</option>
                     <option value="date">מיון: עודכן לאחרונה</option>
                   </select>
+                </div>
+
+                <div className="grid grid-cols-2 sm:flex sm:flex-row sm:flex-wrap gap-2 w-full lg:w-auto print:hidden">
+                  <button onClick={() => window.print()} className="bg-white border border-slate-200 hover:bg-slate-50 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap"><Printer className="w-3.5 h-3.5 md:w-4 md:h-4" /> הדפס</button>
+                  <button onClick={handleExportCSV} className="bg-slate-100 hover:bg-slate-200 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap"><Download className="w-3.5 h-3.5 md:w-4 md:h-4" /> ייצוא</button>
+                  <button onClick={() => setIsGiftHistoryOpen(true)} className="bg-purple-50 hover:bg-purple-100 text-purple-700 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap font-medium"><History className="w-3.5 h-3.5 md:w-4 md:h-4" /> מעקב מתנות ({giftLogs.length})</button>
                   {userRole === 'admin' && (
-                    <button onClick={() => setIsAddSupplierModalOpen(true)} className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg font-medium flex justify-center items-center gap-2"><Plus className="w-4 h-4" /> הוסף ספק חדש</button>
+                    <>
+                      <button onClick={() => setIsGiftModalOpen(true)} className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap font-medium shadow-sm"><Gift className="w-3.5 h-3.5 md:w-4 md:h-4" /> חלוקה לתורמים</button>
+                      <button onClick={handleImportYhyCatalog} className="bg-pink-100 hover:bg-pink-200 text-pink-700 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap transition-colors font-medium"><Download className="w-3.5 h-3.5 md:w-4 md:h-4" /> ייבוא מהאתר</button>
+                      <button onClick={() => setIsUpdateStockModalOpen(true)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap"><RefreshCw className="w-3.5 h-3.5 md:w-4 md:h-4" /> עדכון ידני</button>
+                      <button onClick={() => setIsAddBookModalOpen(true)} className="col-span-2 sm:col-span-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 shadow-sm whitespace-nowrap"><Plus className="w-3.5 h-3.5 md:w-4 md:h-4" /> הוסף ספר</button>
+                    </>
                   )}
                 </div>
               </div>
@@ -1899,7 +1810,7 @@ export default function PublisherApp() {
                        <div className="flex justify-between text-[10px] md:text-xs text-slate-500">
                            <span>נוצל: ₪{Number(camp.spent).toLocaleString()}</span><span>מתוך ₪{Number(camp.budget).toLocaleString()}</span>
                        </div>
-                       <div className="w-full bg-slate-100 rounded-full h-1.5 md:h-2"><div className="bg-indigo-500 h-1.5 md:h-2 rounded-full" style={{ width: `${(Number(camp.spent)/Number(camp.budget))*100}%`}}></div></div>
+                       <div className="w-full bg-slate-100 rounded-full h-1.5 md:h-2"><div className="bg-indigo-500 h-1.5 md:h-2 rounded-full" style={{ width: `${Number(camp.budget) > 0 ? Math.min(100, (Number(camp.spent)/Number(camp.budget))*100) : 0}%`}}></div></div>
                     </div>
                   ))}
                 </div>
@@ -2125,7 +2036,7 @@ export default function PublisherApp() {
               {supplierLogs.filter(log => log.supplierName === selectedSupplierForHistory.name).length > 0 ? (
                 <div className="space-y-4">
                   {supplierLogs.filter(log => log.supplierName === selectedSupplierForHistory.name)
-                    .sort((a, b) => new Date(b.date) - new Date(a.date))
+                    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
                     .map((log, idx) => (
                     <div key={idx} className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex flex-col gap-3 relative">
                       <div className="flex justify-between items-start">
@@ -2444,7 +2355,7 @@ export default function PublisherApp() {
             <div className="p-4 md:p-6 overflow-y-auto flex-1">
               {giftLogs.length > 0 ? (
                 <div className="space-y-3">
-                  {giftLogs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map((log, idx) => (
+                  {[...giftLogs].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map((log, idx) => (
                     <div key={log.id || idx} className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex justify-between items-start gap-3">
                       <div>
                         <div className="flex items-center gap-2 mb-1">
@@ -2805,9 +2716,9 @@ export default function PublisherApp() {
                   <h4 className="font-bold text-sm md:text-base text-slate-700 mb-2 md:mb-3 border-b border-slate-100 pb-2">מחירונים ועלויות (₪)</h4>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div><label className="block text-xs font-medium text-slate-600 mb-1">עלות הפקה כוללת</label><input type="number" value={newBookForm.productionCost || ''} onChange={e => setNewBookForm({...newBookForm, productionCost: Number(e.target.value)})} className="w-full p-2.5 md:p-2 border border-rose-200 bg-rose-50 rounded-lg focus:ring-2 focus:ring-rose-500 font-semibold text-rose-700" placeholder="0" /></div>
-                    <div><label className="block text-xs font-medium text-slate-600 mb-1">מחיר לצרכן</label><input type="number" value={newBookForm.prices.general} onChange={e => setNewBookForm({...newBookForm, prices: {...newBookForm.prices, general: e.target.value}})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50" /></div>
-                    <div><label className="block text-xs font-medium text-slate-600 mb-1">מחיר לחנויות</label><input type="number" value={newBookForm.prices.supplier} onChange={e => setNewBookForm({...newBookForm, prices: {...newBookForm.prices, supplier: e.target.value}})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50" /></div>
-                    <div><label className="block text-xs font-medium text-slate-600 mb-1">מחיר מיוחד</label><input type="number" value={newBookForm.prices.yeshiva} onChange={e => setNewBookForm({...newBookForm, prices: {...newBookForm.prices, yeshiva: e.target.value}})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50" /></div>
+                    <div><label className="block text-xs font-medium text-slate-600 mb-1">מחיר לצרכן</label><input type="number" value={newBookForm.prices.general} onChange={e => setNewBookForm({...newBookForm, prices: {...newBookForm.prices, general: Number(e.target.value)}})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50" /></div>
+                    <div><label className="block text-xs font-medium text-slate-600 mb-1">מחיר לחנויות</label><input type="number" value={newBookForm.prices.supplier} onChange={e => setNewBookForm({...newBookForm, prices: {...newBookForm.prices, supplier: Number(e.target.value)}})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50" /></div>
+                    <div><label className="block text-xs font-medium text-slate-600 mb-1">מחיר מיוחד</label><input type="number" value={newBookForm.prices.yeshiva} onChange={e => setNewBookForm({...newBookForm, prices: {...newBookForm.prices, yeshiva: Number(e.target.value)}})} className="w-full p-2.5 md:p-2 border rounded-lg bg-slate-50" /></div>
                   </div>
                 </div>
               </div>
