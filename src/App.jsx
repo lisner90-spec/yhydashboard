@@ -1365,38 +1365,45 @@ export default function App() {
   const shippedOrders = ordersList.filter(o => o.status === 'shipped');
 
   const navItems = [
-    { id: 'dashboard', label: 'דאשבורד', icon: LayoutDashboard },
-    { id: 'pos', label: 'קופה מהירה (דוכן)', icon: CreditCard },
-    { id: 'orders', label: 'הזמנות חנות (אתר)', icon: ShoppingCart, badge: pendingOrders.length },
-    { id: 'inventory', label: 'ניהול מלאי', icon: Package },
-    { id: 'suppliers', label: 'ספקים והפצה', icon: Truck },
-    { id: 'production', label: 'הפקת ספרים', icon: KanbanSquare },
-    { id: 'print_quotes', label: 'השוואת דפוסים', icon: Scale },
-    { id: 'marketing', label: 'שיווק ויח״צ', icon: Megaphone },
-    { id: 'integrations', label: 'אוטומציה וגיבוי', icon: Settings },
-    { id: 'notes', label: 'פתקים ומשימות', icon: StickyNote },
-    ...(userRole === 'admin' ? [{ id: 'users', label: 'ניהול משתמשים', icon: UserCog }] : []),
+    { id: 'dashboard', label: 'דאשבורד', icon: LayoutDashboard, group: 'ראשי' },
+    { id: 'pos', label: 'קופה מהירה (דוכן)', icon: CreditCard, group: 'מכירות והזמנות' },
+    { id: 'orders', label: 'הזמנות חנות (אתר)', icon: ShoppingCart, badge: pendingOrders.length, group: 'מכירות והזמנות' },
+    { id: 'inventory', label: 'ניהול מלאי', icon: Package, group: 'מלאי והפצה' },
+    { id: 'suppliers', label: 'ספקים והפצה', icon: Truck, group: 'מלאי והפצה' },
+    { id: 'production', label: 'הפקת ספרים', icon: KanbanSquare, group: 'הפקה ושיווק' },
+    { id: 'print_quotes', label: 'השוואת דפוסים', icon: Scale, group: 'הפקה ושיווק' },
+    { id: 'marketing', label: 'שיווק ויח״צ', icon: Megaphone, group: 'הפקה ושיווק' },
+    { id: 'notes', label: 'פתקים ומשימות', icon: StickyNote, group: 'מערכת' },
+    { id: 'integrations', label: 'אוטומציה וגיבוי', icon: Settings, group: 'מערכת' },
+    ...(userRole === 'admin' ? [{ id: 'users', label: 'ניהול משתמשים', icon: UserCog, group: 'מערכת' }] : []),
   ];
+
+  const activeNavItem = navItems.find(n => n.id === activeTab) || navItems[0];
+  const userInitial = (currentUserName || 'מ').trim().charAt(0);
 
   // ==========================================
   // מסך התחברות (כאשר המשתמש אינו מחובר)
   // ==========================================
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-[#1E293B] to-[#2c3518] flex items-center justify-center p-4 font-sans" dir="rtl">
-        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/60">
-          <div className="bg-[#1E293B] p-8 text-center text-white space-y-3">
-            <div className="w-16 h-16 rounded-2xl bg-[#4B5320] mx-auto flex items-center justify-center shadow-lg border border-amber-200/30">
+      <div className="min-h-screen bg-[#0B1120] relative flex items-center justify-center p-4 font-sans overflow-hidden" dir="rtl">
+        {/* רקע גרדיאנט מודרני */}
+        <div className="pointer-events-none absolute -top-32 -right-32 w-96 h-96 rounded-full bg-[#4B5320]/30 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 -left-32 w-96 h-96 rounded-full bg-indigo-600/20 blur-3xl" />
+
+        <div className="relative bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl w-full max-w-md overflow-hidden ring-1 ring-white/20">
+          <div className="bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#2B3318] p-8 text-center text-white space-y-3.5 relative">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#5c6628] to-[#3f461b] mx-auto flex items-center justify-center shadow-lg ring-1 ring-amber-200/30">
               <BookOpen className="w-8 h-8 text-amber-100" />
             </div>
             <div>
               <h1 className="text-2xl font-extrabold tracking-tight">הוצאת ספרי הישיבה</h1>
-              <p className="text-xs text-slate-300 mt-1">מערכת ניהול מלאי, הפצה והפקה — ישיבת ההסדר ירוחם</p>
+              <p className="text-xs text-slate-300/90 mt-1">מערכת ניהול מלאי, הפצה והפקה — ישיבת ההסדר ירוחם</p>
             </div>
           </div>
 
-          <form onSubmit={handleLogin} className="p-7 space-y-4">
-            <div className="space-y-1">
+          <form onSubmit={handleLogin} className="p-7 space-y-5">
+            <div className="space-y-1.5">
               <label className="block text-xs font-bold text-slate-600">שם משתמש</label>
               <div className="relative">
                 <UserCog className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
@@ -1407,13 +1414,13 @@ export default function App() {
                   value={loginForm.username}
                   onChange={e => { setLoginForm({ ...loginForm, username: e.target.value }); setLoginError(''); }}
                   placeholder="הזן שם משתמש..."
-                  className="w-full pr-10 pl-3 py-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 text-sm outline-none"
+                  className="w-full pr-10 pl-3 py-3 border border-slate-200 rounded-xl bg-slate-50/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-sm outline-none transition-all"
                   dir="ltr"
                 />
               </div>
             </div>
 
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <label className="block text-xs font-bold text-slate-600">סיסמה</label>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
@@ -1423,7 +1430,7 @@ export default function App() {
                   value={loginForm.password}
                   onChange={e => { setLoginForm({ ...loginForm, password: e.target.value }); setLoginError(''); }}
                   placeholder="••••••••"
-                  className="w-full pr-10 pl-3 py-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 text-sm outline-none"
+                  className="w-full pr-10 pl-3 py-3 border border-slate-200 rounded-xl bg-slate-50/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-sm outline-none transition-all"
                   dir="ltr"
                 />
               </div>
@@ -1438,14 +1445,15 @@ export default function App() {
 
             <button
               type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3.5 rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-colors"
+              className="w-full bg-gradient-to-l from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all active:scale-[0.99]"
             >
               <LogIn className="w-4 h-4" /> כניסה למערכת
             </button>
 
-            <p className="text-[11px] text-center text-slate-400 pt-2">
-              {dbConnected ? 'מחובר למסד הנתונים בענן' : 'מוכן לעבודה (מצב מקומי / ענן)'}
-            </p>
+            <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400 pt-1">
+              <span className={`w-2 h-2 rounded-full ${dbConnected ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+              <span>{dbConnected ? 'מחובר למסד הנתונים בענן' : 'מוכן לעבודה (מצב מקומי / ענן)'}</span>
+            </div>
           </form>
         </div>
       </div>
@@ -1456,66 +1464,89 @@ export default function App() {
   // תצוגה ראשית
   // ==========================================
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col lg:flex-row font-sans" dir="rtl">
+    <div className="min-h-screen bg-[#F3F5F9] text-slate-800 flex flex-col lg:flex-row font-sans antialiased" dir="rtl">
       {/* Toast Notification */}
       {toast && (
-        <div className={`fixed bottom-5 left-5 z-[100] px-4 py-3 rounded-xl shadow-lg text-white text-sm font-bold flex items-center gap-2 print:hidden ${
-          toast.type === 'success' ? 'bg-emerald-600' :
-          toast.type === 'error' ? 'bg-rose-600' :
-          toast.type === 'warning' ? 'bg-amber-600' : 'bg-indigo-600'
+        <div className={`fixed bottom-5 left-5 z-[100] px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md text-white text-sm font-bold flex items-center gap-2.5 ring-1 ring-white/15 print:hidden transition-all ${
+          toast.type === 'success' ? 'bg-emerald-600/95' :
+          toast.type === 'error' ? 'bg-rose-600/95' :
+          toast.type === 'warning' ? 'bg-amber-600/95' : 'bg-slate-900/95'
         }`}>
+          {toast.type === 'success' && <CheckCircle className="w-4 h-4 shrink-0" />}
+          {toast.type === 'error' && <AlertTriangle className="w-4 h-4 shrink-0" />}
           <span>{toast.message}</span>
-          <button onClick={() => setToast(null)} className="opacity-80 hover:opacity-100"><X className="w-4 h-4" /></button>
+          <button onClick={() => setToast(null)} className="opacity-75 hover:opacity-100 mr-1"><X className="w-4 h-4" /></button>
         </div>
       )}
 
       {/* Sidebar (Desktop) */}
-      <aside className="hidden lg:flex lg:flex-col w-64 bg-[#1E293B] text-white shrink-0 print:hidden">
-        <div className="p-5 border-b border-slate-700/80 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#4B5320] flex items-center justify-center shadow-sm">
+      <aside className="hidden lg:flex lg:flex-col w-68 bg-[#0F172A] text-white shrink-0 border-l border-slate-800/80 print:hidden">
+        <div className="p-5 border-b border-slate-800/80 flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#5c6628] to-[#3f461b] flex items-center justify-center shadow-md ring-1 ring-amber-200/25 shrink-0">
             <BookOpen className="w-5 h-5 text-amber-100" />
           </div>
-          <div>
-            <h1 className="font-extrabold text-base leading-tight">הוצאת ספרי הישיבה</h1>
-            <p className="text-[11px] text-slate-400">ישיבת ההסדר ירוחם</p>
+          <div className="min-w-0">
+            <h1 className="font-extrabold text-[15px] leading-tight tracking-tight truncate">הוצאת ספרי הישיבה</h1>
+            <p className="text-[11px] text-slate-400 mt-0.5 truncate">ישיבת ההסדר ירוחם</p>
           </div>
         </div>
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {navItems.map(item => {
-            const Icon = item.icon;
-            const active = activeTab === item.id;
+
+        <nav className="flex-1 p-3.5 space-y-5 overflow-y-auto">
+          {['ראשי', 'מכירות והזמנות', 'מלאי והפצה', 'הפקה ושיווק', 'מערכת'].map(groupName => {
+            const groupItems = navItems.filter(i => i.group === groupName);
+            if (groupItems.length === 0) return null;
             return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                  active ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                }`}
-              >
-                <span className="flex items-center gap-3"><Icon className="w-4 h-4" />{item.label}</span>
-                {item.badge > 0 && (
-                  <span className="bg-rose-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                    {item.badge}
-                  </span>
-                )}
-              </button>
+              <div key={groupName} className="space-y-1">
+                <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">{groupName}</p>
+                {groupItems.map(item => {
+                  const Icon = item.icon;
+                  const active = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveTab(item.id)}
+                      className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+                        active
+                          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-950/50 ring-1 ring-indigo-400/30'
+                          : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                      }`}
+                    >
+                      <span className="flex items-center gap-3">
+                        <Icon className={`w-4 h-4 ${active ? 'text-white' : 'text-slate-400'}`} />
+                        {item.label}
+                      </span>
+                      {item.badge > 0 && (
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${active ? 'bg-white text-indigo-700' : 'bg-rose-500 text-white'}`}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             );
           })}
         </nav>
-        <div className="p-4 border-t border-slate-700/80 space-y-3">
-          <div className="flex items-center justify-between text-xs">
-            <div>
-              <p className="font-bold text-white">{currentUserName}</p>
-              <p className="text-[11px] text-slate-400">{userRole === 'admin' ? 'מנהל מערכת' : 'צופה בלבד'}</p>
+
+        <div className="p-4 border-t border-slate-800/80 bg-slate-900/50 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 font-extrabold text-sm flex items-center justify-center shrink-0">
+                {userInitial}
+              </div>
+              <div className="min-w-0">
+                <p className="font-bold text-xs text-white truncate">{currentUserName}</p>
+                <p className="text-[11px] text-slate-400">{userRole === 'admin' ? 'מנהל מערכת' : 'צופה בלבד'}</p>
+              </div>
             </div>
-            <span className="flex items-center gap-1.5 text-[11px] text-slate-400">
-              <span className={`w-2 h-2 rounded-full ${dbConnected ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+            <span className={`flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full ${dbConnected ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${dbConnected ? 'bg-emerald-400' : 'bg-amber-400'}`} />
               {dbConnected ? 'ענן' : 'מקומי'}
             </span>
           </div>
           <button
             onClick={handleLogout}
-            className="w-full bg-slate-800 hover:bg-rose-600/90 text-slate-200 hover:text-white py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors"
+            className="w-full bg-slate-800/90 hover:bg-rose-600 text-slate-300 hover:text-white py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors"
           >
             <LogOut className="w-3.5 h-3.5" /> התנתק מהמערכת
           </button>
@@ -1523,23 +1554,31 @@ export default function App() {
       </aside>
 
       {/* Mobile Header */}
-      <header className="lg:hidden bg-[#1E293B] text-white p-4 flex items-center justify-between sticky top-0 z-30 shadow-md print:hidden">
+      <header className="lg:hidden bg-[#0F172A] text-white px-4 py-3.5 flex items-center justify-between sticky top-0 z-30 shadow-md print:hidden">
         <div className="flex items-center gap-2.5">
-          <BookOpen className="w-5 h-5 text-amber-200" />
-          <span className="font-bold text-base">הוצאת ספרי הישיבה</span>
+          <div className="w-8 h-8 rounded-xl bg-[#4B5320] flex items-center justify-center">
+            <BookOpen className="w-4 h-4 text-amber-100" />
+          </div>
+          <div>
+            <span className="font-bold text-sm block leading-tight">הוצאת ספרי הישיבה</span>
+            <span className="text-[10px] text-slate-400">{activeNavItem?.label}</span>
+          </div>
         </div>
-        <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2 rounded-lg bg-slate-800">
+        <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 transition-colors">
           {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
       </header>
 
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
-        <div className="lg:hidden fixed inset-0 z-40 bg-slate-900/60 print:hidden" onClick={() => setMobileMenuOpen(false)}>
-          <div className="bg-[#1E293B] text-white w-64 h-full p-4 space-y-1 overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center pb-3 mb-2 border-b border-slate-700">
-              <span className="font-bold">תפריט ניווט</span>
-              <button onClick={() => setMobileMenuOpen(false)}><X className="w-5 h-5" /></button>
+        <div className="lg:hidden fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-xs print:hidden" onClick={() => setMobileMenuOpen(false)}>
+          <div className="bg-[#0F172A] text-white w-72 h-full p-4 space-y-1.5 overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center pb-3.5 mb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-amber-200" />
+                <span className="font-bold text-sm">תפריט ניווט</span>
+              </div>
+              <button onClick={() => setMobileMenuOpen(false)} className="p-1 rounded-lg bg-slate-800"><X className="w-4 h-4" /></button>
             </div>
             {navItems.map(item => {
               const Icon = item.icon;
@@ -1547,18 +1586,22 @@ export default function App() {
                 <button
                   key={item.id}
                   onClick={() => { setActiveTab(item.id); setMobileMenuOpen(false); }}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium ${
-                    activeTab === item.id ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-slate-800'
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                    activeTab === item.id ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800'
                   }`}
                 >
                   <span className="flex items-center gap-3"><Icon className="w-4 h-4" />{item.label}</span>
-                  {item.badge > 0 && <span className="bg-rose-500 text-white text-xs px-2 py-0.5 rounded-full">{item.badge}</span>}
+                  {item.badge > 0 && <span className="bg-rose-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{item.badge}</span>}
                 </button>
               );
             })}
-            <div className="pt-4 mt-4 border-t border-slate-700 space-y-2">
-              <div className="px-3 text-xs text-slate-300">
-                מחובר כ: <strong className="text-white">{currentUserName}</strong> ({userRole === 'admin' ? 'מנהל' : 'צופה'})
+            <div className="pt-4 mt-4 border-t border-slate-800 space-y-2.5">
+              <div className="px-3 text-xs text-slate-300 flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-200 font-bold flex items-center justify-center">{userInitial}</div>
+                <div>
+                  <strong className="text-white block">{currentUserName}</strong>
+                  <span className="text-[10px] text-slate-400">{userRole === 'admin' ? 'מנהל מערכת' : 'צופה בלבד'}</span>
+                </div>
               </div>
               <button
                 onClick={handleLogout}
@@ -1571,58 +1614,118 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Content Area */}
-      <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-[1600px] w-full mx-auto overflow-x-hidden">
+      {/* Main Content Wrapper */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Desktop Top Utility Header */}
+        <div className="hidden lg:flex items-center justify-between px-8 py-4 bg-white/80 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-20 print:hidden">
+          <div className="flex items-center gap-3">
+            {activeNavItem && (() => {
+              const ActiveIcon = activeNavItem.icon;
+              return (
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center ring-1 ring-indigo-100">
+                  <ActiveIcon className="w-4 h-4" />
+                </div>
+              );
+            })()}
+            <div>
+              <h2 className="text-base font-extrabold text-slate-800 leading-tight">{activeNavItem?.label}</h2>
+              <p className="text-[11px] text-slate-400">{new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {pendingOrders.length > 0 && activeTab !== 'orders' && (
+              <button
+                onClick={() => setActiveTab('orders')}
+                className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
+              >
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                {pendingOrders.length} הזמנות ממתינות לאריזה
+              </button>
+            )}
+            {activeTab !== 'pos' && (
+              <button
+                onClick={() => setActiveTab('pos')}
+                className="bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
+              >
+                <CreditCard className="w-3.5 h-3.5" /> קופה מהירה
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Main Content Area */}
+        <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-[1600px] w-full mx-auto overflow-x-hidden">
         {/* ==================== 1. DASHBOARD ==================== */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-extrabold text-slate-800">דאשבורד ניהולי — תמונת מצב חיה</h2>
-              <p className="text-sm text-slate-500 mt-0.5">סיכום מלאי, שווי, הכנסות וגבייה בזמן אמת</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">תמונת מצב עסקית</h2>
+                <p className="text-sm text-slate-500 mt-0.5">סיכום חי של המלאי, שווי הספרים, ההכנסות ויתרות הגבייה</p>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
-                <p className="text-xs font-bold text-slate-500">סה"כ עותקים במערכת</p>
-                <p className="text-3xl font-extrabold text-indigo-700 mt-1">{totalCopiesInSystem.toLocaleString()}</p>
-                <p className="text-xs text-slate-400 mt-1">במחסן: {totalWarehouseCopies.toLocaleString()} | אצל ספקים: {(totalCopiesInSystem - totalWarehouseCopies).toLocaleString()}</p>
+              <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 hover:shadow-md hover:-translate-y-0.5 transition-all">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-slate-500">סה"כ עותקים במערכת</p>
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><Package className="w-4 h-4" /></div>
+                </div>
+                <p className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">{totalCopiesInSystem.toLocaleString()}</p>
+                <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span>במחסן: <strong className="text-indigo-700">{totalWarehouseCopies.toLocaleString()}</strong></span>
+                  <span>ספקים: <strong className="text-slate-700">{(totalCopiesInSystem - totalWarehouseCopies).toLocaleString()}</strong></span>
+                </div>
               </div>
 
-              <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
-                <p className="text-xs font-bold text-slate-500">שווי מלאי (צרכן / הדפסה)</p>
-                <p className="text-2xl font-extrabold text-emerald-700 mt-1">₪{Math.round(totalRetailValue).toLocaleString()}</p>
-                <p className="text-xs text-rose-500 mt-1">לפי עלות הדפסה: ₪{Math.round(totalProductionValue).toLocaleString()}</p>
+              <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 hover:shadow-md hover:-translate-y-0.5 transition-all">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-slate-500">שווי מלאי (צרכן / הדפסה)</p>
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><DollarSign className="w-4 h-4" /></div>
+                </div>
+                <p className="text-3xl font-extrabold text-emerald-700 mt-2 tracking-tight">₪{Math.round(totalRetailValue).toLocaleString()}</p>
+                <p className="text-xs text-slate-500 mt-3 pt-2.5 border-t border-slate-100">לפי עלות הדפסה: <strong className="text-rose-600">₪{Math.round(totalProductionValue).toLocaleString()}</strong></p>
               </div>
 
-              <div className="bg-purple-50/70 p-5 rounded-2xl border border-purple-100">
-                <p className="text-xs font-bold text-purple-700">הכנסות מתועדות (אתר + ספקים + דוכן)</p>
-                <p className="text-2xl font-extrabold text-purple-900 mt-1">₪{Math.round(liveStoreRevenue + liveSupplierRevenue + livePosRevenue).toLocaleString()}</p>
-                <p className="text-[11px] text-purple-600 mt-1">אתר: ₪{Math.round(liveStoreRevenue).toLocaleString()} | ספקים: ₪{Math.round(liveSupplierRevenue).toLocaleString()} | דוכן: ₪{Math.round(livePosRevenue).toLocaleString()}</p>
+              <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-purple-200/70 hover:shadow-md hover:-translate-y-0.5 transition-all">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-purple-700">הכנסות מתועדות</p>
+                  <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><TrendingUp className="w-4 h-4" /></div>
+                </div>
+                <p className="text-3xl font-extrabold text-purple-900 mt-2 tracking-tight">₪{Math.round(liveStoreRevenue + liveSupplierRevenue + livePosRevenue).toLocaleString()}</p>
+                <p className="text-[11px] text-slate-500 mt-3 pt-2.5 border-t border-slate-100">אתר: ₪{Math.round(liveStoreRevenue).toLocaleString()} · ספקים: ₪{Math.round(liveSupplierRevenue).toLocaleString()} · דוכן: ₪{Math.round(livePosRevenue).toLocaleString()}</p>
               </div>
 
-              <div onClick={() => setActiveTab('suppliers')} className="cursor-pointer bg-rose-50/80 hover:bg-rose-50 p-5 rounded-2xl border border-rose-200 transition-colors">
+              <div onClick={() => setActiveTab('suppliers')} className="cursor-pointer bg-gradient-to-br from-rose-50 to-white p-5 rounded-2xl shadow-xs ring-1 ring-rose-200/80 hover:shadow-md hover:-translate-y-0.5 transition-all">
                 <div className="flex justify-between items-center">
                   <p className="text-xs font-bold text-rose-800">יתרת חוב פתוחה מספקים</p>
-                  <Wallet className="w-4 h-4 text-rose-600" />
+                  <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center"><Wallet className="w-4 h-4" /></div>
                 </div>
-                <p className="text-2xl font-extrabold text-rose-700 mt-1">₪{Math.round(totalOpenSupplierDebt).toLocaleString()}</p>
-                <p className="text-[11px] text-rose-600 mt-1">לחץ למעבר למסך ספקים וגבייה</p>
+                <p className="text-3xl font-extrabold text-rose-700 mt-2 tracking-tight">₪{Math.round(totalOpenSupplierDebt).toLocaleString()}</p>
+                <p className="text-xs text-rose-600/90 font-medium mt-3 pt-2.5 border-t border-rose-100">לחץ למעבר למסך ספקים וגבייה ←</p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4">
-                  <AlertTriangle className="w-5 h-5 text-amber-500" /> התראות מלאי נמוך ({lowStockBooks.length})
-                </h3>
+              <div className="bg-white p-6 rounded-2xl shadow-xs ring-1 ring-slate-200/70">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center"><AlertTriangle className="w-4 h-4" /></span>
+                    התראות מלאי נמוך
+                  </h3>
+                  <span className="text-xs font-bold bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full">{lowStockBooks.length} ספרים</span>
+                </div>
                 {lowStockBooks.length === 0 ? (
-                  <p className="text-sm text-emerald-600 font-medium">כל הספרים מעל רף ההתראה!</p>
+                  <div className="bg-emerald-50/70 border border-emerald-100 rounded-xl p-4 text-sm text-emerald-700 font-medium flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4" /> כל הספרים מעל רף ההתראה!
+                  </div>
                 ) : (
-                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                  <div className="space-y-2 max-h-72 overflow-y-auto pl-1">
                     {lowStockBooks.map(b => (
-                      <div key={b.id} className="flex justify-between items-center p-3 bg-amber-50/60 border border-amber-100 rounded-xl text-sm">
-                        <span className="font-medium text-slate-800">{b.title}</span>
-                        <span className="font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-lg text-xs">
+                      <div key={b.id} className="flex justify-between items-center p-3 bg-slate-50/80 hover:bg-amber-50/60 border border-slate-200/70 rounded-xl text-sm transition-colors">
+                        <span className="font-semibold text-slate-800">{b.title}</span>
+                        <span className="font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-lg text-xs shrink-0">
                           {calculateTotalStock(b)} / רף {b.threshold || 30}
                         </span>
                       </div>
@@ -1631,21 +1734,25 @@ export default function App() {
                 )}
               </div>
 
-              <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4">
-                  <ShoppingCart className="w-5 h-5 text-indigo-600" /> הזמנות פתוחות לטיפול ({pendingOrders.length})
-                </h3>
+              <div className="bg-white p-6 rounded-2xl shadow-xs ring-1 ring-slate-200/70">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><ShoppingCart className="w-4 h-4" /></span>
+                    הזמנות פתוחות לטיפול
+                  </h3>
+                  <span className="text-xs font-bold bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-full">{pendingOrders.length} פתוחות</span>
+                </div>
                 {pendingOrders.length === 0 ? (
-                  <p className="text-sm text-slate-500">אין הזמנות פתוחות כרגע.</p>
+                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-6 text-center text-sm text-slate-400">אין הזמנות פתוחות כרגע.</div>
                 ) : (
-                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                  <div className="space-y-2 max-h-72 overflow-y-auto pl-1">
                     {pendingOrders.slice(0, 6).map(o => (
-                      <div key={o.id} className="flex justify-between items-center p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+                      <div key={o.id} className="flex justify-between items-center p-3 bg-slate-50/80 hover:bg-indigo-50/40 border border-slate-200/70 rounded-xl text-sm transition-colors">
                         <div>
-                          <p className="font-bold text-slate-800">#{o.orderId} — {o.customerName}</p>
+                          <p className="font-bold text-slate-800">#{String(o.orderId || '').replace(/^#/, '')} — {o.customerName}</p>
                           <p className="text-xs text-slate-500">{o.date}</p>
                         </div>
-                        <button onClick={() => setActiveTab('orders')} className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-bold">טפל</button>
+                        <button onClick={() => setActiveTab('orders')} className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-1.5 rounded-lg font-bold shadow-xs transition-colors">טפל</button>
                       </div>
                     ))}
                   </div>
@@ -1658,14 +1765,17 @@ export default function App() {
         {/* ==================== 2. POS (QUICK STALL SALES) ==================== */}
         {activeTab === 'pos' && (
           <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70">
               <div>
-                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><CreditCard className="w-5 h-5 text-indigo-600" /> קופה מהירה למכירות בישיבה / דוכן</h2>
-                <p className="text-slate-500 text-xs mt-0.5">בחר ספרים להוספה לסל — המלאי יופחת אוטומטית מהמחסן הראשי</p>
+                <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
+                  <span className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><CreditCard className="w-5 h-5" /></span>
+                  קופה מהירה למכירות בישיבה / דוכן
+                </h2>
+                <p className="text-slate-500 text-xs mt-1">בחר ספרים להוספה לסל — המלאי יופחת אוטומטית מהמחסן הראשי</p>
               </div>
-              <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200 w-full sm:w-auto">
-                <button onClick={() => setPosPriceMode('yeshiva')} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-bold ${posPriceMode === 'yeshiva' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600'}`}>מחירון ישיבה</button>
-                <button onClick={() => setPosPriceMode('general')} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-bold ${posPriceMode === 'general' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600'}`}>מחירון צרכן</button>
+              <div className="bg-slate-100 p-1 rounded-xl flex items-center ring-1 ring-slate-200/80 w-full sm:w-auto">
+                <button onClick={() => setPosPriceMode('yeshiva')} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-bold transition-all ${posPriceMode === 'yeshiva' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>מחירון ישיבה</button>
+                <button onClick={() => setPosPriceMode('general')} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-bold transition-all ${posPriceMode === 'general' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>מחירון צרכן</button>
               </div>
             </div>
 
@@ -1673,9 +1783,9 @@ export default function App() {
               <div className="lg:col-span-2 space-y-4">
                 <div className="relative">
                   <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
-                  <input type="text" value={posSearch} onChange={e => setPosSearch(e.target.value)} placeholder="חפש ספר מהיר בדוכן..." className="w-full pr-10 pl-4 py-3 bg-white border border-slate-200 rounded-xl text-sm shadow-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+                  <input type="text" value={posSearch} onChange={e => setPosSearch(e.target.value)} placeholder="חפש ספר מהיר בדוכן..." className="w-full pr-10 pl-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm shadow-xs outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all" />
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
                   {inventoryList
                     .filter(b => (b.title || '').includes(posSearch))
                     .sort((a, b) => a.title.localeCompare(b.title, 'he'))
@@ -1687,16 +1797,20 @@ export default function App() {
                           key={book.id}
                           type="button"
                           onClick={() => handleAddToPosCart(book)}
-                          className={`text-right p-4 rounded-2xl border transition-all active:scale-95 flex flex-col justify-between min-h-[115px] relative ${inCart > 0 ? 'bg-indigo-50 border-indigo-400 shadow-sm' : 'bg-white border-slate-200 hover:border-indigo-300'}`}
+                          className={`text-right p-4 rounded-2xl transition-all duration-150 active:scale-[0.98] flex flex-col justify-between min-h-[120px] relative ${
+                            inCart > 0
+                              ? 'bg-indigo-50/80 ring-2 ring-indigo-500 shadow-sm'
+                              : 'bg-white ring-1 ring-slate-200/80 hover:ring-indigo-300 hover:shadow-md'
+                          }`}
                         >
-                          {inCart > 0 && <span className="absolute -top-2 -left-2 bg-indigo-600 text-white text-xs font-bold w-7 h-7 rounded-full flex items-center justify-center shadow-md">{inCart}</span>}
+                          {inCart > 0 && <span className="absolute -top-2 -left-2 bg-indigo-600 text-white text-xs font-extrabold w-7 h-7 rounded-full flex items-center justify-center shadow-md ring-2 ring-white">{inCart}</span>}
                           <div>
                             <h4 className="font-bold text-slate-800 text-sm leading-snug line-clamp-2">{book.title}</h4>
-                            <p className="text-[11px] text-slate-400 mt-1">במחסן: {book.publisherStock}</p>
+                            <span className="inline-block text-[11px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md mt-1.5">במחסן: {book.publisherStock}</span>
                           </div>
-                          <div className="mt-3 pt-2 border-t border-slate-100 flex justify-between items-center">
-                            <span className="text-base font-extrabold text-emerald-600">₪{price}</span>
-                            <span className="text-[11px] bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-md">+ הוסף</span>
+                          <div className="mt-3 pt-2.5 border-t border-slate-100 flex justify-between items-center">
+                            <span className="text-lg font-extrabold text-emerald-600">₪{price}</span>
+                            <span className="text-[11px] bg-indigo-100/80 text-indigo-700 font-bold px-2.5 py-1 rounded-lg">+ הוסף</span>
                           </div>
                         </button>
                       );
@@ -1704,28 +1818,31 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col h-fit sticky top-4 space-y-4">
-                <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-                  <h4 className="font-bold text-slate-800 flex items-center gap-2"><ShoppingCart className="w-5 h-5 text-indigo-600" /> סל קנייה נוכחי</h4>
-                  {posCart.length > 0 && <button onClick={() => setPosCart([])} className="text-xs text-red-500 hover:underline">רוקן סל</button>}
+              <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200/80 p-5 flex flex-col h-fit sticky top-24 space-y-4">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-3.5">
+                  <h4 className="font-extrabold text-slate-800 flex items-center gap-2"><ShoppingCart className="w-5 h-5 text-indigo-600" /> סל קנייה נוכחי</h4>
+                  {posCart.length > 0 && <button onClick={() => setPosCart([])} className="text-xs font-bold text-rose-500 hover:text-rose-700">רוקן סל</button>}
                 </div>
                 {posCart.length === 0 ? (
-                  <p className="py-10 text-center text-slate-400 text-sm">לחץ על הספרים מימין להוספה לסל</p>
+                  <div className="py-12 text-center space-y-2">
+                    <ShoppingCart className="w-10 h-10 text-slate-200 mx-auto" />
+                    <p className="text-slate-400 text-sm">לחץ על הספרים מימין להוספה לסל</p>
+                  </div>
                 ) : (
-                  <div className="space-y-2.5 max-h-64 overflow-y-auto">
+                  <div className="space-y-2.5 max-h-64 overflow-y-auto pl-1">
                     {posCart.map(item => {
                       const book = inventoryList.find(b => b.id === item.bookId);
                       const unitPrice = book ? getPosBookPrice(book, posPriceMode) : 0;
                       return (
-                        <div key={item.bookId} className="flex items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <div key={item.bookId} className="flex items-center justify-between gap-2 bg-slate-50/90 p-3 rounded-xl ring-1 ring-slate-200/60">
                           <div className="flex-1 min-w-0">
                             <p className="font-bold text-xs text-slate-800 truncate">{item.title}</p>
-                            <p className="text-[11px] text-slate-500">₪{unitPrice} ליח' · ₪{(unitPrice * item.qty).toLocaleString()}</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">₪{unitPrice} ליח' · <strong className="text-slate-700">₪{(unitPrice * item.qty).toLocaleString()}</strong></p>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <button onClick={() => handleUpdatePosCartQty(item.bookId, -1)} className="w-7 h-7 bg-white border border-slate-200 rounded-lg flex items-center justify-center"><Minus className="w-3.5 h-3.5" /></button>
-                            <span className="font-bold text-sm w-6 text-center">{item.qty}</span>
-                            <button onClick={() => handleUpdatePosCartQty(item.bookId, 1)} className="w-7 h-7 bg-white border border-slate-200 rounded-lg flex items-center justify-center"><Plus className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => handleUpdatePosCartQty(item.bookId, -1)} className="w-7 h-7 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center transition-colors"><Minus className="w-3.5 h-3.5" /></button>
+                            <span className="font-extrabold text-sm w-6 text-center">{item.qty}</span>
+                            <button onClick={() => handleUpdatePosCartQty(item.bookId, 1)} className="w-7 h-7 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center transition-colors"><Plus className="w-3.5 h-3.5" /></button>
                           </div>
                         </div>
                       );
@@ -1736,17 +1853,17 @@ export default function App() {
                 <div className="space-y-3 pt-3 border-t border-slate-100">
                   <div className="grid grid-cols-4 gap-1.5">
                     {['מזומן', 'ביט', 'פייבוקס', 'אשראי'].map(m => (
-                      <button key={m} type="button" onClick={() => setPosPaymentMethod(m)} className={`py-2 rounded-lg text-xs font-bold border ${posPaymentMethod === m ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>{m}</button>
+                      <button key={m} type="button" onClick={() => setPosPaymentMethod(m)} className={`py-2 rounded-xl text-xs font-bold border transition-all ${posPaymentMethod === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>{m}</button>
                     ))}
                   </div>
-                  <input type="text" value={posBuyerNote} onChange={e => setPosBuyerNote(e.target.value)} placeholder="שם קונה / הערה (אופציונלי)" className="w-full p-2.5 border border-slate-200 rounded-xl text-xs bg-slate-50 outline-none" />
-                  <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex justify-between items-center">
+                  <input type="text" value={posBuyerNote} onChange={e => setPosBuyerNote(e.target.value)} placeholder="שם קונה / הערה (אופציונלי)" className="w-full p-2.5 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white outline-none transition-colors" />
+                  <div className="bg-gradient-to-l from-emerald-50 to-teal-50/70 border border-emerald-200/80 p-4 rounded-2xl flex justify-between items-center">
                     <span className="font-bold text-emerald-900 text-sm">סה"כ לתשלום:</span>
                     <span className="text-2xl font-extrabold text-emerald-700">
                       ₪{posCart.reduce((s, item) => { const b = inventoryList.find(x => x.id === item.bookId); return s + (b ? getPosBookPrice(b, posPriceMode) * item.qty : 0); }, 0).toLocaleString()}
                     </span>
                   </div>
-                  <button type="button" disabled={posCart.length === 0} onClick={handleCompletePosSale} className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white py-3.5 rounded-xl font-bold text-base shadow-sm flex items-center justify-center gap-2">
+                  <button type="button" disabled={posCart.length === 0} onClick={handleCompletePosSale} className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white py-3.5 rounded-xl font-bold text-sm shadow-md shadow-emerald-600/20 disabled:shadow-none flex items-center justify-center gap-2 transition-all">
                     <CheckCircle className="w-5 h-5" /> אשר מכירה והפחת ממלאי
                   </button>
                 </div>
@@ -1758,36 +1875,39 @@ export default function App() {
         {/* ==================== 3. STORE ORDERS ==================== */}
         {activeTab === 'orders' && (
           <div className="space-y-5">
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
-                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><ShoppingCart className="w-5 h-5 text-indigo-600" /> הזמנות מהחנות (אתר הישיבה)</h2>
-                <p className="text-xs text-slate-500 mt-0.5">הזמנות שנכנסות מהאתר וממתינות לאריזה ומשלוח</p>
+                <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
+                  <span className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><ShoppingCart className="w-5 h-5" /></span>
+                  הזמנות מהחנות (אתר הישיבה)
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">הזמנות שנכנסות מהאתר וממתינות לאריזה ומשלוח</p>
               </div>
-              <div className="bg-slate-100 p-1 rounded-xl flex gap-1">
-                <button onClick={() => setOrdersSubTab('pending')} className={`px-4 py-2 rounded-lg text-sm font-bold ${ordersSubTab === 'pending' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600'}`}>הזמנות פתוחות ({pendingOrders.length})</button>
-                <button onClick={() => setOrdersSubTab('shipped')} className={`px-4 py-2 rounded-lg text-sm font-bold ${ordersSubTab === 'shipped' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600'}`}>הזמנות שנשלחו ({shippedOrders.length})</button>
+              <div className="bg-slate-100 p-1 rounded-xl flex gap-1 ring-1 ring-slate-200/80">
+                <button onClick={() => setOrdersSubTab('pending')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${ordersSubTab === 'pending' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>הזמנות פתוחות ({pendingOrders.length})</button>
+                <button onClick={() => setOrdersSubTab('shipped')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${ordersSubTab === 'shipped' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>הזמנות שנשלחו ({shippedOrders.length})</button>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {(ordersSubTab === 'pending' ? pendingOrders : shippedOrders).map(order => (
-                <div key={order.id} className={`bg-white p-5 rounded-2xl shadow-sm border-r-4 border border-slate-100 space-y-3 ${ordersSubTab === 'pending' ? 'border-r-amber-500' : 'border-r-emerald-500'}`}>
+                <div key={order.id} className={`bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 border-r-4 hover:shadow-md transition-all space-y-3.5 ${ordersSubTab === 'pending' ? 'border-r-amber-500' : 'border-r-emerald-500'}`}>
                   <div className="flex justify-between items-start gap-2">
                     <div>
-                      <span className="text-xs font-bold text-indigo-600">הזמנה #{String(order.orderId || '').replace(/^#/, '')}</span>
-                      <h4 className="font-bold text-slate-800 text-base">{order.customerName}</h4>
-                      <p className="text-xs text-slate-500">{order.address} · {order.shippingMethod}</p>
+                      <span className="inline-block text-[11px] font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md mb-1">הזמנה #{String(order.orderId || '').replace(/^#/, '')}</span>
+                      <h4 className="font-extrabold text-slate-900 text-base">{order.customerName}</h4>
+                      <p className="text-xs text-slate-500 mt-0.5">{order.address} · {order.shippingMethod}</p>
                     </div>
                     <div className="text-left">
-                      <span className="font-extrabold text-slate-800">₪{Number(order.total || 0).toLocaleString()}</span>
+                      <span className="text-lg font-extrabold text-slate-900">₪{Number(order.total || 0).toLocaleString()}</span>
                       <p className="text-[11px] text-slate-400">{order.date} {order.time}</p>
                     </div>
                   </div>
-                  <div className="bg-slate-50 p-3 rounded-xl text-sm space-y-1">
+                  <div className="bg-slate-50/90 p-3.5 rounded-xl ring-1 ring-slate-200/60 text-sm space-y-1.5">
                     {(order.items || []).map((item, i) => (
-                      <div key={i} className="flex justify-between">
-                        <span>{item.name}</span>
-                        <span className="font-bold">×{item.quantity}</span>
+                      <div key={i} className="flex justify-between items-center">
+                        <span className="text-slate-700">{item.name}</span>
+                        <span className="font-extrabold bg-white px-2 py-0.5 rounded-md ring-1 ring-slate-200 text-xs">×{item.quantity}</span>
                       </div>
                     ))}
                   </div>
@@ -1801,14 +1921,14 @@ export default function App() {
                         recipient: `${order.customerName} — ${order.address}`,
                         items: order.items || []
                       })}
-                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5"
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
                     >
                       <Printer className="w-4 h-4" /> הדפס דף אריזה
                     </button>
                     {ordersSubTab === 'pending' && userRole === 'admin' && (
                       <button
                         onClick={() => handleMarkOrderShipped(order)}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 mr-auto"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 mr-auto shadow-xs transition-colors"
                       >
                         <CheckCircle className="w-4 h-4" /> סמן כנארז ונשלח
                       </button>
@@ -1817,8 +1937,9 @@ export default function App() {
                 </div>
               ))}
               {(ordersSubTab === 'pending' ? pendingOrders : shippedOrders).length === 0 && (
-                <div className="col-span-full bg-white p-12 rounded-2xl border border-dashed border-slate-300 text-center text-slate-400">
-                  {ordersSubTab === 'pending' ? 'אין הזמנות פתוחות כרגע.' : 'עדיין אין הזמנות שנשלחו.'}
+                <div className="col-span-full bg-white p-14 rounded-2xl border border-dashed border-slate-300 text-center space-y-2">
+                  <ShoppingCart className="w-10 h-10 text-slate-200 mx-auto" />
+                  <p className="text-slate-400 font-medium">{ordersSubTab === 'pending' ? 'אין הזמנות פתוחות כרגע.' : 'עדיין אין הזמנות שנשלחו.'}</p>
                 </div>
               )}
             </div>
@@ -1827,78 +1948,83 @@ export default function App() {
 
         {/* ==================== 4. INVENTORY MANAGEMENT ==================== */}
         {activeTab === 'inventory' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-xs ring-1 ring-slate-200/70 overflow-hidden">
             {/* Toolbar */}
-            <div className="p-4 md:p-6 border-b border-slate-100 flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-4">
-              <div className="flex flex-col sm:flex-row gap-2 flex-1">
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="חיפוש לפי שם ספר, מחבר או דאנאק..."
-                    className="w-full pr-9 pl-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 text-sm outline-none"
-                  />
+            <div className="p-4 md:p-6 border-b border-slate-100 space-y-4">
+              <div className="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-3.5">
+                <div className="flex flex-col sm:flex-row gap-2.5 flex-1">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="חיפוש לפי שם ספר, מחבר או דאנאק..."
+                      className="w-full pr-10 pl-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-sm outline-none transition-all"
+                    />
+                  </div>
+                  <select
+                    value={inventorySort}
+                    onChange={(e) => setInventorySort(e.target.value)}
+                    className="p-2.5 border border-slate-200 rounded-xl bg-slate-50/80 focus:bg-white text-sm outline-none font-medium text-slate-700"
+                  >
+                    <option value="alphabetical">מיון: אלף-בית</option>
+                    <option value="date">מיון: עודכן לאחרונה</option>
+                  </select>
                 </div>
-                <select
-                  value={inventorySort}
-                  onChange={(e) => setInventorySort(e.target.value)}
-                  className="p-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white text-sm outline-none"
-                >
-                  <option value="alphabetical">מיון: אלף-בית</option>
-                  <option value="date">מיון: עודכן לאחרונה</option>
-                </select>
+
+                {userRole === 'admin' && (
+                  <div className="flex flex-wrap gap-2 print:hidden">
+                    <button onClick={() => setIsGiftModalOpen(true)} className="bg-purple-50 hover:bg-purple-100 text-purple-700 ring-1 ring-purple-200/80 px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"><Gift className="w-4 h-4" /> חלוקה לתורמים</button>
+                    <button onClick={handleImportYhyCatalog} className="bg-pink-50 hover:bg-pink-100 text-pink-700 ring-1 ring-pink-200/80 px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"><RefreshCw className="w-4 h-4" /> סנכרן מחירון</button>
+                    <button onClick={() => { setNewBookForm(emptyBookForm); setIsAddBookModalOpen(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-indigo-600/20 transition-all"><Plus className="w-4 h-4" /> הוסף ספר</button>
+                  </div>
+                )}
               </div>
 
-              <div className="flex flex-wrap gap-2 print:hidden">
+              <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100 print:hidden">
                 <button
                   onClick={() => setIsWarehouseMode(!isWarehouseMode)}
-                  className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors ${isWarehouseMode ? 'bg-amber-500 text-white shadow-sm' : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'}`}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${isWarehouseMode ? 'bg-amber-500 text-white shadow-sm' : 'bg-amber-50 hover:bg-amber-100 text-amber-800 ring-1 ring-amber-200/80'}`}
                 >
-                  <ClipboardList className="w-4 h-4" /> {isWarehouseMode ? 'חזרה לטבלה רגילה' : 'מצב ספירת מלאי'}
+                  <ClipboardList className="w-3.5 h-3.5" /> {isWarehouseMode ? 'חזרה לטבלה רגילה' : 'מצב ספירת מלאי'}
                 </button>
-                <button onClick={() => setIsCatalogModalOpen(true)} className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5"><BookMarked className="w-4 h-4" /> קטלוג לשליחה</button>
-                <button onClick={() => window.print()} className="bg-white border border-slate-200 hover:bg-slate-50 px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5"><Printer className="w-4 h-4" /> הדפס</button>
-                <button onClick={handleExportCSV} className="bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5"><Download className="w-4 h-4" /> ייצוא</button>
-                <button onClick={() => setIsGiftHistoryOpen(true)} className="bg-purple-50 hover:bg-purple-100 text-purple-700 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5"><History className="w-4 h-4" /> מתנות ({giftLogs.length})</button>
-                {userRole === 'admin' && (
-                  <>
-                    <button onClick={() => setIsGiftModalOpen(true)} className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5"><Gift className="w-4 h-4" /> חלוקה לתורמים</button>
-                    <button onClick={handleImportYhyCatalog} className="bg-pink-100 hover:bg-pink-200 text-pink-700 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5"><RefreshCw className="w-4 h-4" /> סנכרן מחירון</button>
-                    <button onClick={() => { setNewBookForm(emptyBookForm); setIsAddBookModalOpen(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm"><Plus className="w-4 h-4" /> הוסף ספר</button>
-                  </>
-                )}
+                <button onClick={() => setIsCatalogModalOpen(true)} className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200/80 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"><BookMarked className="w-3.5 h-3.5" /> קטלוג לשליחה</button>
+                <button onClick={() => setIsGiftHistoryOpen(true)} className="bg-slate-50 hover:bg-slate-100 text-slate-700 ring-1 ring-slate-200/80 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"><History className="w-3.5 h-3.5" /> מעקב מתנות ({giftLogs.length})</button>
+                <div className="mr-auto flex items-center gap-2">
+                  <button onClick={() => window.print()} className="bg-white ring-1 ring-slate-200 hover:bg-slate-50 text-slate-600 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"><Printer className="w-3.5 h-3.5" /> הדפס</button>
+                  <button onClick={handleExportCSV} className="bg-white ring-1 ring-slate-200 hover:bg-slate-50 text-slate-600 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"><Download className="w-3.5 h-3.5" /> ייצוא CSV</button>
+                </div>
               </div>
             </div>
 
             {isWarehouseMode ? (
               /* --- מצב ספירת מלאי מהירה (מחסן) --- */
               <div className="p-4 md:p-6 bg-amber-50/30 space-y-4">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-amber-50 border border-amber-200 p-3.5 rounded-xl">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white ring-1 ring-amber-200/80 p-4 rounded-2xl shadow-xs">
                   <div>
-                    <h4 className="font-bold text-amber-900 text-sm md:text-base flex items-center gap-2"><ClipboardList className="w-4 h-4" /> מצב ספירת מלאי מהירה במחסן</h4>
-                    <p className="text-xs text-amber-700">כל לחיצה מעדכנת מיד את כמות המלאי במחסן הראשי</p>
+                    <h4 className="font-extrabold text-amber-900 text-sm md:text-base flex items-center gap-2"><ClipboardList className="w-4 h-4 text-amber-600" /> מצב ספירת מלאי מהירה במחסן</h4>
+                    <p className="text-xs text-slate-500 mt-0.5">כל לחיצה מעדכנת מיד את כמות המלאי במחסן הראשי</p>
                   </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="font-bold text-amber-900">גודל ארגז:</span>
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span className="font-bold text-slate-600 ml-1">גודל ארגז:</span>
                     {[10, 20, 25, 30].map(size => (
-                      <button key={size} onClick={() => setWarehouseBoxSize(size)} className={`px-2.5 py-1 rounded-lg font-bold border ${warehouseBoxSize === size ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-amber-800 border-amber-200'}`}>{size}</button>
+                      <button key={size} onClick={() => setWarehouseBoxSize(size)} className={`px-3 py-1.5 rounded-xl font-bold border transition-all ${warehouseBoxSize === size ? 'bg-amber-600 text-white border-amber-600 shadow-xs' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-amber-50'}`}>{size}</button>
                     ))}
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                   {sortedInventory.map(book => (
-                    <div key={book.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-3">
+                    <div key={book.id} className="bg-white p-4 rounded-2xl ring-1 ring-slate-200/80 shadow-xs flex flex-col gap-3">
                       <div className="flex justify-between items-center gap-2">
                         <h5 className="font-bold text-slate-800 text-sm">{book.title}</h5>
-                        <span className="text-xl font-extrabold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-xl">{Number(book.publisherStock || 0).toLocaleString()}</span>
+                        <span className="text-xl font-extrabold text-indigo-700 bg-indigo-50 ring-1 ring-indigo-100 px-3.5 py-1 rounded-xl">{Number(book.publisherStock || 0).toLocaleString()}</span>
                       </div>
                       <div className="grid grid-cols-4 gap-2">
-                        <button onClick={() => handleQuickWarehouseAdjust(book, -warehouseBoxSize)} className="py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl font-bold text-xs">-{warehouseBoxSize} ארגז</button>
-                        <button onClick={() => handleQuickWarehouseAdjust(book, -1)} className="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-sm">-1</button>
-                        <button onClick={() => handleQuickWarehouseAdjust(book, 1)} className="py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-bold text-sm">+1</button>
-                        <button onClick={() => handleQuickWarehouseAdjust(book, warehouseBoxSize)} className="py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs">+{warehouseBoxSize} ארגז</button>
+                        <button onClick={() => handleQuickWarehouseAdjust(book, -warehouseBoxSize)} className="py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl font-bold text-xs transition-colors">-{warehouseBoxSize} ארגז</button>
+                        <button onClick={() => handleQuickWarehouseAdjust(book, -1)} className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-sm transition-colors">-1</button>
+                        <button onClick={() => handleQuickWarehouseAdjust(book, 1)} className="py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-bold text-sm transition-colors">+1</button>
+                        <button onClick={() => handleQuickWarehouseAdjust(book, warehouseBoxSize)} className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-xs transition-colors">+{warehouseBoxSize} ארגז</button>
                       </div>
                     </div>
                   ))}
@@ -1908,9 +2034,9 @@ export default function App() {
               /* --- טבלת ניהול המלאי המלאה --- */
               <div className="overflow-x-auto">
                 <table className="w-full text-right text-sm min-w-[980px]">
-                  <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs">
+                  <thead className="bg-slate-50/90 text-slate-500 border-b border-slate-200/80 text-xs uppercase tracking-wide">
                     <tr>
-                      <th className="py-3.5 px-4 font-bold">שם הספר ופרטים</th>
+                      <th className="py-3.5 px-5 font-bold">שם הספר ופרטים</th>
                       <th className="py-3.5 px-4 font-bold text-center">מחירים (אתר / ספק / ישיבה)</th>
                       <th className="py-3.5 px-4 font-bold text-center text-rose-700 bg-rose-50/40">עלות הפקה</th>
                       <th className="py-3.5 px-4 font-bold text-center">רווחיות לעותק</th>
@@ -1932,9 +2058,9 @@ export default function App() {
                       const supProfit = supPrice > 0 ? supPrice - cost : 0;
 
                       return (
-                        <tr key={book.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-4 px-4">
-                            <div className="font-bold text-slate-800 text-sm">{book.title}</div>
+                        <tr key={book.id} className="hover:bg-indigo-50/20 transition-colors">
+                          <td className="py-4 px-5">
+                            <div className="font-bold text-slate-900 text-sm">{book.title}</div>
                             <div className="text-xs text-slate-400 mt-0.5 flex flex-wrap gap-2">
                               {book.author && <span>{book.author}</span>}
                               {book.isbn && <span>· דאנאק: {book.isbn}</span>}
@@ -1942,25 +2068,25 @@ export default function App() {
                           </td>
 
                           <td className="py-4 px-4 text-center">
-                            <div className="flex flex-col items-center gap-0.5 text-xs">
-                              <span className="font-bold text-slate-800">אתר: ₪{webPrice}</span>
-                              <span className="text-indigo-700 font-semibold">ספק: ₪{supPrice}</span>
-                              <span className="text-emerald-700">ישיבה: ₪{Number(book.prices?.yeshiva || 0)}</span>
+                            <div className="flex flex-wrap justify-center gap-1 text-[11px]">
+                              <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded-md">אתר ₪{webPrice}</span>
+                              <span className="bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-md">ספק ₪{supPrice}</span>
+                              <span className="bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-md">ישיבה ₪{Number(book.prices?.yeshiva || 0)}</span>
                             </div>
                           </td>
 
-                          <td className="py-4 px-4 text-center bg-rose-50/30 border-x border-slate-100">
-                            <span className="font-bold text-rose-700 text-base">₪{cost.toLocaleString()}</span>
+                          <td className="py-4 px-4 text-center bg-rose-50/25 border-x border-slate-100/80">
+                            <span className="font-extrabold text-rose-700 text-sm">₪{cost.toLocaleString()}</span>
                           </td>
 
                           <td className="py-4 px-4 text-center text-xs">
                             {cost > 0 ? (
-                              <div className="space-y-0.5">
-                                {webPrice > 0 && <div className="text-emerald-700 font-bold">אתר: ₪{webProfit.toFixed(1)} ({webMargin}%)</div>}
-                                {supPrice > 0 && <div className="text-slate-600">ספק: ₪{supProfit.toFixed(1)}</div>}
+                              <div className="space-y-1">
+                                {webPrice > 0 && <div className="text-emerald-700 font-bold bg-emerald-50/80 inline-block px-2 py-0.5 rounded-md">אתר: ₪{webProfit.toFixed(1)} ({webMargin}%)</div>}
+                                {supPrice > 0 && <div className="text-slate-500 text-[11px]">ספק: ₪{supProfit.toFixed(1)}</div>}
                               </div>
                             ) : (
-                              <span className="text-slate-400">לא הוזנה עלות</span>
+                              <span className="text-slate-300">—</span>
                             )}
                           </td>
 
@@ -1971,11 +2097,11 @@ export default function App() {
                                 min="0"
                                 value={book.publisherStock}
                                 onChange={(e) => handleInlineStockChange(book, e.target.value)}
-                                className="w-20 font-extrabold text-indigo-700 text-lg text-center bg-white border border-indigo-200 rounded-lg py-1 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                className="w-20 font-extrabold text-indigo-700 text-base text-center bg-white border border-indigo-200/80 rounded-xl py-1.5 focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none shadow-2xs transition-all"
                                 dir="ltr"
                               />
                             ) : (
-                              <span className="font-extrabold text-indigo-700 text-lg">{Number(book.publisherStock || 0).toLocaleString()}</span>
+                              <span className="font-extrabold text-indigo-700 text-base">{Number(book.publisherStock || 0).toLocaleString()}</span>
                             )}
                           </td>
 
@@ -1983,19 +2109,20 @@ export default function App() {
                             {(book.breakdown || []).filter(r => Number(r.amount) > 0).length > 0 ? (
                               <div className="flex flex-wrap gap-1.5">
                                 {(book.breakdown || []).filter(r => Number(r.amount) > 0).map((row, i) => (
-                                  <span key={i} className="bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-lg text-xs font-medium">
-                                    {row.location}: <strong>{row.amount}</strong>
+                                  <span key={i} className="bg-slate-100/90 text-slate-700 ring-1 ring-slate-200/80 px-2.5 py-0.5 rounded-lg text-xs font-medium">
+                                    {row.location}: <strong className="text-slate-900">{row.amount}</strong>
                                   </span>
                                 ))}
                               </div>
                             ) : (
-                              <span className="text-xs text-slate-400">אין עותקים אצל ספקים</span>
+                              <span className="text-xs text-slate-400">אין אצל ספקים</span>
                             )}
                           </td>
 
                           <td className="py-4 px-4 text-center">
-                            <div className="font-extrabold text-slate-800 text-base">{totalStock.toLocaleString()}</div>
-                            <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5 ${isLow ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}>
+                            <div className="font-extrabold text-slate-900 text-base">{totalStock.toLocaleString()}</div>
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5 ${isLow ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${isLow ? 'bg-amber-500' : 'bg-emerald-500'}`} />
                               {isLow ? 'מלאי נמוך' : 'תקין'}
                             </span>
                           </td>
@@ -2010,12 +2137,12 @@ export default function App() {
                                     editions: book.editions?.length ? book.editions : [{ name: 'מהדורה 1', printRun: 0 }],
                                     breakdown: book.breakdown || []
                                   })}
-                                  className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                                  className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
                                   title="ערוך ספר"
                                 >
                                   <Edit className="w-4 h-4" />
                                 </button>
-                                <button onClick={() => handleDeleteBook(book)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg" title="מחק ספר">
+                                <button onClick={() => handleDeleteBook(book)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors" title="מחק ספר">
                                   <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
@@ -2034,22 +2161,22 @@ export default function App() {
         {/* ==================== 5. SUPPLIERS & DISTRIBUTION ==================== */}
         {activeTab === 'suppliers' && (
           <div className="space-y-6">
-            <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4">
-              <div className="flex flex-col sm:flex-row gap-2 flex-1">
+            <div className="bg-white p-4 md:p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3.5">
+              <div className="flex flex-col sm:flex-row gap-2.5 flex-1">
                 <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+                  <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     value={supplierSearch}
                     onChange={e => setSupplierSearch(e.target.value)}
                     placeholder="חיפוש ספק, חנות או איש קשר..."
-                    className="w-full pr-9 pl-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white text-sm outline-none"
+                    className="w-full pr-10 pl-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 text-sm outline-none transition-all"
                   />
                 </div>
                 <select
                   value={supplierSort}
                   onChange={e => setSupplierSort(e.target.value)}
-                  className="p-2.5 border border-slate-200 rounded-xl bg-slate-50 text-sm outline-none"
+                  className="p-2.5 border border-slate-200 rounded-xl bg-slate-50/80 text-sm outline-none font-medium text-slate-700"
                 >
                   <option value="alphabetical">מיון: אלף-בית</option>
                   <option value="date">מיון: עודכן לאחרונה</option>
@@ -2058,7 +2185,7 @@ export default function App() {
               {userRole === 'admin' && (
                 <button
                   onClick={() => { setEditingSupplier(null); setSupplierForm(emptySupplierForm); setIsSupplierModalOpen(true); }}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm shadow-indigo-600/20 transition-all"
                 >
                   <Plus className="w-4 h-4" /> הוסף ספק / חנות
                 </button>
@@ -2066,7 +2193,7 @@ export default function App() {
             </div>
 
             {sortedSuppliers.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center space-y-3">
+              <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-14 text-center space-y-3">
                 <Truck className="w-12 h-12 text-slate-300 mx-auto" />
                 <h4 className="font-bold text-slate-700">עדיין לא הוגדרו ספקים או חנויות</h4>
                 <p className="text-sm text-slate-500">לחץ על "הוסף ספק / חנות" כדי להתחיל לנהל הזמנות, מלאי בקונסיגנציה וגבייה.</p>
@@ -2079,65 +2206,70 @@ export default function App() {
                   const openDebt = getSupplierOpenDebt(supplier.name);
 
                   return (
-                    <div key={supplier.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 flex flex-col justify-between gap-4">
-                      <div className="space-y-3">
+                    <div key={supplier.id} className="bg-white rounded-2xl shadow-xs ring-1 ring-slate-200/70 hover:shadow-md transition-all p-5 flex flex-col justify-between gap-4">
+                      <div className="space-y-3.5">
                         <div className="flex justify-between items-start gap-2">
-                          <div>
-                            <h3 className="font-extrabold text-slate-800 text-lg">{supplier.name}</h3>
-                            {supplier.contact && <p className="text-xs text-slate-500">איש קשר: {supplier.contact}</p>}
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 font-extrabold text-sm flex items-center justify-center shrink-0 ring-1 ring-slate-200/80">
+                              {(supplier.name || 'ס').charAt(0)}
+                            </div>
+                            <div>
+                              <h3 className="font-extrabold text-slate-900 text-base leading-tight">{supplier.name}</h3>
+                              {supplier.contact && <p className="text-xs text-slate-500 mt-0.5">איש קשר: {supplier.contact}</p>}
+                            </div>
                           </div>
                           {userRole === 'admin' && (
                             <div className="flex gap-1">
                               <button
                                 onClick={() => { setEditingSupplier(supplier); setSupplierForm({ name: supplier.name, contact: supplier.contact || '', phone: supplier.phone || '', email: supplier.email || '', address: supplier.address || '', notes: supplier.notes || '' }); setIsSupplierModalOpen(true); }}
-                                className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50"
+                                className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
                               >
                                 <Edit className="w-4 h-4" />
                               </button>
-                              <button onClick={() => handleDeleteSupplier(supplier)} className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50">
+                              <button onClick={() => handleDeleteSupplier(supplier)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors">
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
                           )}
                         </div>
 
-                        <div className="text-xs text-slate-600 space-y-1">
-                          {supplier.phone && <p className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-slate-400" /> {supplier.phone}</p>}
-                          {supplier.email && <p className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-slate-400" /> {supplier.email}</p>}
-                          {supplier.notes && <p className="text-slate-500 bg-slate-50 p-2 rounded-lg mt-1">{supplier.notes}</p>}
+                        <div className="text-xs text-slate-600 space-y-1.5">
+                          {supplier.phone && <p className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-slate-400" /> {supplier.phone}</p>}
+                          {supplier.email && <p className="flex items-center gap-2"><Mail className="w-3.5 h-3.5 text-slate-400" /> {supplier.email}</p>}
+                          {supplier.notes && <p className="text-slate-500 bg-slate-50 p-2.5 rounded-xl ring-1 ring-slate-100 mt-1">{supplier.notes}</p>}
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2 pt-1">
-                          <div className="bg-indigo-50/70 border border-indigo-100 p-2.5 rounded-xl text-center">
-                            <p className="text-[11px] text-indigo-700 font-medium">מלאי אצל הספק</p>
-                            <p className="text-lg font-extrabold text-indigo-800">{totalHeld.toLocaleString()} עותקים</p>
+                        <div className="grid grid-cols-2 gap-2.5 pt-1">
+                          <div className="bg-indigo-50/70 ring-1 ring-indigo-100 p-3 rounded-xl text-center">
+                            <p className="text-[11px] text-indigo-700 font-semibold">מלאי אצל הספק</p>
+                            <p className="text-lg font-extrabold text-indigo-900 mt-0.5">{totalHeld.toLocaleString()} עותקים</p>
                           </div>
-                          <div className={`p-2.5 rounded-xl text-center border ${openDebt > 0 ? 'bg-rose-50 border-rose-200' : 'bg-emerald-50 border-emerald-200'}`}>
-                            <p className={`text-[11px] font-medium ${openDebt > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>יתרת חוב פתוחה</p>
-                            <p className={`text-lg font-extrabold ${openDebt > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>₪{openDebt.toLocaleString()}</p>
+                          <div className={`p-3 rounded-xl text-center ring-1 ${openDebt > 0 ? 'bg-rose-50/80 ring-rose-200/80' : 'bg-emerald-50/80 ring-emerald-200/80'}`}>
+                            <p className={`text-[11px] font-semibold ${openDebt > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>יתרת חוב פתוחה</p>
+                            <p className={`text-lg font-extrabold mt-0.5 ${openDebt > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>₪{openDebt.toLocaleString()}</p>
                           </div>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100">
-                        <button onClick={() => setViewingSupplierStock(supplier)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5">
+                      <div className="grid grid-cols-2 gap-2 pt-3.5 border-t border-slate-100">
+                        <button onClick={() => setViewingSupplierStock(supplier)} className="bg-slate-100 hover:bg-slate-200/80 text-slate-700 py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
                           <Package className="w-3.5 h-3.5" /> צפה במלאי
                         </button>
-                        <button onClick={() => { setSelectedSupplierForHistory(supplier); setIsSupplierHistoryModalOpen(true); }} className="bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5">
+                        <button onClick={() => { setSelectedSupplierForHistory(supplier); setIsSupplierHistoryModalOpen(true); }} className="bg-slate-100 hover:bg-slate-200/80 text-slate-700 py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
                           <History className="w-3.5 h-3.5" /> היסטוריה וגבייה
                         </button>
                         {userRole === 'admin' && (
                           <>
-                            <button onClick={() => openSupplierOrderModal(supplier)} className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5">
+                            <button onClick={() => openSupplierOrderModal(supplier)} className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors">
                               <Send className="w-3.5 h-3.5" /> הפק הזמנה
                             </button>
-                            <button onClick={() => openConsignmentModal(supplier)} className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5">
+                            <button onClick={() => openConsignmentModal(supplier)} className="bg-amber-50 hover:bg-amber-100 text-amber-900 ring-1 ring-amber-200/80 py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
                               <ArrowLeftRight className="w-3.5 h-3.5" /> מכירה / החזרה
                             </button>
                           </>
                         )}
                         {openDebt > 0 && supplier.phone && (
-                          <button onClick={() => handleSendDebtWhatsAppReminder(supplier)} className="col-span-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5">
+                          <button onClick={() => handleSendDebtWhatsAppReminder(supplier)} className="col-span-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors">
                             <MessageCircle className="w-3.5 h-3.5" /> שלח תזכורת גבייה בוואטסאפ
                           </button>
                         )}
@@ -2153,20 +2285,23 @@ export default function App() {
         {/* ==================== 6. PRODUCTION KANBAN ==================== */}
         {activeTab === 'production' && (
           <div className="space-y-6">
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
-                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><KanbanSquare className="w-5 h-5 text-indigo-600" /> מעקב הפקת ספרים</h2>
-                <p className="text-xs text-slate-500 mt-0.5">לחץ על כל ספר לניהול שלבים, הוצאות הפקה, מחיקה או העברה למלאי</p>
+                <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
+                  <span className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><KanbanSquare className="w-5 h-5" /></span>
+                  מעקב הפקת ספרים
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">לחץ על כל ספר לניהול שלבים, הוצאות הפקה, מחיקה או העברה למלאי</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => { setBreakEvenForm({ bookTitle: '', totalCost: 15000, printRun: 1000, sellPrice: 60 }); setIsBreakEvenModalOpen(true); }}
-                  className="bg-amber-100 hover:bg-amber-200 text-amber-900 px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-1.5"
+                  className="bg-amber-50 hover:bg-amber-100 text-amber-900 ring-1 ring-amber-200/80 px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-1.5 transition-colors"
                 >
                   <Calculator className="w-4 h-4" /> מחשבון נקודת איזון
                 </button>
                 {userRole === 'admin' && (
-                  <button onClick={() => setIsAddTaskModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-1.5 shadow-sm">
+                  <button onClick={() => setIsAddTaskModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-1.5 shadow-sm shadow-indigo-600/20 transition-all">
                     <Plus className="w-4 h-4" /> פרויקט ספר חדש
                   </button>
                 )}
@@ -2177,10 +2312,10 @@ export default function App() {
               {KANBAN_COLUMNS.map(col => {
                 const colTasks = tasksList.filter(t => (t.status || 'planned') === col.id);
                 return (
-                  <div key={col.id} className={`rounded-2xl p-3.5 border min-h-[320px] ${col.color}`}>
-                    <div className="flex justify-between items-center mb-3">
-                      <h3 className="font-bold text-slate-800 text-sm">{col.title}</h3>
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${col.badge}`}>{colTasks.length}</span>
+                  <div key={col.id} className={`rounded-2xl p-3.5 border min-h-[340px] ${col.color}`}>
+                    <div className="flex justify-between items-center mb-3.5 px-1">
+                      <h3 className="font-extrabold text-slate-800 text-sm">{col.title}</h3>
+                      <span className={`text-xs font-extrabold px-2.5 py-0.5 rounded-full ${col.badge}`}>{colTasks.length}</span>
                     </div>
                     <div className="space-y-2.5">
                       {colTasks.map(task => {
@@ -2189,14 +2324,14 @@ export default function App() {
                           <div
                             key={task.id}
                             onClick={() => setSelectedTask(task)}
-                            className="bg-white p-3.5 rounded-xl shadow-sm border border-slate-200/80 hover:border-indigo-400 cursor-pointer transition-all space-y-2"
+                            className="bg-white p-3.5 rounded-xl shadow-xs ring-1 ring-slate-200/80 hover:ring-indigo-400 hover:shadow-md cursor-pointer transition-all space-y-2"
                           >
                             <div className="flex justify-between items-start gap-2">
-                              <h4 className="font-bold text-slate-800 text-sm leading-snug">{task.title}</h4>
+                              <h4 className="font-bold text-slate-900 text-sm leading-snug">{task.title}</h4>
                               {userRole === 'admin' && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleDeleteTask(task); }}
-                                  className="text-slate-300 hover:text-red-500 p-0.5"
+                                  className="text-slate-300 hover:text-rose-500 p-0.5 transition-colors"
                                   title="מחק פרויקט"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -2204,9 +2339,9 @@ export default function App() {
                               )}
                             </div>
                             {task.author && <p className="text-xs text-slate-500">{task.author}</p>}
-                            <div className="flex justify-between items-center pt-1 border-t border-slate-100 text-[11px]">
-                              <span className="text-rose-600 font-bold">הוצאות: ₪{totalExp.toLocaleString()}</span>
-                              {task.addedToInventory && <span className="text-emerald-600 font-bold">במלאי ✓</span>}
+                            <div className="flex justify-between items-center pt-2 border-t border-slate-100 text-[11px]">
+                              <span className="bg-rose-50 text-rose-700 font-bold px-2 py-0.5 rounded-md">₪{totalExp.toLocaleString()}</span>
+                              {task.addedToInventory && <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-bold">במלאי ✓</span>}
                             </div>
                           </div>
                         );
@@ -2243,18 +2378,21 @@ export default function App() {
 
           return (
             <div className="space-y-6">
-              <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
+              <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
                 <div>
-                  <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><Scale className="w-5 h-5 text-indigo-600" /> השוואת הצעות מחיר מבתי דפוס</h2>
-                  <p className="text-xs text-slate-500 mt-0.5">שמור מסמכי הצעות מחיר והשווה בקלות עלות כוללת, עלות לעותק וזמני אספקה</p>
+                  <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
+                    <span className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><Scale className="w-5 h-5" /></span>
+                    השוואת הצעות מחיר מבתי דפוס
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">שמור מסמכי הצעות מחיר והשווה בקלות עלות כוללת, עלות לעותק וזמני אספקה</p>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <select value={selectedQuoteProject} onChange={e => setSelectedQuoteProject(e.target.value)} className="p-2.5 border border-slate-200 rounded-xl bg-slate-50 text-sm outline-none min-w-[200px]">
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                  <select value={selectedQuoteProject} onChange={e => setSelectedQuoteProject(e.target.value)} className="p-2.5 border border-slate-200 rounded-xl bg-slate-50/80 text-sm outline-none min-w-[200px] font-medium">
                     <option value="ALL">כל הפרויקטים ({printQuotes.length})</option>
                     {uniqueProjects.map(p => <option key={p} value={p}>{p} ({printQuotes.filter(q => q.projectTitle === p).length})</option>)}
                   </select>
                   {userRole === 'admin' && (
-                    <button onClick={() => setIsAddQuoteModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm">
+                    <button onClick={() => setIsAddQuoteModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm shadow-indigo-600/20 transition-all">
                       <Plus className="w-4 h-4" /> העלה הצעת דפוס חדשה
                     </button>
                   )}
@@ -2263,47 +2401,47 @@ export default function App() {
 
               {filteredQuotes.length > 0 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl">
-                    <div className="flex justify-between text-emerald-700 text-xs font-bold"><span>ההצעה הזולה ביותר</span><Award className="w-4 h-4" /></div>
-                    <p className="text-xl font-extrabold text-emerald-900 mt-1">₪{minEffectivePrice.toLocaleString()}</p>
-                    <p className="text-xs text-emerald-700 mt-0.5 truncate">{cheapestQuote?.printerName}</p>
+                  <div className="bg-white p-4 rounded-2xl shadow-xs ring-1 ring-emerald-200/80">
+                    <div className="flex justify-between items-center text-emerald-700 text-xs font-bold"><span>ההצעה הזולה ביותר</span><div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center"><Award className="w-4 h-4" /></div></div>
+                    <p className="text-2xl font-extrabold text-emerald-900 mt-1">₪{minEffectivePrice.toLocaleString()}</p>
+                    <p className="text-xs text-emerald-700 mt-1 truncate">{cheapestQuote?.printerName}</p>
                   </div>
-                  <div className="bg-indigo-50 border border-indigo-200 p-4 rounded-2xl">
-                    <div className="flex justify-between text-indigo-700 text-xs font-bold"><span>עלות נמוכה לעותק</span><DollarSign className="w-4 h-4" /></div>
-                    <p className="text-xl font-extrabold text-indigo-900 mt-1">₪{Number(cheapestPerCopyQuote?.costPerCopy || 0).toFixed(2)}</p>
-                    <p className="text-xs text-indigo-700 mt-0.5 truncate">{cheapestPerCopyQuote?.printerName}</p>
+                  <div className="bg-white p-4 rounded-2xl shadow-xs ring-1 ring-indigo-200/80">
+                    <div className="flex justify-between items-center text-indigo-700 text-xs font-bold"><span>עלות נמוכה לעותק</span><div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center"><DollarSign className="w-4 h-4" /></div></div>
+                    <p className="text-2xl font-extrabold text-indigo-900 mt-1">₪{Number(cheapestPerCopyQuote?.costPerCopy || 0).toFixed(2)}</p>
+                    <p className="text-xs text-indigo-700 mt-1 truncate">{cheapestPerCopyQuote?.printerName}</p>
                   </div>
-                  <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl">
-                    <div className="flex justify-between text-amber-800 text-xs font-bold"><span>פער מחירים (חיסכון)</span><TrendingUp className="w-4 h-4" /></div>
-                    <p className="text-xl font-extrabold text-amber-900 mt-1">₪{potentialSavings.toLocaleString()}</p>
-                    <p className="text-xs text-amber-700 mt-0.5">{filteredQuotes.length > 1 ? `חיסכון של ${savingsPct}%` : 'הוסף הצעה נוספת'}</p>
+                  <div className="bg-white p-4 rounded-2xl shadow-xs ring-1 ring-amber-200/80">
+                    <div className="flex justify-between items-center text-amber-800 text-xs font-bold"><span>פער מחירים (חיסכון)</span><div className="w-8 h-8 rounded-xl bg-amber-50 flex items-center justify-center"><TrendingUp className="w-4 h-4" /></div></div>
+                    <p className="text-2xl font-extrabold text-amber-900 mt-1">₪{potentialSavings.toLocaleString()}</p>
+                    <p className="text-xs text-amber-700 mt-1">{filteredQuotes.length > 1 ? `חיסכון של ${savingsPct}%` : 'הוסף הצעה נוספת'}</p>
                   </div>
-                  <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
-                    <div className="flex justify-between text-slate-600 text-xs font-bold"><span>אספקה מהירה</span><Clock className="w-4 h-4" /></div>
-                    <p className="text-xl font-extrabold text-slate-800 mt-1">{fastestQuote ? `${fastestQuote.deliveryDays} ימים` : 'לא הוזן'}</p>
-                    <p className="text-xs text-slate-500 mt-0.5 truncate">{fastestQuote?.printerName || ''}</p>
+                  <div className="bg-white p-4 rounded-2xl shadow-xs ring-1 ring-slate-200/80">
+                    <div className="flex justify-between items-center text-slate-600 text-xs font-bold"><span>אספקה מהירה</span><div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center"><Clock className="w-4 h-4" /></div></div>
+                    <p className="text-2xl font-extrabold text-slate-900 mt-1">{fastestQuote ? `${fastestQuote.deliveryDays} ימים` : 'לא הוזן'}</p>
+                    <p className="text-xs text-slate-500 mt-1 truncate">{fastestQuote?.printerName || ''}</p>
                   </div>
                 </div>
               )}
 
               {filteredQuotes.length === 0 ? (
-                <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center space-y-2">
+                <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-14 text-center space-y-2">
                   <Scale className="w-12 h-12 text-slate-300 mx-auto" />
                   <p className="font-bold text-slate-700">עדיין לא הועלו הצעות מחיר מדפוסים</p>
                 </div>
               ) : (
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-x-auto">
+                <div className="bg-white rounded-2xl shadow-xs ring-1 ring-slate-200/70 overflow-x-auto">
                   <table className="w-full text-right text-sm min-w-[900px]">
-                    <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs">
+                    <thead className="bg-slate-50/90 text-slate-500 border-b border-slate-200/80 text-xs uppercase">
                       <tr>
-                        <th className="p-3.5 font-bold">בית הדפוס / ספר</th>
-                        <th className="p-3.5 font-bold text-center">כמות</th>
-                        <th className="p-3.5 font-bold text-center">מחיר כולל מע"מ</th>
-                        <th className="p-3.5 font-bold text-center">עלות לעותק</th>
-                        <th className="p-3.5 font-bold text-center">פער מהזול</th>
-                        <th className="p-3.5 font-bold">מפרט</th>
-                        <th className="p-3.5 font-bold text-center">מסמך</th>
-                        <th className="p-3.5 font-bold text-center">פעולות</th>
+                        <th className="p-4 font-bold">בית הדפוס / ספר</th>
+                        <th className="p-4 font-bold text-center">כמות</th>
+                        <th className="p-4 font-bold text-center">מחיר כולל מע"מ</th>
+                        <th className="p-4 font-bold text-center">עלות לעותק</th>
+                        <th className="p-4 font-bold text-center">פער מהזול</th>
+                        <th className="p-4 font-bold">מפרט</th>
+                        <th className="p-4 font-bold text-center">מסמך</th>
+                        <th className="p-4 font-bold text-center">פעולות</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -2313,19 +2451,19 @@ export default function App() {
                         const diffPct = minEffectivePrice > 0 ? Math.round((diff / minEffectivePrice) * 100) : 0;
                         const isBest = filteredQuotes.length > 1 && diff === 0;
                         return (
-                          <tr key={quote.id} className={isBest ? 'bg-emerald-50/30' : ''}>
+                          <tr key={quote.id} className={isBest ? 'bg-emerald-50/35' : 'hover:bg-slate-50/70'}>
                             <td className="p-4">
                               <div className="flex items-center gap-2">
-                                <span className="font-bold text-slate-800">{quote.printerName}</span>
+                                <span className="font-bold text-slate-900">{quote.printerName}</span>
                                 {isBest && <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full">הכי משתלם</span>}
                               </div>
-                              <div className="text-xs text-indigo-600">{quote.projectTitle}</div>
+                              <div className="text-xs text-indigo-600 mt-0.5">{quote.projectTitle}</div>
                             </td>
                             <td className="p-4 text-center font-bold">{Number(quote.copies).toLocaleString()}</td>
-                            <td className="p-4 text-center font-extrabold">₪{effPrice.toLocaleString()}</td>
-                            <td className="p-4 text-center"><span className="bg-indigo-50 text-indigo-700 font-bold px-2 py-1 rounded-lg">₪{Number(quote.costPerCopy || 0).toFixed(2)}</span></td>
+                            <td className="p-4 text-center font-extrabold text-slate-900">₪{effPrice.toLocaleString()}</td>
+                            <td className="p-4 text-center"><span className="bg-indigo-50 text-indigo-700 font-bold px-2.5 py-1 rounded-lg">₪{Number(quote.costPerCopy || 0).toFixed(2)}</span></td>
                             <td className="p-4 text-center">
-                              {diff === 0 ? <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded-lg">הזול ביותר</span> : <span className="text-xs font-bold text-rose-700 bg-rose-50 px-2 py-1 rounded-lg">+₪{diff.toLocaleString()} (+{diffPct}%)</span>}
+                              {diff === 0 ? <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-lg">הזול ביותר</span> : <span className="text-xs font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg">+₪{diff.toLocaleString()} (+{diffPct}%)</span>}
                             </td>
                             <td className="p-4 text-xs text-slate-600">
                               {[quote.coverType, quote.paperType, quote.pages ? `${quote.pages} עמ'` : '', quote.deliveryDays ? `${quote.deliveryDays} ימים` : ''].filter(Boolean).join(' · ')}
@@ -2333,13 +2471,13 @@ export default function App() {
                             </td>
                             <td className="p-4 text-center">
                               {quote.fileData ? (
-                                <button onClick={() => setPreviewQuoteDoc(quote)} className="bg-indigo-50 text-indigo-700 px-2.5 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> צפה</button>
+                                <button onClick={() => setPreviewQuoteDoc(quote)} className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1 transition-colors"><Eye className="w-3.5 h-3.5" /> צפה</button>
                               ) : <span className="text-xs text-slate-400">—</span>}
                             </td>
                             <td className="p-4 text-center">
                               <div className="flex justify-center gap-1">
-                                <button onClick={() => { setBreakEvenForm({ bookTitle: `${quote.projectTitle} (${quote.printerName})`, totalCost: effPrice, printRun: Number(quote.copies || 1000), sellPrice: 60 }); setIsBreakEvenModalOpen(true); }} className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg" title="נקודת איזון"><Calculator className="w-4 h-4" /></button>
-                                {userRole === 'admin' && <button onClick={() => handleDeletePrintQuote(quote)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>}
+                                <button onClick={() => { setBreakEvenForm({ bookTitle: `${quote.projectTitle} (${quote.printerName})`, totalCost: effPrice, printRun: Number(quote.copies || 1000), sellPrice: 60 }); setIsBreakEvenModalOpen(true); }} className="p-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors" title="נקודת איזון"><Calculator className="w-4 h-4" /></button>
+                                {userRole === 'admin' && <button onClick={() => handleDeletePrintQuote(quote)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>}
                               </div>
                             </td>
                           </tr>
@@ -2356,8 +2494,11 @@ export default function App() {
         {/* ==================== 8. MARKETING & PR ==================== */}
         {activeTab === 'marketing' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
-              <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><Megaphone className="w-5 h-5 text-indigo-600" /> קמפיינים ופרסום</h3>
+            <div className="bg-white p-6 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-4">
+              <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2.5">
+                <span className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><Megaphone className="w-4 h-4" /></span>
+                קמפיינים ופרסום
+              </h3>
               {userRole === 'admin' && (
                 <form
                   onSubmit={async (e) => {
@@ -2368,25 +2509,25 @@ export default function App() {
                     if (db && dbConnected) { try { await addDoc(getCollRef('campaigns'), obj); } catch {} }
                     setNewCampaignForm({ name: '', budget: '', spent: '', channel: 'וואטסאפ / בוגרים' });
                   }}
-                  className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200"
+                  className="grid grid-cols-2 gap-2.5 bg-slate-50/90 p-4 rounded-2xl ring-1 ring-slate-200/70"
                 >
-                  <input required placeholder="שם הקמפיין" value={newCampaignForm.name} onChange={e => setNewCampaignForm({ ...newCampaignForm, name: e.target.value })} className="col-span-2 p-2 border rounded-lg text-xs bg-white" />
-                  <input type="number" min="0" placeholder="תקציב (₪)" value={newCampaignForm.budget} onChange={e => setNewCampaignForm({ ...newCampaignForm, budget: e.target.value })} className="p-2 border rounded-lg text-xs bg-white" />
-                  <input type="number" min="0" placeholder="נוצל (₪)" value={newCampaignForm.spent} onChange={e => setNewCampaignForm({ ...newCampaignForm, spent: e.target.value })} className="p-2 border rounded-lg text-xs bg-white" />
-                  <button type="submit" className="col-span-2 bg-indigo-600 text-white py-2 rounded-lg text-xs font-bold">+ הוסף קמפיין</button>
+                  <input required placeholder="שם הקמפיין" value={newCampaignForm.name} onChange={e => setNewCampaignForm({ ...newCampaignForm, name: e.target.value })} className="col-span-2 p-2.5 border border-slate-200 rounded-xl text-xs bg-white outline-none focus:border-indigo-500" />
+                  <input type="number" min="0" placeholder="תקציב (₪)" value={newCampaignForm.budget} onChange={e => setNewCampaignForm({ ...newCampaignForm, budget: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white outline-none focus:border-indigo-500" />
+                  <input type="number" min="0" placeholder="נוצל (₪)" value={newCampaignForm.spent} onChange={e => setNewCampaignForm({ ...newCampaignForm, spent: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white outline-none focus:border-indigo-500" />
+                  <button type="submit" className="col-span-2 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors">+ הוסף קמפיין</button>
                 </form>
               )}
-              <div className="space-y-2.5">
+              <div className="space-y-3">
                 {campaignsList.map(c => {
                   const pct = Number(c.budget) > 0 ? Math.min(100, Math.round((Number(c.spent || 0) / Number(c.budget)) * 100)) : 0;
                   return (
-                    <div key={c.id} className="p-3.5 border border-slate-200 rounded-xl space-y-2">
+                    <div key={c.id} className="p-4 ring-1 ring-slate-200/80 rounded-2xl space-y-2.5">
                       <div className="flex justify-between items-center">
-                        <span className="font-bold text-sm">{c.name}</span>
-                        <span className="text-xs text-slate-500">₪{Number(c.spent || 0).toLocaleString()} / ₪{Number(c.budget || 0).toLocaleString()} ({pct}%)</span>
+                        <span className="font-bold text-sm text-slate-800">{c.name}</span>
+                        <span className="text-xs font-semibold text-slate-500">₪{Number(c.spent || 0).toLocaleString()} / ₪{Number(c.budget || 0).toLocaleString()} ({pct}%)</span>
                       </div>
-                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                        <div className="bg-indigo-600 h-full" style={{ width: `${pct}%` }} />
+                      <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                        <div className="bg-gradient-to-l from-indigo-500 to-indigo-600 h-full rounded-full transition-all" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   );
@@ -2395,8 +2536,11 @@ export default function App() {
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
-              <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><FileText className="w-5 h-5 text-emerald-600" /> עותקי ביקורת ויח"צ</h3>
+            <div className="bg-white p-6 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-4">
+              <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2.5">
+                <span className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><FileText className="w-4 h-4" /></span>
+                עותקי ביקורת ויח"צ
+              </h3>
               {userRole === 'admin' && (
                 <form
                   onSubmit={async (e) => {
@@ -2407,21 +2551,21 @@ export default function App() {
                     if (db && dbConnected) { try { await addDoc(getCollRef('pr_copies'), obj); } catch {} }
                     setNewPrForm({ bookTitle: '', recipient: '', role: 'מבקר / עיתונאי' });
                   }}
-                  className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200"
+                  className="grid grid-cols-2 gap-2.5 bg-slate-50/90 p-4 rounded-2xl ring-1 ring-slate-200/70"
                 >
-                  <input required placeholder="שם הספר" value={newPrForm.bookTitle} onChange={e => setNewPrForm({ ...newPrForm, bookTitle: e.target.value })} className="p-2 border rounded-lg text-xs bg-white" />
-                  <input required placeholder="למי נשלח" value={newPrForm.recipient} onChange={e => setNewPrForm({ ...newPrForm, recipient: e.target.value })} className="p-2 border rounded-lg text-xs bg-white" />
-                  <button type="submit" className="col-span-2 bg-emerald-600 text-white py-2 rounded-lg text-xs font-bold">+ תעד עותק ביקורת</button>
+                  <input required placeholder="שם הספר" value={newPrForm.bookTitle} onChange={e => setNewPrForm({ ...newPrForm, bookTitle: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white outline-none focus:border-emerald-500" />
+                  <input required placeholder="למי נשלח" value={newPrForm.recipient} onChange={e => setNewPrForm({ ...newPrForm, recipient: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white outline-none focus:border-emerald-500" />
+                  <button type="submit" className="col-span-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors">+ תעד עותק ביקורת</button>
                 </form>
               )}
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {prCopies.map(pr => (
-                  <div key={pr.id} className="p-3 border border-slate-200 rounded-xl flex justify-between items-center text-xs">
+                  <div key={pr.id} className="p-3.5 ring-1 ring-slate-200/80 rounded-xl flex justify-between items-center text-xs hover:bg-slate-50/70 transition-colors">
                     <div>
                       <p className="font-bold text-slate-800">{pr.bookTitle}</p>
-                      <p className="text-slate-500">נשלח אל: {pr.recipient}</p>
+                      <p className="text-slate-500 mt-0.5">נשלח אל: {pr.recipient}</p>
                     </div>
-                    <span className="text-slate-400">{pr.date}</span>
+                    <span className="text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">{pr.date}</span>
                   </div>
                 ))}
                 {prCopies.length === 0 && <p className="text-xs text-slate-400 text-center py-6">לא תועדו עותקי יח"צ.</p>}
@@ -2433,18 +2577,18 @@ export default function App() {
         {/* ==================== 9. INTEGRATIONS & BACKUP ==================== */}
         {activeTab === 'integrations' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-indigo-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div className="flex items-start gap-3">
-                <div className="p-3 bg-indigo-100 text-indigo-700 rounded-xl"><Database className="w-6 h-6" /></div>
+            <div className="bg-white rounded-2xl p-6 shadow-xs ring-1 ring-indigo-200/70 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="flex items-start gap-3.5">
+                <div className="p-3.5 bg-indigo-50 text-indigo-600 rounded-2xl ring-1 ring-indigo-100"><Database className="w-6 h-6" /></div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-800">גיבוי ושחזור מלא של כל נתוני המערכת (JSON)</h3>
+                  <h3 className="text-lg font-extrabold text-slate-900">גיבוי ושחזור מלא של כל נתוני המערכת (JSON)</h3>
                   <p className="text-slate-500 text-sm mt-0.5">הורד קובץ גיבוי אחד עם כל המלאי, הספקים, ההזמנות, הצעות הדפוס והפתקים.</p>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <button onClick={handleExportFullBackup} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2"><Download className="w-4 h-4" /> הורד גיבוי מלא</button>
+              <div className="flex flex-wrap gap-2.5">
+                <button onClick={handleExportFullBackup} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-sm shadow-indigo-600/20 transition-all"><Download className="w-4 h-4" /> הורד גיבוי מלא</button>
                 {userRole === 'admin' && (
-                  <label className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 cursor-pointer border border-slate-200">
+                  <label className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 cursor-pointer ring-1 ring-slate-200 transition-colors">
                     <Upload className="w-4 h-4" /> שחזר מגיבוי
                     <input type="file" accept=".json,application/json" onChange={handleImportBackupFile} className="hidden" />
                   </label>
@@ -2452,10 +2596,10 @@ export default function App() {
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 space-y-3">
-              <h3 className="font-bold text-slate-800 text-base">חיבור Webhook לחנות WooCommerce</h3>
+            <div className="bg-white rounded-2xl p-6 shadow-xs ring-1 ring-slate-200/70 space-y-3">
+              <h3 className="font-extrabold text-slate-900 text-base">חיבור Webhook לחנות WooCommerce</h3>
               <p className="text-sm text-slate-600">כדי שהזמנות מהאתר יקפצו אוטומטית ללשונית "הזמנות חנות" ויפחיתו מלאי, הגדר בוורדפרס את הכתובת הבאה תחת WooCommerce → הגדרות → מתקדם → Webhooks:</p>
-              <div className="bg-slate-900 text-emerald-400 p-3.5 rounded-xl font-mono text-xs select-all" dir="ltr">
+              <div className="bg-[#0F172A] text-emerald-400 p-4 rounded-xl font-mono text-xs select-all ring-1 ring-slate-800" dir="ltr">
                 https://yhydashboard.vercel.app/api/webhook
               </div>
             </div>
@@ -2465,29 +2609,29 @@ export default function App() {
         {/* ==================== 10. NOTES ==================== */}
         {activeTab === 'notes' && (
           <div className="space-y-6">
-            <form onSubmit={handleAddNote} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row gap-3">
+            <form onSubmit={handleAddNote} className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 flex flex-col sm:flex-row gap-3">
               <input
                 type="text"
                 value={newNoteText}
                 onChange={e => setNewNoteText(e.target.value)}
                 placeholder="כתוב פתק או תזכורת חדשה לצוות ההוצאה..."
-                className="flex-1 p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white text-sm outline-none"
+                className="flex-1 p-3 border border-slate-200 rounded-xl bg-slate-50/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 text-sm outline-none transition-all"
               />
-              <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2"><Plus className="w-4 h-4" /> הוסף פתק</button>
+              <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm shadow-indigo-600/20 transition-all"><Plus className="w-4 h-4" /> הוסף פתק</button>
             </form>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {notesList.map(note => (
-                <div key={note.id} className="bg-amber-50 border border-amber-200 p-4 rounded-2xl shadow-sm relative flex flex-col justify-between min-h-[150px]">
+                <div key={note.id} className="bg-gradient-to-br from-amber-50 to-yellow-50/70 ring-1 ring-amber-200/80 border-t-4 border-t-amber-400 p-4 rounded-2xl shadow-xs hover:shadow-md transition-all relative flex flex-col justify-between min-h-[160px]">
                   <button
                     onClick={() => handleDeleteNote(note)}
-                    className="absolute top-3 left-3 bg-amber-200/70 hover:bg-rose-500 hover:text-white text-amber-900 w-7 h-7 rounded-full flex items-center justify-center transition-colors"
+                    className="absolute top-3 left-3 bg-white/80 hover:bg-rose-500 hover:text-white text-amber-900 w-7 h-7 rounded-full flex items-center justify-center shadow-2xs transition-colors"
                     title="מחק פתק"
                   >
                     <X className="w-4 h-4" />
                   </button>
-                  <p className="text-sm text-slate-800 whitespace-pre-wrap pl-8 leading-relaxed">{note.text}</p>
-                  <p className="text-[11px] text-amber-700/80 mt-4 pt-2 border-t border-amber-200/60">{note.date}</p>
+                  <p className="text-sm text-slate-800 whitespace-pre-wrap pl-8 leading-relaxed font-medium">{note.text}</p>
+                  <p className="text-[11px] text-amber-800/70 mt-4 pt-2 border-t border-amber-200/60">{note.date}</p>
                 </div>
               ))}
               {notesList.length === 0 && <p className="col-span-full text-center text-slate-400 py-10">אין פתקים כרגע.</p>}
@@ -2498,30 +2642,31 @@ export default function App() {
         {/* ==================== 11. USER MANAGEMENT (ADMIN ONLY) ==================== */}
         {activeTab === 'users' && userRole === 'admin' && (
           <div className="space-y-6">
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
-              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                <UserCog className="w-5 h-5 text-indigo-600" /> ניהול משתמשים והרשאות
+            <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70">
+              <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
+                <span className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><UserCog className="w-5 h-5" /></span>
+                ניהול משתמשים והרשאות
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">הוסף חברי צוות, קבע הרשאות (מנהל מלא או צופה בלבד) ועדכן סיסמאות</p>
+              <p className="text-xs text-slate-500 mt-1">הוסף חברי צוות, קבע הרשאות (מנהל מלא או צופה בלבד) ועדכן סיסמאות</p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Add User Form */}
-              <form onSubmit={handleAddUser} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-3 h-fit">
-                <h3 className="font-bold text-slate-800 text-base flex items-center gap-2 border-b border-slate-100 pb-3">
+              <form onSubmit={handleAddUser} className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-3.5 h-fit">
+                <h3 className="font-extrabold text-slate-800 text-base flex items-center gap-2 border-b border-slate-100 pb-3">
                   <Plus className="w-4 h-4 text-indigo-600" /> הוספת משתמש חדש
                 </h3>
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">שם מלא *</label>
-                  <input required type="text" placeholder="למשל: דוד כהן" value={newUserForm.name} onChange={e => setNewUserForm({ ...newUserForm, name: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" />
+                  <input required type="text" placeholder="למשל: דוד כהן" value={newUserForm.name} onChange={e => setNewUserForm({ ...newUserForm, name: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">שם משתמש להתחברות *</label>
-                  <input required type="text" placeholder="username" value={newUserForm.username} onChange={e => setNewUserForm({ ...newUserForm, username: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+                  <input required type="text" placeholder="username" value={newUserForm.username} onChange={e => setNewUserForm({ ...newUserForm, username: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" dir="ltr" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">סיסמה *</label>
-                  <input required type="password" placeholder="בחר סיסמה..." value={newUserForm.password} onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+                  <input required type="password" placeholder="בחר סיסמה..." value={newUserForm.password} onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" dir="ltr" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">רמת הרשאה</label>
@@ -2530,19 +2675,19 @@ export default function App() {
                     <option value="admin">מנהל מערכת (גישה מלאה)</option>
                   </select>
                 </div>
-                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center justify-center gap-2">
+                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center justify-center gap-2 transition-colors">
                   <Plus className="w-4 h-4" /> צור משתמש
                 </button>
               </form>
 
               {/* Users List */}
-              <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div className="lg:col-span-2 bg-white rounded-2xl shadow-xs ring-1 ring-slate-200/70 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
                   <h3 className="font-bold text-slate-800 text-sm">משתמשים רשומים במערכת ({usersList.length})</h3>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-right text-sm">
-                    <thead className="bg-slate-50/70 text-xs text-slate-600 border-b">
+                    <thead className="bg-slate-50/70 text-xs text-slate-500 border-b uppercase">
                       <tr>
                         <th className="p-3.5 font-bold">שם מלא</th>
                         <th className="p-3.5 font-bold">שם משתמש</th>
@@ -2552,10 +2697,15 @@ export default function App() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {usersList.map(u => (
-                        <tr key={u.id} className="hover:bg-slate-50/70">
+                        <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
                           <td className="p-3.5 font-bold text-slate-800">
-                            {u.name}
-                            {u.id === currentUser?.id && <span className="mr-2 text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">אתה</span>}
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-700 font-extrabold text-xs flex items-center justify-center shrink-0">
+                                {(u.name || 'מ').charAt(0)}
+                              </div>
+                              <span>{u.name}</span>
+                              {u.id === currentUser?.id && <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">אתה</span>}
+                            </div>
                           </td>
                           <td className="p-3.5 text-slate-600 font-mono text-xs" dir="ltr">{u.username}</td>
                           <td className="p-3.5 text-center">
@@ -2568,7 +2718,7 @@ export default function App() {
                             <div className="flex justify-center gap-1">
                               <button
                                 onClick={() => setEditingUser({ ...u, newPassword: '' })}
-                                className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                                className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
                                 title="ערוך משתמש / שנה סיסמה"
                               >
                                 <KeyRound className="w-4 h-4" />
@@ -2576,7 +2726,7 @@ export default function App() {
                               <button
                                 onClick={() => handleDeleteUser(u)}
                                 disabled={u.id === currentUser?.id}
-                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed"
+                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                                 title="מחק משתמש"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -2592,35 +2742,36 @@ export default function App() {
             </div>
           </div>
         )}
-      </main>
+        </main>
+      </div>
 
       {/* ===================================================================== */}
       {/* MODALS */}
       {/* ===================================================================== */}
 
-      {/* Add / Edit Book Modal (Scrollable Body + Sticky Header & Footer) */}
+      {/* Add / Edit Book Modal */}
       {(isAddBookModalOpen || editingBook) && (() => {
         const isEdit = Boolean(editingBook);
         const formState = isEdit ? editingBook : newBookForm;
         const setFormState = isEdit ? setEditingBook : setNewBookForm;
 
         return (
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
-              <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-                <h3 className="font-bold text-lg text-slate-800">{isEdit ? `עריכת ספר: ${formState.title}` : 'הוספת ספר חדש למלאי'}</h3>
-                <button onClick={() => { setIsAddBookModalOpen(false); setEditingBook(null); }} className="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-500"><X className="w-5 h-5" /></button>
+          <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+              <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
+                <h3 className="font-extrabold text-lg text-slate-900">{isEdit ? `עריכת ספר: ${formState.title}` : 'הוספת ספר חדש למלאי'}</h3>
+                <button onClick={() => { setIsAddBookModalOpen(false); setEditingBook(null); }} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-500 hover:text-slate-800"><X className="w-5 h-5" /></button>
               </div>
               <form onSubmit={isEdit ? handleSaveEditBook : handleSaveNewBook} className="flex flex-col flex-1 overflow-hidden">
                 <div className="p-5 overflow-y-auto space-y-4 flex-1">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-600 mb-1">שם הספר *</label>
-                      <input required type="text" value={formState.title} onChange={e => setFormState({ ...formState, title: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" />
+                      <input required type="text" value={formState.title} onChange={e => setFormState({ ...formState, title: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-600 mb-1">מחבר</label>
-                      <input type="text" value={formState.author || ''} onChange={e => setFormState({ ...formState, author: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" />
+                      <input type="text" value={formState.author || ''} onChange={e => setFormState({ ...formState, author: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" />
                     </div>
                   </div>
 
@@ -2658,7 +2809,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Breakdown at Suppliers */}
                   <div className="border-t border-slate-100 pt-3 space-y-2">
                     <div className="flex justify-between items-center">
                       <label className="text-xs font-bold text-slate-700">עותקים אצל ספקים וחנויות</label>
@@ -2682,7 +2832,7 @@ export default function App() {
                             next[idx] = { ...next[idx], location: e.target.value };
                             setFormState({ ...formState, breakdown: next });
                           }}
-                          className="flex-1 p-2 border border-slate-200 rounded-lg text-sm"
+                          className="flex-1 p-2 border border-slate-200 rounded-xl text-sm"
                         />
                         <input
                           type="number"
@@ -2693,13 +2843,13 @@ export default function App() {
                             next[idx] = { ...next[idx], amount: e.target.value };
                             setFormState({ ...formState, breakdown: next });
                           }}
-                          className="w-24 p-2 border border-slate-200 rounded-lg text-sm text-center"
+                          className="w-24 p-2 border border-slate-200 rounded-xl text-sm text-center"
                           dir="ltr"
                         />
                         <button
                           type="button"
                           onClick={() => setFormState({ ...formState, breakdown: formState.breakdown.filter((_, i) => i !== idx) })}
-                          className="text-slate-400 hover:text-red-500 p-1"
+                          className="text-slate-400 hover:text-rose-500 p-1"
                         >
                           <X className="w-4 h-4" />
                         </button>
@@ -2711,8 +2861,8 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0 flex justify-end gap-2">
-                  <button type="button" onClick={() => { setIsAddBookModalOpen(false); setEditingBook(null); }} className="px-4 py-2.5 rounded-xl text-sm text-slate-600 hover:bg-slate-200 font-medium">ביטול</button>
+                <div className="p-4 border-t border-slate-100 bg-slate-50/80 shrink-0 flex justify-end gap-2">
+                  <button type="button" onClick={() => { setIsAddBookModalOpen(false); setEditingBook(null); }} className="px-4 py-2.5 rounded-xl text-sm text-slate-600 hover:bg-slate-200/70 font-medium">ביטול</button>
                   <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2">
                     <Check className="w-4 h-4" /> {isEdit ? 'שמור שינויים' : 'הוסף ספר למלאי'}
                   </button>
@@ -2725,22 +2875,22 @@ export default function App() {
 
       {/* Add / Edit Supplier Modal */}
       {isSupplierModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden" dir="rtl">
-            <div className="p-5 border-b bg-slate-50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-800">{editingSupplier ? 'עריכת ספק' : 'הוספת ספק / חנות חדשה'}</h3>
-              <button onClick={() => setIsSupplierModalOpen(false)}><X className="w-5 h-5 text-slate-400" /></button>
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
+              <h3 className="font-extrabold text-slate-900">{editingSupplier ? 'עריכת ספק' : 'הוספת ספק / חנות חדשה'}</h3>
+              <button onClick={() => setIsSupplierModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
             </div>
             <form onSubmit={handleSaveSupplier} className="p-5 space-y-3">
-              <input required placeholder="שם הספק / החנות *" value={supplierForm.name} onChange={e => setSupplierForm({ ...supplierForm, name: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" />
-              <input placeholder="שם איש קשר" value={supplierForm.contact} onChange={e => setSupplierForm({ ...supplierForm, contact: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" />
-              <input placeholder="טלפון (לוואטסאפ)" value={supplierForm.phone} onChange={e => setSupplierForm({ ...supplierForm, phone: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" dir="ltr" />
-              <input type="email" placeholder="אימייל לשליחת הזמנות" value={supplierForm.email} onChange={e => setSupplierForm({ ...supplierForm, email: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" dir="ltr" />
-              <input placeholder="כתובת למשלוח" value={supplierForm.address} onChange={e => setSupplierForm({ ...supplierForm, address: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" />
-              <textarea rows="2" placeholder="הערות..." value={supplierForm.notes} onChange={e => setSupplierForm({ ...supplierForm, notes: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" />
+              <input required placeholder="שם הספק / החנות *" value={supplierForm.name} onChange={e => setSupplierForm({ ...supplierForm, name: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" />
+              <input placeholder="שם איש קשר" value={supplierForm.contact} onChange={e => setSupplierForm({ ...supplierForm, contact: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" />
+              <input placeholder="טלפון (לוואטסאפ)" value={supplierForm.phone} onChange={e => setSupplierForm({ ...supplierForm, phone: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" dir="ltr" />
+              <input type="email" placeholder="אימייל לשליחת הזמנות" value={supplierForm.email} onChange={e => setSupplierForm({ ...supplierForm, email: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" dir="ltr" />
+              <input placeholder="כתובת למשלוח" value={supplierForm.address} onChange={e => setSupplierForm({ ...supplierForm, address: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" />
+              <textarea rows="2" placeholder="הערות..." value={supplierForm.notes} onChange={e => setSupplierForm({ ...supplierForm, notes: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" />
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setIsSupplierModalOpen(false)} className="px-4 py-2 text-sm text-slate-600">ביטול</button>
-                <button type="submit" className="bg-indigo-600 text-white px-5 py-2 rounded-xl font-bold text-sm">שמור ספק</button>
+                <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-xs">שמור ספק</button>
               </div>
             </form>
           </div>
@@ -2749,14 +2899,14 @@ export default function App() {
 
       {/* View Supplier Stock Modal */}
       {viewingSupplierStock && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden" dir="rtl">
-            <div className="p-5 border-b bg-slate-50 flex justify-between items-center">
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-lg overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
               <div>
-                <h3 className="font-bold text-slate-800">מלאי נוכחי אצל: {viewingSupplierStock.name}</h3>
+                <h3 className="font-extrabold text-slate-900">מלאי נוכחי אצל: {viewingSupplierStock.name}</h3>
                 <p className="text-xs text-slate-500">מעודכן אוטומטית מהזמנות ודיווחי מכירה</p>
               </div>
-              <button onClick={() => setViewingSupplierStock(null)}><X className="w-5 h-5 text-slate-400" /></button>
+              <button onClick={() => setViewingSupplierStock(null)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
             </div>
             <div className="p-5 max-h-[65vh] overflow-y-auto">
               {(() => {
@@ -2766,7 +2916,7 @@ export default function App() {
                 return (
                   <div className="space-y-3">
                     <table className="w-full text-right text-sm">
-                      <thead className="bg-slate-50 text-xs text-slate-600 border-b">
+                      <thead className="bg-slate-50 text-xs text-slate-500 border-b">
                         <tr>
                           <th className="p-2.5">שם הספר</th>
                           <th className="p-2.5 text-center">כמות</th>
@@ -2783,7 +2933,7 @@ export default function App() {
                         ))}
                       </tbody>
                     </table>
-                    <div className="bg-indigo-50 p-3 rounded-xl flex justify-between font-bold text-indigo-900 text-sm">
+                    <div className="bg-indigo-50 ring-1 ring-indigo-100 p-3.5 rounded-xl flex justify-between font-bold text-indigo-900 text-sm">
                       <span>סה"כ עותקים אצל הספק:</span>
                       <span>{totalQty.toLocaleString()} עותקים</span>
                     </div>
@@ -2803,14 +2953,14 @@ export default function App() {
         }, 0);
 
         return (
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
-              <div className="p-5 border-b bg-slate-50 flex justify-between items-center shrink-0">
+          <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+              <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
                 <div>
-                  <h3 className="font-bold text-lg text-slate-800">הפקת הזמנה לספק: {invoiceSupplier.name}</h3>
+                  <h3 className="font-extrabold text-lg text-slate-900">הפקת הזמנה לספק: {invoiceSupplier.name}</h3>
                   <p className="text-xs text-slate-500">המחירים נשלפים אוטומטית ממחירון הספקים ומלאי הספק מתעדכן מיד</p>
                 </div>
-                <button onClick={() => setIsSupplierInvoiceModalOpen(false)}><X className="w-5 h-5 text-slate-400" /></button>
+                <button onClick={() => setIsSupplierInvoiceModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
               </div>
               <div className="p-5 overflow-y-auto space-y-4 flex-1">
                 <div className="space-y-2.5">
@@ -2818,7 +2968,7 @@ export default function App() {
                     const book = inventoryList.find(b => b.id === row.bookId);
                     const unitPrice = Number(book?.prices?.supplier || 0);
                     return (
-                      <div key={idx} className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                      <div key={idx} className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-slate-50/90 p-2.5 rounded-xl ring-1 ring-slate-200/70">
                         <select
                           value={row.bookId}
                           onChange={e => {
@@ -2826,7 +2976,7 @@ export default function App() {
                             next[idx] = { ...next[idx], bookId: e.target.value };
                             setInvoiceItems(next);
                           }}
-                          className="flex-1 p-2 border border-slate-200 rounded-lg text-sm bg-white"
+                          className="flex-1 p-2 border border-slate-200 rounded-xl text-sm bg-white"
                         >
                           <option value="">בחר ספר...</option>
                           {[...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => (
@@ -2842,12 +2992,12 @@ export default function App() {
                             next[idx] = { ...next[idx], quantity: e.target.value };
                             setInvoiceItems(next);
                           }}
-                          className="w-20 p-2 border border-slate-200 rounded-lg text-sm text-center bg-white font-bold"
+                          className="w-20 p-2 border border-slate-200 rounded-xl text-sm text-center bg-white font-bold"
                           dir="ltr"
                         />
-                        <span className="text-xs font-bold text-indigo-700 w-24 text-center">₪{(unitPrice * Number(row.quantity || 0)).toLocaleString()}</span>
+                        <span className="text-xs font-extrabold text-indigo-700 w-24 text-center">₪{(unitPrice * Number(row.quantity || 0)).toLocaleString()}</span>
                         {invoiceItems.length > 1 && (
-                          <button onClick={() => setInvoiceItems(invoiceItems.filter((_, i) => i !== idx))} className="text-slate-400 hover:text-red-500 p-1"><X className="w-4 h-4" /></button>
+                          <button onClick={() => setInvoiceItems(invoiceItems.filter((_, i) => i !== idx))} className="text-slate-400 hover:text-rose-500 p-1"><X className="w-4 h-4" /></button>
                         )}
                       </div>
                     );
@@ -2857,23 +3007,23 @@ export default function App() {
                   </button>
                 </div>
 
-                <label className="flex items-center gap-2 text-xs font-bold text-slate-700 bg-indigo-50/70 p-3 rounded-xl border border-indigo-100 cursor-pointer">
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-700 bg-indigo-50/70 p-3.5 rounded-xl ring-1 ring-indigo-100 cursor-pointer">
                   <input type="checkbox" checked={deductFromWarehouse} onChange={e => setDeductFromWarehouse(e.target.checked)} className="w-4 h-4 text-indigo-600 rounded" />
                   הפחת אוטומטית את הכמויות מ"המחסן הראשי" והעבר למלאי של {invoiceSupplier.name}
                 </label>
 
                 <input type="text" value={invoiceNotes} onChange={e => setInvoiceNotes(e.target.value)} placeholder="הערות להזמנה (אופציונלי)..." className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" />
 
-                <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex justify-between items-center">
+                <div className="bg-emerald-50 ring-1 ring-emerald-200/80 p-4 rounded-2xl flex justify-between items-center">
                   <span className="font-bold text-emerald-900">סה"כ משוקלל להזמנה (מחיר ספק):</span>
                   <span className="text-2xl font-extrabold text-emerald-700">₪{orderTotal.toLocaleString()}</span>
                 </div>
               </div>
-              <div className="p-4 border-t bg-slate-50 grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0">
-                <button onClick={() => processSupplierOrder('email')} className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"><Mail className="w-4 h-4" /> שלח במייל</button>
-                <button onClick={() => processSupplierOrder('whatsapp')} className="bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"><MessageCircle className="w-4 h-4" /> שלח בוואטסאפ</button>
-                <button onClick={() => processSupplierOrder('print')} className="bg-slate-700 hover:bg-slate-800 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"><Printer className="w-4 h-4" /> תעודת משלוח</button>
-                <button onClick={() => processSupplierOrder('save_only')} className="bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 py-2.5 px-3 rounded-xl text-xs font-bold">שמור ועדכן בלבד</button>
+              <div className="p-4 border-t bg-slate-50/80 grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0">
+                <button onClick={() => processSupplierOrder('email')} className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs"><Mail className="w-4 h-4" /> שלח במייל</button>
+                <button onClick={() => processSupplierOrder('whatsapp')} className="bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs"><MessageCircle className="w-4 h-4" /> שלח בוואטסאפ</button>
+                <button onClick={() => processSupplierOrder('print')} className="bg-slate-800 hover:bg-slate-900 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs"><Printer className="w-4 h-4" /> תעודת משלוח</button>
+                <button onClick={() => processSupplierOrder('save_only')} className="bg-white ring-1 ring-slate-300 hover:bg-slate-100 text-slate-700 py-2.5 px-3 rounded-xl text-xs font-bold">שמור ועדכן בלבד</button>
               </div>
             </div>
           </div>
@@ -2882,16 +3032,16 @@ export default function App() {
 
       {/* Consignment Sale / Return Modal */}
       {isConsignmentModalOpen && consignmentSupplier && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden" dir="rtl">
-            <div className="p-5 border-b bg-slate-50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-800">התחשבנות קונסיגנציה — {consignmentSupplier.name}</h3>
-              <button onClick={() => setIsConsignmentModalOpen(false)}><X className="w-5 h-5 text-slate-400" /></button>
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
+              <h3 className="font-extrabold text-slate-900">התחשבנות קונסיגנציה — {consignmentSupplier.name}</h3>
+              <button onClick={() => setIsConsignmentModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
             </div>
-            <form onSubmit={handleSaveConsignment} className="p-5 space-y-3">
-              <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
-                <button type="button" onClick={() => setConsignmentForm({ ...consignmentForm, type: 'sale' })} className={`py-2 rounded-lg text-xs font-bold ${consignmentForm.type === 'sale' ? 'bg-indigo-600 text-white' : 'text-slate-600'}`}>דיווח מכירה</button>
-                <button type="button" onClick={() => setConsignmentForm({ ...consignmentForm, type: 'return' })} className={`py-2 rounded-lg text-xs font-bold ${consignmentForm.type === 'return' ? 'bg-amber-600 text-white' : 'text-slate-600'}`}>החזרה למחסן</button>
+            <form onSubmit={handleSaveConsignment} className="p-5 space-y-3.5">
+              <div className="grid grid-cols-2 gap-1.5 bg-slate-100 p-1 rounded-xl">
+                <button type="button" onClick={() => setConsignmentForm({ ...consignmentForm, type: 'sale' })} className={`py-2 rounded-lg text-xs font-bold transition-all ${consignmentForm.type === 'sale' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'}`}>דיווח מכירה</button>
+                <button type="button" onClick={() => setConsignmentForm({ ...consignmentForm, type: 'return' })} className={`py-2 rounded-lg text-xs font-bold transition-all ${consignmentForm.type === 'return' ? 'bg-white text-amber-700 shadow-xs' : 'text-slate-600'}`}>החזרה למחסן</button>
               </div>
               <select
                 required
@@ -2900,27 +3050,27 @@ export default function App() {
                   const b = inventoryList.find(x => x.id === e.target.value);
                   setConsignmentForm({ ...consignmentForm, bookId: e.target.value, unitPrice: Number(b?.prices?.supplier || 0) });
                 }}
-                className="w-full p-2.5 border rounded-xl text-sm"
+                className="w-full p-2.5 border border-slate-200 rounded-xl text-sm"
               >
                 <option value="">בחר ספר...</option>
                 {getSupplierInventoryItems(consignmentSupplier.name).map(it => (
                   <option key={it.bookId} value={it.bookId}>{it.title} (אצל הספק: {it.amount})</option>
                 ))}
               </select>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">כמות</label>
-                  <input required type="number" min="1" value={consignmentForm.quantity} onChange={e => setConsignmentForm({ ...consignmentForm, quantity: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" dir="ltr" />
+                  <input required type="number" min="1" value={consignmentForm.quantity} onChange={e => setConsignmentForm({ ...consignmentForm, quantity: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
                 </div>
                 {consignmentForm.type === 'sale' && (
                   <div>
                     <label className="block text-xs font-bold text-slate-600 mb-1">מחיר ליחידה (₪)</label>
-                    <input required type="number" min="0" value={consignmentForm.unitPrice} onChange={e => setConsignmentForm({ ...consignmentForm, unitPrice: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" dir="ltr" />
+                    <input required type="number" min="0" value={consignmentForm.unitPrice} onChange={e => setConsignmentForm({ ...consignmentForm, unitPrice: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
                   </div>
                 )}
               </div>
-              <input placeholder="הערות..." value={consignmentForm.notes} onChange={e => setConsignmentForm({ ...consignmentForm, notes: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" />
-              <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-bold text-sm">אשר ועדכן מלאי</button>
+              <input placeholder="הערות..." value={consignmentForm.notes} onChange={e => setConsignmentForm({ ...consignmentForm, notes: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" />
+              <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-bold text-sm shadow-xs">אשר ועדכן מלאי</button>
             </form>
           </div>
         </div>
@@ -2928,14 +3078,14 @@ export default function App() {
 
       {/* Supplier History & Debt Modal */}
       {isSupplierHistoryModalOpen && selectedSupplierForHistory && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full overflow-hidden" dir="rtl">
-            <div className="p-5 border-b bg-slate-50 flex justify-between items-center">
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 max-w-2xl w-full overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
               <div>
-                <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><History className="w-5 h-5 text-indigo-600" /> היסטוריית פעולות וגבייה</h3>
-                <p className="text-xs text-slate-500">{selectedSupplierForHistory.name} | יתרה פתוחה: <strong className="text-rose-600">₪{getSupplierOpenDebt(selectedSupplierForHistory.name).toLocaleString()}</strong></p>
+                <h3 className="font-extrabold text-lg text-slate-900 flex items-center gap-2"><History className="w-5 h-5 text-indigo-600" /> היסטוריית פעולות וגבייה</h3>
+                <p className="text-xs text-slate-500 mt-0.5">{selectedSupplierForHistory.name} | יתרה פתוחה: <strong className="text-rose-600">₪{getSupplierOpenDebt(selectedSupplierForHistory.name).toLocaleString()}</strong></p>
               </div>
-              <button onClick={() => setIsSupplierHistoryModalOpen(false)} className="p-1.5 bg-white border rounded-lg"><X className="w-5 h-5 text-slate-400" /></button>
+              <button onClick={() => setIsSupplierHistoryModalOpen(false)} className="p-1.5 bg-white ring-1 ring-slate-200 rounded-xl"><X className="w-4 h-4 text-slate-400" /></button>
             </div>
             <div className="p-5 max-h-[65vh] overflow-y-auto bg-slate-50/50 space-y-4">
               {supplierLogs.filter(l => l.supplierName === selectedSupplierForHistory.name).length === 0 ? (
@@ -2949,35 +3099,35 @@ export default function App() {
                     const payStatus = log.paymentStatus || 'unpaid';
                     const remaining = getLogRemainingDebt(log);
                     return (
-                      <div key={log.id || idx} className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm space-y-3">
+                      <div key={log.id || idx} className="bg-white ring-1 ring-slate-200/80 p-4 rounded-2xl shadow-2xs space-y-3">
                         <div className="flex justify-between items-start">
                           <div>
-                            <p className="font-bold text-slate-800 text-sm">{log.action}</p>
+                            <p className="font-bold text-slate-900 text-sm">{log.action}</p>
                             <p className="text-xs text-slate-400">{log.date}</p>
                           </div>
                           <div className="text-left">
-                            <p className="font-extrabold text-indigo-700">₪{Number(log.totalAmount || 0).toLocaleString()}</p>
+                            <p className="font-extrabold text-indigo-700 text-base">₪{Number(log.totalAmount || 0).toLocaleString()}</p>
                             {isBillable && (
-                              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${
-                                payStatus === 'paid' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
-                                payStatus === 'partial' ? 'bg-amber-100 text-amber-800 border-amber-200' :
-                                'bg-rose-100 text-rose-700 border-rose-200'
+                              <span className={`inline-block text-[11px] font-bold px-2.5 py-0.5 rounded-full border mt-0.5 ${
+                                payStatus === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                payStatus === 'partial' ? 'bg-amber-50 text-amber-800 border-amber-200' :
+                                'bg-rose-50 text-rose-700 border-rose-200'
                               }`}>
                                 {payStatus === 'paid' ? 'שולם' : payStatus === 'partial' ? `שולם חלקית (נותר ₪${remaining.toLocaleString()})` : 'טרם שולם'}
                               </span>
                             )}
                           </div>
                         </div>
-                        <div className="bg-slate-50 p-3 rounded-lg text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{log.details}</div>
+                        <div className="bg-slate-50/90 p-3 rounded-xl text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{log.details}</div>
                         {isBillable && userRole === 'admin' && (
                           <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
                             <div className="flex gap-1.5">
-                              <button onClick={() => handleUpdateLogPayment(log, 'unpaid')} className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${payStatus === 'unpaid' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-rose-700 border-rose-200'}`}>טרם שולם</button>
-                              <button onClick={() => handleUpdateLogPayment(log, 'paid')} className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${payStatus === 'paid' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-emerald-700 border-emerald-200'}`}>סמן כשולם</button>
+                              <button onClick={() => handleUpdateLogPayment(log, 'unpaid')} className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${payStatus === 'unpaid' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'}`}>טרם שולם</button>
+                              <button onClick={() => handleUpdateLogPayment(log, 'paid')} className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${payStatus === 'paid' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50'}`}>סמן כשולם</button>
                             </div>
                             <div className="flex items-center gap-1.5">
-                              <input type="number" min="0" placeholder="סכום חלקי" value={partialPayInputs[log.id] ?? (payStatus === 'partial' ? log.paidAmount : '')} onChange={e => setPartialPayInputs(prev => ({ ...prev, [log.id]: e.target.value }))} className="w-24 p-1 text-xs border rounded-lg text-center" dir="ltr" />
-                              <button onClick={() => handleUpdateLogPayment(log, 'partial', partialPayInputs[log.id])} className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500 text-white">שולם חלקית</button>
+                              <input type="number" min="0" placeholder="סכום חלקי" value={partialPayInputs[log.id] ?? (payStatus === 'partial' ? log.paidAmount : '')} onChange={e => setPartialPayInputs(prev => ({ ...prev, [log.id]: e.target.value }))} className="w-24 p-1.5 text-xs border border-slate-200 rounded-xl text-center" dir="ltr" />
+                              <button onClick={() => handleUpdateLogPayment(log, 'partial', partialPayInputs[log.id])} className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white transition-colors">שולם חלקית</button>
                             </div>
                           </div>
                         )}
@@ -2992,29 +3142,29 @@ export default function App() {
 
       {/* Gift / Donor Distribution Modal */}
       {isGiftModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden" dir="rtl">
-            <div className="p-5 border-b bg-slate-50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2"><Gift className="w-5 h-5 text-purple-600" /> חלוקה לתורמים / מתנות</h3>
-              <button onClick={() => setIsGiftModalOpen(false)}><X className="w-5 h-5 text-slate-400" /></button>
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
+              <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Gift className="w-5 h-5 text-purple-600" /> חלוקה לתורמים / מתנות</h3>
+              <button onClick={() => setIsGiftModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
             </div>
             <form onSubmit={handleRecordGift} className="p-5 space-y-3">
-              <select required value={giftForm.bookId} onChange={e => setGiftForm({ ...giftForm, bookId: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm">
+              <select required value={giftForm.bookId} onChange={e => setGiftForm({ ...giftForm, bookId: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm">
                 <option value="">בחר ספר לחלוקה...</option>
                 {inventoryList.map(b => <option key={b.id} value={b.id}>{b.title} (במחסן: {b.publisherStock})</option>)}
               </select>
-              <div className="grid grid-cols-2 gap-2">
-                <input required type="number" min="1" value={giftForm.quantity} onChange={e => setGiftForm({ ...giftForm, quantity: e.target.value })} placeholder="כמות" className="p-2.5 border rounded-xl text-sm" dir="ltr" />
-                <select value={giftForm.category} onChange={e => setGiftForm({ ...giftForm, category: e.target.value })} className="p-2.5 border rounded-xl text-sm">
+              <div className="grid grid-cols-2 gap-2.5">
+                <input required type="number" min="1" value={giftForm.quantity} onChange={e => setGiftForm({ ...giftForm, quantity: e.target.value })} placeholder="כמות" className="p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+                <select value={giftForm.category} onChange={e => setGiftForm({ ...giftForm, category: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-sm">
                   <option value="תורם">תורם</option>
                   <option value="רב / מרצה">רב / מרצה</option>
                   <option value="בוגר / תלמיד">בוגר / תלמיד</option>
                   <option value="אחר">אחר</option>
                 </select>
               </div>
-              <input required placeholder="שם המקבל *" value={giftForm.recipient} onChange={e => setGiftForm({ ...giftForm, recipient: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" />
-              <input placeholder="הערה (אופציונלי)" value={giftForm.notes} onChange={e => setGiftForm({ ...giftForm, notes: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" />
-              <button type="submit" className="w-full bg-purple-600 hover:bg-purple-700 text-white py-2.5 rounded-xl font-bold text-sm">תעד והפחת מהמחסן</button>
+              <input required placeholder="שם המקבל *" value={giftForm.recipient} onChange={e => setGiftForm({ ...giftForm, recipient: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" />
+              <input placeholder="הערה (אופציונלי)" value={giftForm.notes} onChange={e => setGiftForm({ ...giftForm, notes: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" />
+              <button type="submit" className="w-full bg-purple-600 hover:bg-purple-700 text-white py-2.5 rounded-xl font-bold text-sm shadow-xs">תעד והפחת מהמחסן</button>
             </form>
           </div>
         </div>
@@ -3022,20 +3172,20 @@ export default function App() {
 
       {/* Gift History Modal */}
       {isGiftHistoryOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden" dir="rtl">
-            <div className="p-5 border-b bg-slate-50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-800">מעקב חלוקה לתורמים ומתנות ({giftLogs.length})</h3>
-              <button onClick={() => setIsGiftHistoryOpen(false)}><X className="w-5 h-5 text-slate-400" /></button>
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-lg overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
+              <h3 className="font-extrabold text-slate-900">מעקב חלוקה לתורמים ומתנות ({giftLogs.length})</h3>
+              <button onClick={() => setIsGiftHistoryOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
             </div>
             <div className="p-5 max-h-[65vh] overflow-y-auto space-y-2.5">
               {giftLogs.length === 0 ? <p className="text-center text-slate-400 py-8">אין תיעוד חלוקות עדיין.</p> :
                 [...giftLogs].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map((g, i) => (
-                  <div key={g.id || i} className="p-3 bg-slate-50 border rounded-xl text-sm flex justify-between items-start">
+                  <div key={g.id || i} className="p-3.5 bg-slate-50/90 ring-1 ring-slate-200/70 rounded-xl text-sm flex justify-between items-start">
                     <div>
                       <p className="font-bold text-slate-800">{g.bookTitle} (×{g.quantity})</p>
-                      <p className="text-xs text-slate-600">נמסר ל: {g.recipient} ({g.category})</p>
-                      {g.notes && <p className="text-xs text-slate-400">{g.notes}</p>}
+                      <p className="text-xs text-slate-600 mt-0.5">נמסר ל: {g.recipient} ({g.category})</p>
+                      {g.notes && <p className="text-xs text-slate-400 mt-0.5">{g.notes}</p>}
                     </div>
                     <span className="text-[11px] text-slate-400">{g.date}</span>
                   </div>
@@ -3048,20 +3198,20 @@ export default function App() {
 
       {/* Add Task Modal */}
       {isAddTaskModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden" dir="rtl">
-            <div className="p-5 border-b bg-slate-50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-800">פרויקט ספר חדש להפקה</h3>
-              <button onClick={() => setIsAddTaskModalOpen(false)}><X className="w-5 h-5 text-slate-400" /></button>
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
+              <h3 className="font-extrabold text-slate-900">פרויקט ספר חדש להפקה</h3>
+              <button onClick={() => setIsAddTaskModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
             </div>
             <form onSubmit={handleAddTask} className="p-5 space-y-3">
-              <input required placeholder="שם הספר / הפרויקט *" value={newTaskForm.title} onChange={e => setNewTaskForm({ ...newTaskForm, title: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" />
-              <input placeholder="שם המחבר" value={newTaskForm.author} onChange={e => setNewTaskForm({ ...newTaskForm, author: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" />
-              <select value={newTaskForm.status} onChange={e => setNewTaskForm({ ...newTaskForm, status: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm">
+              <input required placeholder="שם הספר / הפרויקט *" value={newTaskForm.title} onChange={e => setNewTaskForm({ ...newTaskForm, title: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" />
+              <input placeholder="שם המחבר" value={newTaskForm.author} onChange={e => setNewTaskForm({ ...newTaskForm, author: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" />
+              <select value={newTaskForm.status} onChange={e => setNewTaskForm({ ...newTaskForm, status: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm">
                 {KANBAN_COLUMNS.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
               </select>
-              <textarea rows="2" placeholder="הערות..." value={newTaskForm.notes} onChange={e => setNewTaskForm({ ...newTaskForm, notes: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" />
-              <button type="submit" className="w-full bg-indigo-600 text-white py-2.5 rounded-xl font-bold text-sm">צור פרויקט</button>
+              <textarea rows="2" placeholder="הערות..." value={newTaskForm.notes} onChange={e => setNewTaskForm({ ...newTaskForm, notes: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" />
+              <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-bold text-sm shadow-xs">צור פרויקט</button>
             </form>
           </div>
         </div>
@@ -3069,33 +3219,33 @@ export default function App() {
 
       {/* Selected Task Detail Modal */}
       {selectedTask && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
-            <div className="p-5 border-b bg-slate-50 flex justify-between items-center">
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
               <div>
-                <h3 className="font-bold text-lg text-slate-800">{selectedTask.title}</h3>
+                <h3 className="font-extrabold text-lg text-slate-900">{selectedTask.title}</h3>
                 {selectedTask.author && <p className="text-xs text-slate-500">{selectedTask.author}</p>}
               </div>
               <div className="flex items-center gap-1.5">
                 {userRole === 'admin' && (
-                  <button onClick={() => handleDeleteTask(selectedTask)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg" title="מחק פרויקט"><Trash2 className="w-5 h-5" /></button>
+                  <button onClick={() => handleDeleteTask(selectedTask)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl" title="מחק פרויקט"><Trash2 className="w-5 h-5" /></button>
                 )}
-                <button onClick={() => setSelectedTask(null)} className="p-2 bg-white border rounded-lg"><X className="w-5 h-5 text-slate-500" /></button>
+                <button onClick={() => setSelectedTask(null)} className="p-1.5 bg-white ring-1 ring-slate-200 rounded-xl"><X className="w-4 h-4 text-slate-500" /></button>
               </div>
             </div>
             <div className="p-5 overflow-y-auto space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">שלב נוכחי בהפקה</label>
-                <select value={selectedTask.status} onChange={e => handleUpdateTaskStatus(selectedTask, e.target.value)} className="w-full p-2.5 border rounded-xl text-sm font-bold bg-slate-50">
+                <select value={selectedTask.status} onChange={e => handleUpdateTaskStatus(selectedTask, e.target.value)} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold bg-slate-50">
                   {KANBAN_COLUMNS.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
                 </select>
               </div>
 
               <div className="flex flex-wrap gap-2">
                 {!selectedTask.addedToInventory ? (
-                  <button onClick={() => handleTransferTaskToInventory(selectedTask)} className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-xl font-bold flex items-center gap-1.5"><Package className="w-4 h-4" /> העבר אוטומטית למלאי</button>
+                  <button onClick={() => handleTransferTaskToInventory(selectedTask)} className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl font-bold flex items-center gap-1.5 shadow-xs"><Package className="w-4 h-4" /> העבר אוטומטית למלאי</button>
                 ) : (
-                  <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-2 rounded-xl font-bold flex items-center gap-1.5"><CheckCircle className="w-4 h-4" /> הועבר למלאי</span>
+                  <span className="text-xs bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-3.5 py-2 rounded-xl font-bold flex items-center gap-1.5"><CheckCircle className="w-4 h-4" /> הועבר למלאי</span>
                 )}
                 <button
                   onClick={() => {
@@ -3103,7 +3253,7 @@ export default function App() {
                     setBreakEvenForm({ bookTitle: selectedTask.title, totalCost: totalExp > 0 ? totalExp : 15000, printRun: 1000, sellPrice: 60 });
                     setIsBreakEvenModalOpen(true);
                   }}
-                  className="text-xs bg-amber-100 hover:bg-amber-200 text-amber-900 px-3 py-2 rounded-xl font-bold flex items-center gap-1.5"
+                  className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-900 ring-1 ring-amber-200 px-3.5 py-2 rounded-xl font-bold flex items-center gap-1.5"
                 >
                   <Calculator className="w-4 h-4" /> חשב נקודת איזון
                 </button>
@@ -3113,19 +3263,19 @@ export default function App() {
                 <h4 className="font-bold text-sm text-slate-800">הוצאות הפקה (עריכה, עימוד, דפוס)</h4>
                 {userRole === 'admin' && (
                   <form onSubmit={handleAddTaskInvoice} className="flex gap-2">
-                    <input required placeholder="תיאור הוצאה..." value={taskInvoiceForm.description} onChange={e => setTaskInvoiceForm({ ...taskInvoiceForm, description: e.target.value })} className="flex-1 p-2 border rounded-lg text-xs" />
-                    <input required type="number" min="1" placeholder="סכום ₪" value={taskInvoiceForm.amount} onChange={e => setTaskInvoiceForm({ ...taskInvoiceForm, amount: e.target.value })} className="w-24 p-2 border rounded-lg text-xs" dir="ltr" />
-                    <button type="submit" className="bg-indigo-600 text-white px-3 rounded-lg text-xs font-bold">+ הוסף</button>
+                    <input required placeholder="תיאור הוצאה..." value={taskInvoiceForm.description} onChange={e => setTaskInvoiceForm({ ...taskInvoiceForm, description: e.target.value })} className="flex-1 p-2.5 border border-slate-200 rounded-xl text-xs" />
+                    <input required type="number" min="1" placeholder="סכום ₪" value={taskInvoiceForm.amount} onChange={e => setTaskInvoiceForm({ ...taskInvoiceForm, amount: e.target.value })} className="w-24 p-2.5 border border-slate-200 rounded-xl text-xs" dir="ltr" />
+                    <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 rounded-xl text-xs font-bold">+ הוסף</button>
                   </form>
                 )}
                 <div className="space-y-1.5">
                   {(selectedTask.invoices || []).map(inv => (
-                    <div key={inv.id} className="flex justify-between items-center p-2.5 bg-slate-50 rounded-lg text-xs">
+                    <div key={inv.id} className="flex justify-between items-center p-2.5 bg-slate-50 rounded-xl text-xs">
                       <span>{inv.description} <span className="text-slate-400">({inv.date})</span></span>
                       <span className="font-bold text-rose-700">₪{Number(inv.amount).toLocaleString()}</span>
                     </div>
                   ))}
-                  <div className="bg-rose-50 text-rose-800 p-3 rounded-xl font-bold text-sm flex justify-between">
+                  <div className="bg-rose-50 ring-1 ring-rose-100 text-rose-800 p-3.5 rounded-xl font-bold text-sm flex justify-between">
                     <span>סה"כ הוצאות הפקה:</span>
                     <span>₪{(selectedTask.invoices || []).reduce((s, i) => s + Number(i.amount || 0), 0).toLocaleString()}</span>
                   </div>
@@ -3138,28 +3288,28 @@ export default function App() {
 
       {/* Break-Even Calculator Modal */}
       {isBreakEvenModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden" dir="rtl">
-            <div className="p-5 border-b bg-slate-50 flex justify-between items-center">
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-xl overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
               <div>
-                <h3 className="font-bold text-slate-800 flex items-center gap-2"><Calculator className="w-5 h-5 text-amber-600" /> מחשבון נקודת איזון (Break-Even)</h3>
+                <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Calculator className="w-5 h-5 text-amber-600" /> מחשבון נקודת איזון (Break-Even)</h3>
                 {breakEvenForm.bookTitle && <p className="text-xs text-slate-500">{breakEvenForm.bookTitle}</p>}
               </div>
-              <button onClick={() => setIsBreakEvenModalOpen(false)}><X className="w-5 h-5 text-slate-400" /></button>
+              <button onClick={() => setIsBreakEvenModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
             </div>
             <div className="p-5 space-y-4">
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">עלות כוללת (₪)</label>
-                  <input type="number" min="0" value={breakEvenForm.totalCost} onChange={e => setBreakEvenForm({ ...breakEvenForm, totalCost: Number(e.target.value) })} className="w-full p-2.5 border rounded-xl font-bold" dir="ltr" />
+                  <input type="number" min="0" value={breakEvenForm.totalCost} onChange={e => setBreakEvenForm({ ...breakEvenForm, totalCost: Number(e.target.value) })} className="w-full p-2.5 border border-slate-200 rounded-xl font-bold" dir="ltr" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">כמות עותקים</label>
-                  <input type="number" min="1" value={breakEvenForm.printRun} onChange={e => setBreakEvenForm({ ...breakEvenForm, printRun: Math.max(1, Number(e.target.value)) })} className="w-full p-2.5 border rounded-xl font-bold" dir="ltr" />
+                  <input type="number" min="1" value={breakEvenForm.printRun} onChange={e => setBreakEvenForm({ ...breakEvenForm, printRun: Math.max(1, Number(e.target.value)) })} className="w-full p-2.5 border border-slate-200 rounded-xl font-bold" dir="ltr" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">מחיר מכירה (₪)</label>
-                  <input type="number" min="1" value={breakEvenForm.sellPrice} onChange={e => setBreakEvenForm({ ...breakEvenForm, sellPrice: Math.max(1, Number(e.target.value)) })} className="w-full p-2.5 border rounded-xl font-bold" dir="ltr" />
+                  <input type="number" min="1" value={breakEvenForm.sellPrice} onChange={e => setBreakEvenForm({ ...breakEvenForm, sellPrice: Math.max(1, Number(e.target.value)) })} className="w-full p-2.5 border border-slate-200 rounded-xl font-bold" dir="ltr" />
                 </div>
               </div>
               {(() => {
@@ -3172,18 +3322,18 @@ export default function App() {
                 return (
                   <>
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-indigo-50 p-4 rounded-xl text-center">
-                        <p className="text-xs text-indigo-700">נקודת איזון</p>
-                        <p className="text-2xl font-extrabold text-indigo-900">{breakEvenCopies.toLocaleString()} עותקים</p>
+                      <div className="bg-indigo-50 ring-1 ring-indigo-100 p-4 rounded-2xl text-center">
+                        <p className="text-xs font-semibold text-indigo-700">נקודת איזון</p>
+                        <p className="text-2xl font-extrabold text-indigo-900 mt-0.5">{breakEvenCopies.toLocaleString()} עותקים</p>
                         <p className="text-xs text-indigo-600">{breakEvenPct}% מהמהדורה</p>
                       </div>
-                      <div className="bg-slate-50 p-4 rounded-xl text-center border">
-                        <p className="text-xs text-slate-600">עלות לעותק</p>
-                        <p className="text-2xl font-extrabold text-slate-800">₪{costPerCopy.toFixed(2)}</p>
-                        <p className="text-xs text-emerald-600">רווח לעותק: ₪{(sellPrice - costPerCopy).toFixed(2)}</p>
+                      <div className="bg-slate-50 ring-1 ring-slate-200/80 p-4 rounded-2xl text-center">
+                        <p className="text-xs font-semibold text-slate-600">עלות לעותק</p>
+                        <p className="text-2xl font-extrabold text-slate-900 mt-0.5">₪{costPerCopy.toFixed(2)}</p>
+                        <p className="text-xs text-emerald-600 font-semibold">רווח לעותק: ₪{(sellPrice - costPerCopy).toFixed(2)}</p>
                       </div>
                     </div>
-                    <table className="w-full text-right text-sm border rounded-xl overflow-hidden">
+                    <table className="w-full text-right text-sm ring-1 ring-slate-200 rounded-xl overflow-hidden">
                       <thead className="bg-slate-50 text-xs border-b">
                         <tr><th className="p-2.5">תרחיש</th><th className="p-2.5 text-center">עותקים</th><th className="p-2.5 text-center">הכנסה</th><th className="p-2.5 text-center">רווח נקי</th></tr>
                       </thead>
@@ -3213,25 +3363,25 @@ export default function App() {
 
       {/* Digital Catalog Modal */}
       {isCatalogModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden" dir="rtl">
-            <div className="p-5 border-b bg-slate-50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2"><BookMarked className="w-5 h-5 text-emerald-600" /> קטלוג דיגיטלי לשליחה</h3>
-              <button onClick={() => setIsCatalogModalOpen(false)}><X className="w-5 h-5 text-slate-400" /></button>
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-xl overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
+              <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><BookMarked className="w-5 h-5 text-emerald-600" /> קטלוג דיגיטלי לשליחה</h3>
+              <button onClick={() => setIsCatalogModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
             </div>
             <div className="p-5 space-y-4">
-              <div className="grid grid-cols-3 gap-2 bg-slate-100 p-1 rounded-xl">
+              <div className="grid grid-cols-3 gap-1.5 bg-slate-100 p-1 rounded-xl">
                 {[{ id: 'general', label: 'צרכן' }, { id: 'yeshiva', label: 'ישיבה' }, { id: 'supplier', label: 'ספקים' }].map(t => (
-                  <button key={t.id} onClick={() => setCatalogPriceTier(t.id)} className={`py-2 rounded-lg text-xs font-bold ${catalogPriceTier === t.id ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600'}`}>{t.label}</button>
+                  <button key={t.id} onClick={() => setCatalogPriceTier(t.id)} className={`py-2 rounded-lg text-xs font-bold transition-all ${catalogPriceTier === t.id ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'}`}>{t.label}</button>
                 ))}
               </div>
               <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
                 <input type="checkbox" checked={catalogOnlyInStock} onChange={e => setCatalogOnlyInStock(e.target.checked)} className="w-4 h-4 rounded" />
                 הצג רק ספרים שנמצאים במלאי
               </label>
-              <textarea readOnly rows="8" value={buildCatalogWhatsAppText()} className="w-full p-3 border rounded-xl bg-slate-50 text-xs leading-relaxed" />
-              <div className="grid grid-cols-2 gap-2">
-                <button onClick={handleCopyCatalogText} className="bg-emerald-600 text-white py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5"><Copy className="w-4 h-4" /> העתק לוואטסאפ</button>
+              <textarea readOnly rows="8" value={buildCatalogWhatsAppText()} className="w-full p-3.5 border border-slate-200 rounded-xl bg-slate-50 text-xs leading-relaxed" />
+              <div className="grid grid-cols-2 gap-2.5">
+                <button onClick={handleCopyCatalogText} className="bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs"><Copy className="w-4 h-4" /> העתק לוואטסאפ</button>
                 <button
                   onClick={() => {
                     setIsCatalogModalOpen(false);
@@ -3244,7 +3394,7 @@ export default function App() {
                       items: getCatalogBooks().map(b => ({ name: b.title, author: b.author || '', price: getCatalogBookPrice(b) }))
                     });
                   }}
-                  className="bg-indigo-600 text-white py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs"
                 >
                   <Printer className="w-4 h-4" /> הדפס / שמור PDF
                 </button>
@@ -3256,47 +3406,47 @@ export default function App() {
 
       {/* Add Print House Quote Modal */}
       {isAddQuoteModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
-            <div className="p-5 border-b bg-slate-50 flex justify-between items-center shrink-0">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2"><Scale className="w-5 h-5 text-indigo-600" /> הוספת הצעת מחיר מדפוס</h3>
-              <button onClick={() => setIsAddQuoteModalOpen(false)}><X className="w-5 h-5 text-slate-400" /></button>
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
+              <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Scale className="w-5 h-5 text-indigo-600" /> הוספת הצעת מחיר מדפוס</h3>
+              <button onClick={() => setIsAddQuoteModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
             </div>
             <form onSubmit={handleSavePrintQuote} className="flex flex-col flex-1 overflow-hidden">
               <div className="p-5 overflow-y-auto space-y-3 flex-1">
                 <div className="grid grid-cols-2 gap-3">
-                  <input required placeholder="שם הספר / הפרויקט *" value={quoteForm.projectTitle} onChange={e => setQuoteForm({ ...quoteForm, projectTitle: e.target.value })} className="p-2.5 border rounded-xl text-sm" />
-                  <input required placeholder="שם בית הדפוס *" value={quoteForm.printerName} onChange={e => setQuoteForm({ ...quoteForm, printerName: e.target.value })} className="p-2.5 border rounded-xl text-sm" />
+                  <input required placeholder="שם הספר / הפרויקט *" value={quoteForm.projectTitle} onChange={e => setQuoteForm({ ...quoteForm, projectTitle: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-sm" />
+                  <input required placeholder="שם בית הדפוס *" value={quoteForm.printerName} onChange={e => setQuoteForm({ ...quoteForm, printerName: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-sm" />
                 </div>
                 <div className="grid grid-cols-3 gap-3">
-                  <input required type="number" min="1" placeholder="כמות" value={quoteForm.copies} onChange={e => setQuoteForm({ ...quoteForm, copies: e.target.value })} className="p-2.5 border rounded-xl text-sm" dir="ltr" />
-                  <input required type="number" min="1" placeholder="מחיר כולל (₪)" value={quoteForm.totalPrice} onChange={e => setQuoteForm({ ...quoteForm, totalPrice: e.target.value })} className="p-2.5 border rounded-xl text-sm font-bold" dir="ltr" />
-                  <input type="number" min="0" placeholder="ימי אספקה" value={quoteForm.deliveryDays} onChange={e => setQuoteForm({ ...quoteForm, deliveryDays: e.target.value })} className="p-2.5 border rounded-xl text-sm" dir="ltr" />
+                  <input required type="number" min="1" placeholder="כמות" value={quoteForm.copies} onChange={e => setQuoteForm({ ...quoteForm, copies: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+                  <input required type="number" min="1" placeholder="מחיר כולל (₪)" value={quoteForm.totalPrice} onChange={e => setQuoteForm({ ...quoteForm, totalPrice: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-sm font-bold" dir="ltr" />
+                  <input type="number" min="0" placeholder="ימי אספקה" value={quoteForm.deliveryDays} onChange={e => setQuoteForm({ ...quoteForm, deliveryDays: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
                 </div>
-                <label className="flex items-center gap-2 text-xs font-bold text-slate-700 bg-slate-50 p-2.5 rounded-xl border">
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-700 bg-slate-50 p-3 rounded-xl ring-1 ring-slate-200/70">
                   <input type="checkbox" checked={quoteForm.includesVat} onChange={e => setQuoteForm({ ...quoteForm, includesVat: e.target.checked })} className="w-4 h-4 rounded" />
                   המחיר כולל מע"מ (אם לא מסומן — יתווסף 18% להשוואה אחידה)
                 </label>
                 <div className="grid grid-cols-3 gap-3">
-                  <input type="number" min="0" placeholder="עמודים" value={quoteForm.pages} onChange={e => setQuoteForm({ ...quoteForm, pages: e.target.value })} className="p-2.5 border rounded-xl text-sm" dir="ltr" />
-                  <select value={quoteForm.coverType} onChange={e => setQuoteForm({ ...quoteForm, coverType: e.target.value })} className="p-2.5 border rounded-xl text-sm">
+                  <input type="number" min="0" placeholder="עמודים" value={quoteForm.pages} onChange={e => setQuoteForm({ ...quoteForm, pages: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+                  <select value={quoteForm.coverType} onChange={e => setQuoteForm({ ...quoteForm, coverType: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-sm">
                     <option value="כריכה קשה">כריכה קשה</option>
                     <option value="כריכה קשה + הטבעה">כריכה קשה + הטבעה</option>
                     <option value="כריכה רכה">כריכה רכה</option>
                     <option value="סיכות (חוברת)">סיכות (חוברת)</option>
                   </select>
-                  <input placeholder="סוג נייר" value={quoteForm.paperType} onChange={e => setQuoteForm({ ...quoteForm, paperType: e.target.value })} className="p-2.5 border rounded-xl text-sm" />
+                  <input placeholder="סוג נייר" value={quoteForm.paperType} onChange={e => setQuoteForm({ ...quoteForm, paperType: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-sm" />
                 </div>
-                <textarea rows="2" placeholder="הערות והבדלים (הובלה, תנאי תשלום...)" value={quoteForm.notes} onChange={e => setQuoteForm({ ...quoteForm, notes: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" />
-                <label className="flex flex-col items-center justify-center gap-1.5 border border-dashed border-indigo-300 bg-indigo-50/50 p-4 rounded-xl cursor-pointer">
+                <textarea rows="2" placeholder="הערות והבדלים (הובלה, תנאי תשלום...)" value={quoteForm.notes} onChange={e => setQuoteForm({ ...quoteForm, notes: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" />
+                <label className="flex flex-col items-center justify-center gap-1.5 border border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 p-4 rounded-2xl cursor-pointer transition-colors">
                   <Upload className="w-5 h-5 text-indigo-600" />
                   <span className="text-xs font-bold text-indigo-800">{quoteForm.fileName || 'העלה מסמך הצעת מחיר (PDF / תמונה עד 700KB)'}</span>
                   <input type="file" accept=".pdf,image/*" onChange={handleQuoteFileUpload} className="hidden" />
                 </label>
               </div>
-              <div className="p-4 border-t bg-slate-50 flex justify-end gap-2 shrink-0">
+              <div className="p-4 border-t bg-slate-50/80 flex justify-end gap-2 shrink-0">
                 <button type="button" onClick={() => setIsAddQuoteModalOpen(false)} className="px-4 py-2 text-sm text-slate-600">ביטול</button>
-                <button type="submit" className="bg-indigo-600 text-white px-5 py-2 rounded-xl font-bold text-sm">שמור הצעה</button>
+                <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-xs">שמור הצעה</button>
               </div>
             </form>
           </div>
@@ -3305,20 +3455,20 @@ export default function App() {
 
       {/* Preview Quote Document Modal */}
       {previewQuoteDoc && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
-            <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-800">{previewQuoteDoc.printerName} — {previewQuoteDoc.fileName}</h3>
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+            <div className="p-4 border-b bg-slate-50/80 flex justify-between items-center">
+              <h3 className="font-extrabold text-slate-900">{previewQuoteDoc.printerName} — {previewQuoteDoc.fileName}</h3>
               <div className="flex gap-2">
-                <a href={previewQuoteDoc.fileData} download={previewQuoteDoc.fileName} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1"><Download className="w-3.5 h-3.5" /> הורד</a>
-                <button onClick={() => setPreviewQuoteDoc(null)} className="p-1.5 bg-white border rounded-lg"><X className="w-5 h-5 text-slate-500" /></button>
+                <a href={previewQuoteDoc.fileData} download={previewQuoteDoc.fileName} className="bg-indigo-600 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1"><Download className="w-3.5 h-3.5" /> הורד</a>
+                <button onClick={() => setPreviewQuoteDoc(null)} className="p-1.5 bg-white ring-1 ring-slate-200 rounded-xl"><X className="w-4 h-4 text-slate-500" /></button>
               </div>
             </div>
             <div className="p-4 bg-slate-100 flex-1 overflow-auto flex items-center justify-center min-h-[400px]">
               {previewQuoteDoc.fileType?.startsWith('image/') ? (
-                <img src={previewQuoteDoc.fileData} alt={previewQuoteDoc.fileName} className="max-w-full max-h-[70vh] rounded-lg" />
+                <img src={previewQuoteDoc.fileData} alt={previewQuoteDoc.fileName} className="max-w-full max-h-[70vh] rounded-xl shadow-sm" />
               ) : previewQuoteDoc.fileType === 'application/pdf' ? (
-                <iframe src={previewQuoteDoc.fileData} title={previewQuoteDoc.fileName} className="w-full h-[70vh] bg-white rounded-lg" />
+                <iframe src={previewQuoteDoc.fileData} title={previewQuoteDoc.fileName} className="w-full h-[70vh] bg-white rounded-xl" />
               ) : (
                 <a href={previewQuoteDoc.fileData} download={previewQuoteDoc.fileName} className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold text-sm">הורד לצפייה</a>
               )}
@@ -3329,19 +3479,19 @@ export default function App() {
 
       {/* Print Document Preview Modal */}
       {printDoc && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
-            <div className="p-4 border-b bg-slate-50 flex justify-between items-center print:hidden">
-              <h3 className="font-bold text-slate-800">{printDoc.docTitle}</h3>
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+            <div className="p-4 border-b bg-slate-50/80 flex justify-between items-center print:hidden">
+              <h3 className="font-extrabold text-slate-900">{printDoc.docTitle}</h3>
               <div className="flex gap-2">
-                <button onClick={() => window.print()} className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5"><Printer className="w-4 h-4" /> הדפס / שמור PDF</button>
-                <button onClick={() => setPrintDoc(null)} className="p-1.5 bg-white border rounded-lg"><X className="w-5 h-5 text-slate-500" /></button>
+                <button onClick={() => window.print()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5"><Printer className="w-4 h-4" /> הדפס / שמור PDF</button>
+                <button onClick={() => setPrintDoc(null)} className="p-1.5 bg-white ring-1 ring-slate-200 rounded-xl"><X className="w-4 h-4 text-slate-500" /></button>
               </div>
             </div>
             <div className="p-6 overflow-y-auto space-y-4">
               <div className="border-b pb-4 flex justify-between items-start">
                 <div>
-                  <h2 className="text-xl font-extrabold text-slate-800">הוצאת ספרי ישיבת ירוחם</h2>
+                  <h2 className="text-xl font-extrabold text-slate-900">הוצאת ספרי ישיבת ירוחם</h2>
                   <p className="text-sm text-slate-600 mt-1">{printDoc.docTitle}</p>
                 </div>
                 <div className="text-left text-xs text-slate-500">
@@ -3401,12 +3551,12 @@ export default function App() {
                 </tbody>
               </table>
               {printDoc.notes && (
-                <p className="text-xs text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <p className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200">
                   <strong>הערות:</strong> {printDoc.notes}
                 </p>
               )}
               {printDoc.totalAmount > 0 && (
-                <div className="bg-slate-100 p-3.5 rounded-xl flex justify-between items-center font-extrabold text-slate-800">
+                <div className="bg-slate-100 p-3.5 rounded-xl flex justify-between items-center font-extrabold text-slate-900">
                   <span>סה"כ לתשלום:</span>
                   <span>₪{Number(printDoc.totalAmount).toLocaleString()}</span>
                 </div>
@@ -3418,35 +3568,35 @@ export default function App() {
 
       {/* Edit User Modal */}
       {editingUser && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden" dir="rtl">
-            <div className="p-5 border-b bg-slate-50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2"><KeyRound className="w-5 h-5 text-indigo-600" /> עריכת משתמש: {editingUser.name}</h3>
-              <button onClick={() => setEditingUser(null)}><X className="w-5 h-5 text-slate-400" /></button>
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
+              <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><KeyRound className="w-5 h-5 text-indigo-600" /> עריכת משתמש: {editingUser.name}</h3>
+              <button onClick={() => setEditingUser(null)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
             </div>
             <form onSubmit={handleSaveEditUser} className="p-5 space-y-3">
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">שם מלא</label>
-                <input required type="text" value={editingUser.name} onChange={e => setEditingUser({ ...editingUser, name: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" />
+                <input required type="text" value={editingUser.name} onChange={e => setEditingUser({ ...editingUser, name: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">שם משתמש</label>
-                <input required type="text" value={editingUser.username} onChange={e => setEditingUser({ ...editingUser, username: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" dir="ltr" />
+                <input required type="text" value={editingUser.username} onChange={e => setEditingUser({ ...editingUser, username: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">סיסמה חדשה (השאר ריק כדי לא לשנות)</label>
-                <input type="password" placeholder="••••••••" value={editingUser.newPassword || ''} onChange={e => setEditingUser({ ...editingUser, newPassword: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm" dir="ltr" />
+                <input type="password" placeholder="••••••••" value={editingUser.newPassword || ''} onChange={e => setEditingUser({ ...editingUser, newPassword: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">רמת הרשאה</label>
-                <select value={editingUser.role} onChange={e => setEditingUser({ ...editingUser, role: e.target.value })} className="w-full p-2.5 border rounded-xl text-sm bg-slate-50">
+                <select value={editingUser.role} onChange={e => setEditingUser({ ...editingUser, role: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50">
                   <option value="viewer">צופה בלבד</option>
                   <option value="admin">מנהל מערכת</option>
                 </select>
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setEditingUser(null)} className="px-4 py-2 text-sm text-slate-600">ביטול</button>
-                <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl font-bold text-sm">שמור שינויים</button>
+                <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-xs">שמור שינויים</button>
               </div>
             </form>
           </div>
@@ -3455,12 +3605,12 @@ export default function App() {
 
       {/* Confirm Dialog Modal */}
       {confirmDialog && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[90] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4" dir="rtl">
-            <div className="flex items-center gap-3">
-              <div className={`p-3 rounded-xl ${confirmDialog.iconStyle || 'bg-red-100 text-red-600'}`}>{confirmDialog.icon}</div>
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-[90] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 max-w-md w-full p-6 space-y-4" dir="rtl">
+            <div className="flex items-center gap-3.5">
+              <div className={`p-3 rounded-2xl ${confirmDialog.iconStyle || 'bg-red-100 text-red-600'}`}>{confirmDialog.icon}</div>
               <div>
-                <h3 className="font-bold text-slate-800 text-base">{confirmDialog.title}</h3>
+                <h3 className="font-extrabold text-slate-900 text-base">{confirmDialog.title}</h3>
                 <p className="text-sm text-slate-600 mt-0.5">{confirmDialog.message}</p>
               </div>
             </div>
