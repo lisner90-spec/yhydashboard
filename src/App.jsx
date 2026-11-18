@@ -2985,3 +2985,1227 @@ export default function PublisherApp() {
     </div>
   );
 }
+// ... existing code ...
+import { 
+  LayoutDashboard, KanbanSquare, Package, BookOpen, AlertTriangle, CheckCircle, 
+  TrendingUp, FileText, PenTool, Printer, Truck, Store, Users, Search, X, 
+  Image as ImageIcon, Upload, Receipt, Plus, DollarSign, Paperclip, Mail, 
+  Megaphone, Settings, RefreshCw, Share2, Download, Edit, Phone, Menu, Trash2, 
+  Settings2, UserPlus, Send, UserCog, Info, StickyNote, History, Clock,
+  ShoppingCart, MapPin, CheckSquare, MessageCircle, Gift, ArrowLeftRight,
+  Percent, ArrowRight, Calculator, ClipboardList, Copy, CreditCard, Database,
+  Minus, Wallet, BookMarked
+} from 'lucide-react';
+
+// ==========================================
+// ... existing code ...
+  // --- Print Document (Packing Slip / Delivery Note / Catalog) State ---
+  const [printDoc, setPrintDoc] = useState(null);
+
+  // --- Stage B: POS (Quick Stall Sales) State ---
+  const [posSales, setPosSales] = useState([]);
+  const [posCart, setPosCart] = useState([]);
+  const [posPriceMode, setPosPriceMode] = useState('yeshiva'); // 'yeshiva' | 'general'
+  const [posPaymentMethod, setPosPaymentMethod] = useState('מזומן');
+  const [posBuyerNote, setPosBuyerNote] = useState('');
+  const [posSearch, setPosSearch] = useState('');
+
+  // --- Stage B: Warehouse Stocktake Mode State ---
+  const [isWarehouseMode, setIsWarehouseMode] = useState(false);
+  const [warehouseBoxSize, setWarehouseBoxSize] = useState(20);
+
+  // --- Stage B: Break-Even Calculator State ---
+  const [isBreakEvenModalOpen, setIsBreakEvenModalOpen] = useState(false);
+  const [breakEvenForm, setBreakEvenForm] = useState({
+    bookTitle: '',
+    totalCost: 15000,
+    printRun: 1000,
+    sellPrice: 60
+  });
+
+  // --- Stage B: Digital Catalog Modal State ---
+  const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false);
+  const [catalogPriceTier, setCatalogPriceTier] = useState('general'); // 'general' | 'supplier' | 'yeshiva'
+  const [catalogOnlyInStock, setCatalogOnlyInStock] = useState(false);
+
+  // --- Stage B: Supplier Payment Partial Input State ---
+  const [partialPayInputs, setPartialPayInputs] = useState({});
+
+  // --- Marketing & PR States ---
+// ... existing code ...
+        unsubs.push(onSnapshot(getCollRef('supplier_logs'), snap => setSupplierLogs(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
+        unsubs.push(onSnapshot(getCollRef('gift_logs'), snap => setGiftLogs(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
+        unsubs.push(onSnapshot(getCollRef('pos_sales'), snap => setPosSales(snap.docs.map(d => ({id: d.id, ...d.data()}))), handleDbError));
+        unsubs.push(onSnapshot(getCollRef('users'), snap => {
+// ... existing code ...
+    const logObj = {
+      supplierName: invoiceSupplier.name,
+      action: actionLabel,
+      type: 'order',
+      user: currentUserName || username,
+      date: new Date().toLocaleString('he-IL'),
+      timestamp: Date.now(),
+      totalAmount: totalOrderPrice,
+      paymentStatus: 'unpaid',
+      paidAmount: 0,
+      details: itemsText
+    };
+    if (db) addDoc(getCollRef('supplier_logs'), logObj);
+    else setSupplierLogs([{ ...logObj, id: Date.now().toString() }, ...supplierLogs]);
+
+    setIsSupplierInvoiceModalOpen(false);
+  };
+
+  // --- התחשבנות קונסיגנציה: דיווח מכירה או החזרת ספרים מספק ---
+// ... existing code ...
+    const logObj = {
+      supplierName: consignmentSupplier.name,
+      action: isReturn ? 'החזרת ספרים למחסן' : 'דיווח מכירת קונסיגנציה',
+      type: consignmentForm.type,
+      user: currentUserName || username,
+      date: new Date().toLocaleString('he-IL'),
+      timestamp: Date.now(),
+      totalAmount,
+      paymentStatus: isReturn ? 'paid' : 'unpaid',
+      paidAmount: isReturn ? 0 : 0,
+      details
+    };
+
+    if (db) addDoc(getCollRef('supplier_logs'), logObj);
+    else setSupplierLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]);
+
+    showToast(isReturn ? `${qty} עותקים הוחזרו למחסן הראשי!` : `נרשמה מכירה ע"ס ₪${totalAmount.toLocaleString()}!`, "success");
+    setIsConsignmentModalOpen(false);
+  };
+
+  // --- Stage B (2): מעקב גבייה ותשלומים מספקים ---
+  const getLogRemainingDebt = (log) => {
+    if (log.type === 'return') return 0;
+    const total = Number(log.totalAmount || 0);
+    if (total <= 0) return 0;
+    if (log.paymentStatus === 'paid') return 0;
+    if (log.paymentStatus === 'partial') return Math.max(0, total - Number(log.paidAmount || 0));
+    return total;
+  };
+
+  const getSupplierOpenDebt = (supplierName) => {
+    return supplierLogs
+      .filter(log => log.supplierName === supplierName)
+      .reduce((sum, log) => sum + getLogRemainingDebt(log), 0);
+  };
+
+  const handleUpdateLogPayment = async (log, status, customPaidAmount = null) => {
+    const total = Number(log.totalAmount || 0);
+    let paidAmount = 0;
+    if (status === 'paid') paidAmount = total;
+    else if (status === 'partial') {
+      const parsed = Number(customPaidAmount);
+      if (isNaN(parsed) || parsed < 0 || parsed > total) {
+        showToast(`אנא הזן סכום תקין בין 0 ל-₪${total.toLocaleString()}`, "warning");
+        return;
+      }
+      paidAmount = parsed;
+    }
+
+    setSupplierLogs(prev => prev.map(l => l.id === log.id ? { ...l, paymentStatus: status, paidAmount } : l));
+    if (db && log.id) {
+      try {
+        await updateDoc(getDocRef('supplier_logs', log.id), { paymentStatus: status, paidAmount });
+      } catch (err) {
+        console.error("שגיאה בעדכון סטטוס תשלום:", err);
+      }
+    }
+    showToast(status === 'paid' ? "החיוב סומן כשולם!" : status === 'partial' ? `עודכן תשלום חלקי ע"ס ₪${paidAmount.toLocaleString()}` : "סטטוס עודכן לטרם שולם", "success");
+  };
+
+  const handleSendDebtWhatsAppReminder = (supplier) => {
+    const debt = getSupplierOpenDebt(supplier.name);
+    const waPhone = formatWhatsAppPhone(supplier.phone);
+    if (!waPhone) {
+      showToast("לספק זה לא מוגדר מספר טלפון תקין לוואטסאפ.", "error");
+      return;
+    }
+    const msg = `שלום ${supplier.contact || supplier.name},\nמקווים ששלומכם טוב!\nפונים אליכם בעדינות מהוצאת ספרי ישיבת ירוחם לגבי יתרת תשלום פתוחה על הזמנות ספרים ע"ס ₪${debt.toLocaleString()}.\nנשמח לעדכון מתי צפויה העברה או אם נדרש מאיתנו מסמך נוסף.\nתודה רבה וכל טוב!`;
+    window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
+  };
+
+  // --- Stage B (1): קופה מהירה (POS) למכירות בישיבה / דוכן ---
+  const getPosBookPrice = (book, mode = posPriceMode) => {
+    if (mode === 'yeshiva') return Number(book.prices?.yeshiva || book.prices?.general || 0);
+    return Number(book.prices?.general || 0);
+  };
+
+  const handleAddToPosCart = (book) => {
+    setPosCart(prev => {
+      const existing = prev.find(i => i.bookId === book.id);
+      if (existing) {
+        return prev.map(i => i.bookId === book.id ? { ...i, qty: i.qty + 1 } : i);
+      }
+      return [...prev, { bookId: book.id, title: book.title, qty: 1 }];
+    });
+  };
+
+  const handleUpdatePosCartQty = (bookId, delta) => {
+    setPosCart(prev => prev
+      .map(i => i.bookId === bookId ? { ...i, qty: i.qty + delta } : i)
+      .filter(i => i.qty > 0)
+    );
+  };
+
+  const handleCompletePosSale = async () => {
+    if (posCart.length === 0) {
+      showToast("הסל ריק. בחר ספרים למכירה.", "warning");
+      return;
+    }
+
+    let totalAmount = 0;
+    const saleItems = posCart.map(item => {
+      const book = inventoryList.find(b => b.id === item.bookId);
+      const unitPrice = book ? getPosBookPrice(book, posPriceMode) : 0;
+      const lineTotal = unitPrice * item.qty;
+      totalAmount += lineTotal;
+      return { bookId: item.bookId, title: item.title, qty: item.qty, unitPrice, lineTotal };
+    });
+
+    // הפחתה אוטומטית מהמחסן הראשי
+    const updatedBooks = [];
+    setInventoryList(prev => prev.map(book => {
+      const cartItem = posCart.find(c => c.bookId === book.id);
+      if (!cartItem) return book;
+      const newStock = Math.max(0, Number(book.publisherStock || 0) - cartItem.qty);
+      const updated = { ...book, publisherStock: newStock, updatedAt: Date.now() };
+      updatedBooks.push(updated);
+      return updated;
+    }));
+
+    if (db) {
+      try {
+        await Promise.all(
+          updatedBooks.map(b => updateDoc(getDocRef('inventory', b.id), { publisherStock: b.publisherStock, updatedAt: b.updatedAt }))
+        );
+      } catch (err) {
+        console.error("שגיאה בעדכון מלאי לאחר מכירת קופה:", err);
+      }
+    }
+
+    const saleObj = {
+      items: saleItems,
+      totalAmount,
+      priceMode: posPriceMode === 'yeshiva' ? 'מחיר ישיבה' : 'מחיר צרכן',
+      paymentMethod: posPaymentMethod,
+      buyerNote: posBuyerNote.trim(),
+      user: currentUserName || username,
+      date: new Date().toLocaleString('he-IL'),
+      timestamp: Date.now()
+    };
+
+    if (db) await addDoc(getCollRef('pos_sales'), saleObj);
+    else setPosSales(prev => [{ ...saleObj, id: Date.now().toString() }, ...prev]);
+
+    setPosCart([]);
+    setPosBuyerNote('');
+    showToast(`מכירה הושלמה ע"ס ₪${totalAmount.toLocaleString()} והמלאי עודכן!`, "success");
+  };
+
+  // --- Stage B (4): ספירת מלאי מהירה (מצב מחסן) ---
+  const handleQuickWarehouseAdjust = async (book, delta) => {
+    const newStock = Math.max(0, Number(book.publisherStock || 0) + delta);
+    const updatedAt = Date.now();
+    setInventoryList(prev => prev.map(b => b.id === book.id ? { ...b, publisherStock: newStock, updatedAt } : b));
+    if (db) {
+      try {
+        await updateDoc(getDocRef('inventory', book.id), { publisherStock: newStock, updatedAt });
+      } catch (err) {
+        console.error("שגיאה בעדכון מלאי מהיר:", err);
+      }
+    }
+  };
+
+  // --- Stage B (3): גיבוי ושחזור מלא (JSON) ---
+  const handleExportFullBackup = () => {
+    const backupPayload = {
+      version: '2.0',
+      exportedAt: new Date().toISOString(),
+      data: {
+        inventory: inventoryList,
+        suppliers: suppliersList,
+        tasks: tasksList,
+        orders: ordersList,
+        notes: notesList,
+        supplierLogs,
+        giftLogs,
+        posSales,
+        campaigns: campaignsList,
+        prCopies,
+        statsData
+      }
+    };
+    const blob = new Blob([JSON.stringify(backupPayload, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    link.download = `yhy_publisher_backup_${dateStr}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast("קובץ גיבוי מלא (JSON) הורד למחשב בהצלחה!", "success");
+  };
+
+  const handleImportBackupFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target.result);
+        const d = parsed.data || parsed;
+        if (!Array.isArray(d.inventory)) {
+          showToast("קובץ הגיבוי אינו תקין או אינו מכיל נתוני מלאי.", "error");
+          return;
+        }
+        setConfirmDialog({
+          title: "שחזור מגיבוי מלא",
+          message: `נמצא גיבוי עם ${d.inventory.length} ספרים ו-${(d.suppliers || []).length} ספקים. האם לשחזר ולהחליף את הנתונים הנוכחיים במערכת?`,
+          confirmText: "כן, שחזר נתונים",
+          confirmStyle: "bg-indigo-600 hover:bg-indigo-700",
+          icon: <Database className="w-6 h-6" />,
+          iconStyle: "bg-indigo-100 text-indigo-600",
+          onConfirm: async () => {
+            if (d.inventory) setInventoryList(d.inventory);
+            if (d.suppliers) setSuppliersList(d.suppliers);
+            if (d.tasks) setTasksList(d.tasks);
+            if (d.orders) setOrdersList(d.orders);
+            if (d.notes) setNotesList(d.notes);
+            if (d.supplierLogs) setSupplierLogs(d.supplierLogs);
+            if (d.giftLogs) setGiftLogs(d.giftLogs);
+            if (d.posSales) setPosSales(d.posSales);
+            if (d.campaigns) setCampaignsList(d.campaigns);
+            if (d.prCopies) setPrCopies(d.prCopies);
+            if (d.statsData) setStatsData(d.statsData);
+            if (db && d.statsData) {
+              try { await setDoc(getDocRef('globals', 'stats'), d.statsData); } catch {}
+            }
+            showToast("הנתונים שוחזרו בהצלחה מקובץ הגיבוי!", "success");
+          }
+        });
+      } catch (err) {
+        console.error(err);
+        showToast("שגיאה בקריאת קובץ הגיבוי. ודא שזהו קובץ JSON תקין.", "error");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  // --- Stage B (6): קטלוג דיגיטלי מעוצב (וואטסאפ / PDF) ---
+  const getCatalogBooks = () => {
+    return [...inventoryList]
+      .filter(b => !catalogOnlyInStock || calculateTotalStock(b) > 0)
+      .sort((a, b) => a.title.localeCompare(b.title, 'he'));
+  };
+
+  const getCatalogBookPrice = (book) => {
+    if (catalogPriceTier === 'supplier') return Number(book.prices?.supplier || 0);
+    if (catalogPriceTier === 'yeshiva') return Number(book.prices?.yeshiva || book.prices?.general || 0);
+    return Number(book.prices?.general || 0);
+  };
+
+  const buildCatalogWhatsAppText = () => {
+    const tierLabel = catalogPriceTier === 'supplier' ? 'מחירון ספקים וחנויות' : catalogPriceTier === 'yeshiva' ? 'מחירון מיוחד לתלמידי ובוגרי הישיבה' : 'מחירון לצרכן';
+    const books = getCatalogBooks();
+    const lines = books.map((b, i) => {
+      const price = getCatalogBookPrice(b);
+      return `${i + 1}. *${b.title}*${b.author ? ` (${b.author})` : ''} — ${price > 0 ? `₪${price}` : 'בתיאום'}`;
+    });
+    return `📚 *קטלוג הוצאת ספרי ישיבת ירוחם*\n_${tierLabel}_\n\n${lines.join('\n')}\n\nלהזמנות ופרטים נוספים ניתן להשיב להודעה זו.`;
+  };
+
+  const handleCopyCatalogText = () => {
+    const text = buildCatalogWhatsAppText();
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand('copy');
+      showToast("הקטלוג הועתק! אפשר להדביק ישירות בוואטסאפ.", "success");
+    } catch {
+      showToast("לא ניתן להעתיק אוטומטית, אנא העתק ידנית מהתיבה.", "warning");
+    }
+    document.body.removeChild(textarea);
+  };
+
+  const handlePrintCatalogPdf = () => {
+    const tierLabel = catalogPriceTier === 'supplier' ? 'מחירון ספקים וחנויות' : catalogPriceTier === 'yeshiva' ? 'מחירון תלמידי ובוגרי הישיבה' : 'מחירון לצרכן';
+    const books = getCatalogBooks();
+    setIsCatalogModalOpen(false);
+    setPrintDoc({
+      type: 'catalog',
+      docTitle: `קטלוג ספרים רשמי — ${tierLabel}`,
+      orderId: new Date().toLocaleDateString('he-IL'),
+      date: new Date().toLocaleDateString('he-IL'),
+      recipient: 'כלל הלקוחות, הבוגרים והחנויות',
+      items: books.map(b => ({
+        name: b.title,
+        author: b.author || '',
+        price: getCatalogBookPrice(b),
+        inStock: calculateTotalStock(b) > 0
+      }))
+    });
+  };
+
+  // --- חלוקה לתורמים / בוגרים / רבנים (עותקי מתנה) ---
+// ... existing code ...
+  const navItems = [
+    { id: 'dashboard', label: 'דאשבורד', icon: LayoutDashboard },
+    { id: 'pos', label: 'קופה מהירה (דוכן)', icon: CreditCard },
+    { id: 'orders', label: 'הזמנות חנות (אתר)', icon: ShoppingCart },
+    { id: 'inventory', label: 'ניהול מלאי', icon: Package },
+    { id: 'suppliers', label: 'ספקים והפצה', icon: Truck },
+    { id: 'production', label: 'הפקת ספרים', icon: KanbanSquare },
+    { id: 'marketing', label: 'שיווק ויח״צ', icon: Megaphone },
+    { id: 'integrations', label: 'אוטומציה וגיבוי', icon: Settings },
+    { id: 'notes', label: 'פתקים ומשימות', icon: StickyNote },
+  ];
+// ... existing code ...
+  const liveStoreRevenue = ordersList.reduce((sum, o) => sum + Number(o.total || 0), 0);
+  const liveSupplierRevenue = supplierLogs.filter(l => l.type !== 'return').reduce((sum, l) => sum + Number(l.totalAmount || 0), 0);
+  const livePosRevenue = posSales.reduce((sum, s) => sum + Number(s.totalAmount || 0), 0);
+  const totalOpenSupplierDebt = supplierLogs.reduce((sum, l) => sum + getLogRemainingDebt(l), 0);
+  
+  const currentStats = statsData[dashboardPeriod] || initialStatsData.monthly;
+// ... existing code ...
+          <table className="w-full text-right border-collapse border border-slate-300 text-sm mb-6">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="border border-slate-300 p-2">#</th>
+                <th className="border border-slate-300 p-2">שם הספר</th>
+                {printDoc.type === 'catalog' ? (
+                  <>
+                    <th className="border border-slate-300 p-2">מחבר</th>
+                    <th className="border border-slate-300 p-2 text-center">מחיר</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="border border-slate-300 p-2 text-center">כמות</th>
+                    {printDoc.type === 'supplier_delivery' && <th className="border border-slate-300 p-2 text-center">מחיר יח'</th>}
+                    {printDoc.type === 'supplier_delivery' && <th className="border border-slate-300 p-2 text-center">סה"כ</th>}
+                  </>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {printDoc.items.map((item, idx) => (
+                <tr key={idx}>
+                  <td className="border border-slate-300 p-2">{idx + 1}</td>
+                  <td className="border border-slate-300 p-2 font-medium">{item.name}</td>
+                  {printDoc.type === 'catalog' ? (
+                    <>
+                      <td className="border border-slate-300 p-2 text-slate-600">{item.author}</td>
+                      <td className="border border-slate-300 p-2 text-center font-bold">{item.price > 0 ? `₪${Number(item.price).toLocaleString()}` : 'בתיאום'}</td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="border border-slate-300 p-2 text-center font-bold">{item.quantity}</td>
+                      {printDoc.type === 'supplier_delivery' && <td className="border border-slate-300 p-2 text-center">₪{Number(item.price || 0).toLocaleString()}</td>}
+                      {printDoc.type === 'supplier_delivery' && <td className="border border-slate-300 p-2 text-center font-bold">₪{Number(item.lineTotal || 0).toLocaleString()}</td>}
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+// ... existing code ...
+                    <div className="bg-purple-50/50 p-3.5 rounded-xl border border-purple-100">
+                      <p className="text-xs text-purple-700">הכנסות מתועדות (אתר + ספקים + דוכן)</p>
+                      <p className="text-base md:text-lg font-bold text-purple-800 mt-1">₪{Math.round(liveStoreRevenue + liveSupplierRevenue + livePosRevenue).toLocaleString()}</p>
+                      <p className="text-[11px] text-purple-500 mt-0.5">אתר: ₪{Math.round(liveStoreRevenue).toLocaleString()} | ספקים: ₪{Math.round(liveSupplierRevenue).toLocaleString()} | דוכן: ₪{Math.round(livePosRevenue).toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div onClick={() => setActiveTab('suppliers')} className="cursor-pointer bg-rose-50/70 hover:bg-rose-50 border border-rose-200 p-3.5 rounded-xl flex justify-between items-center transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <Wallet className="w-5 h-5 text-rose-600" />
+                      <div>
+                        <p className="text-xs font-bold text-rose-800">יתרת חוב פתוחה לגבייה מספקים</p>
+                        <p className="text-[11px] text-rose-600">לחץ למעבר למסך הספקים ותזכורות גבייה</p>
+                      </div>
+                    </div>
+                    <span className="text-lg md:text-xl font-bold text-rose-700">₪{Math.round(totalOpenSupplierDebt).toLocaleString()}</span>
+                  </div>
+                </div>
+// ... existing code ...
+          {/* POS (QUICK STALL SALES) VIEW */}
+          {activeTab === 'pos' && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100">
+                <div>
+                  <h3 className="text-lg md:text-xl font-bold text-slate-800 flex items-center gap-2"><CreditCard className="w-5 h-5 text-indigo-600" /> קופה מהירה למכירות בישיבה / דוכן</h3>
+                  <p className="text-slate-500 text-xs md:text-sm mt-0.5">בחר ספרים להוספה לסל – המלאי יופחת אוטומטית מהמחסן הראשי</p>
+                </div>
+                <div className="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200 w-full sm:w-auto">
+                  <button onClick={() => setPosPriceMode('yeshiva')} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs md:text-sm font-bold transition-all ${posPriceMode === 'yeshiva' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600'}`}>מחירון ישיבה</button>
+                  <button onClick={() => setPosPriceMode('general')} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs md:text-sm font-bold transition-all ${posPriceMode === 'general' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600'}`}>מחירון צרכן</button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Books Grid */}
+                <div className="lg:col-span-2 space-y-4">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={posSearch}
+                      onChange={(e) => setPosSearch(e.target.value)}
+                      placeholder="חפש ספר מהיר בדוכן..."
+                      className="w-full pr-10 pl-4 py-3 bg-white border border-slate-200 rounded-xl text-sm shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {inventoryList
+                      .filter(b => b.title.includes(posSearch) || (b.author || '').includes(posSearch))
+                      .sort((a, b) => a.title.localeCompare(b.title, 'he'))
+                      .map(book => {
+                        const price = getPosBookPrice(book, posPriceMode);
+                        const inCart = posCart.find(c => c.bookId === book.id)?.qty || 0;
+                        return (
+                          <button
+                            key={book.id}
+                            type="button"
+                            onClick={() => handleAddToPosCart(book)}
+                            className={`text-right p-4 rounded-2xl border transition-all active:scale-95 flex flex-col justify-between min-h-[115px] relative ${inCart > 0 ? 'bg-indigo-50 border-indigo-400 shadow-sm' : 'bg-white border-slate-200 hover:border-indigo-300 hover:shadow-sm'}`}
+                          >
+                            {inCart > 0 && (
+                              <span className="absolute -top-2 -left-2 bg-indigo-600 text-white text-xs font-bold w-7 h-7 rounded-full flex items-center justify-center shadow-md">
+                                {inCart}
+                              </span>
+                            )}
+                            <div>
+                              <h4 className="font-bold text-slate-800 text-sm leading-snug line-clamp-2">{book.title}</h4>
+                              <p className="text-[11px] text-slate-400 mt-1">במחסן: {book.publisherStock}</p>
+                            </div>
+                            <div className="mt-3 pt-2 border-t border-slate-100 flex justify-between items-center">
+                              <span className="text-base font-extrabold text-emerald-600">₪{price}</span>
+                              <span className="text-[11px] bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-md">+ הוסף</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+
+                {/* Cart & Checkout */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col h-fit sticky top-4 space-y-4">
+                  <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                    <h4 className="font-bold text-slate-800 flex items-center gap-2"><ShoppingCart className="w-5 h-5 text-indigo-600" /> סל קנייה נוכחי</h4>
+                    {posCart.length > 0 && (
+                      <button onClick={() => setPosCart([])} className="text-xs text-red-500 hover:underline">רוקן סל</button>
+                    )}
+                  </div>
+
+                  {posCart.length === 0 ? (
+                    <div className="py-10 text-center text-slate-400 text-sm">
+                      לחץ על הספרים מימין כדי להוסיף אותם למכירה
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5 max-h-64 overflow-y-auto">
+                      {posCart.map(item => {
+                        const book = inventoryList.find(b => b.id === item.bookId);
+                        const unitPrice = book ? getPosBookPrice(book, posPriceMode) : 0;
+                        return (
+                          <div key={item.bookId} className="flex items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-xs text-slate-800 truncate">{item.title}</p>
+                              <p className="text-[11px] text-slate-500">₪{unitPrice} ליח' · סה"כ ₪{(unitPrice * item.qty).toLocaleString()}</p>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <button onClick={() => handleUpdatePosCartQty(item.bookId, -1)} className="w-7 h-7 bg-white border border-slate-200 rounded-lg flex items-center justify-center hover:bg-red-50 hover:text-red-600"><Minus className="w-3.5 h-3.5" /></button>
+                              <span className="font-bold text-sm w-6 text-center">{item.qty}</span>
+                              <button onClick={() => handleUpdatePosCartQty(item.bookId, 1)} className="w-7 h-7 bg-white border border-slate-200 rounded-lg flex items-center justify-center hover:bg-emerald-50 hover:text-emerald-600"><Plus className="w-3.5 h-3.5" /></button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="space-y-3 pt-3 border-t border-slate-100">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">אמצעי תשלום</label>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {['מזומן', 'ביט', 'פייבוקס', 'אשראי'].map(m => (
+                          <button key={m} type="button" onClick={() => setPosPaymentMethod(m)} className={`py-2 rounded-lg text-xs font-bold border transition-colors ${posPaymentMethod === m ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>{m}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">שם קונה / הערה (אופציונלי)</label>
+                      <input type="text" value={posBuyerNote} onChange={e => setPosBuyerNote(e.target.value)} placeholder="למשל: תלמיד שיעור ג' / כנס בוגרים" className="w-full p-2.5 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white outline-none" />
+                    </div>
+                    <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex justify-between items-center">
+                      <span className="font-bold text-emerald-900 text-sm">סה"כ לתשלום:</span>
+                      <span className="text-2xl font-extrabold text-emerald-700">
+                        ₪{posCart.reduce((sum, item) => {
+                          const b = inventoryList.find(x => x.id === item.bookId);
+                          return sum + (b ? getPosBookPrice(b, posPriceMode) * item.qty : 0);
+                        }, 0).toLocaleString()}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={posCart.length === 0}
+                      onClick={handleCompletePosSale}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white py-3.5 rounded-xl font-bold text-base shadow-sm flex items-center justify-center gap-2 transition-colors"
+                    >
+                      <CheckCircle className="w-5 h-5" /> אשר מכירה והפחת ממלאי
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recent POS Sales */}
+              {posSales.length > 0 && (
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+                  <h4 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><History className="w-4 h-4 text-indigo-600" /> מכירות אחרונות בדוכן ({posSales.length})</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {[...posSales].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).slice(0, 9).map((sale, idx) => (
+                      <div key={sale.id || idx} className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-xs space-y-1.5">
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-emerald-700 text-sm">₪{Number(sale.totalAmount || 0).toLocaleString()}</span>
+                          <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-medium">{sale.paymentMethod} · {sale.priceMode}</span>
+                        </div>
+                        <p className="text-slate-700">{(sale.items || []).map(i => `${i.title} (x${i.qty})`).join(', ')}</p>
+                        {sale.buyerNote && <p className="text-slate-500">הערה: {sale.buyerNote}</p>}
+                        <p className="text-[10px] text-slate-400">{sale.date} | {sale.user}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* STORE ORDERS VIEW */}
+// ... existing code ...
+          {/* INVENTORY VIEW */}
+          {activeTab === 'inventory' && (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden animate-in fade-in duration-300">
+              <div className="p-4 md:p-6 border-b border-slate-100 flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
+                <div className="flex flex-col sm:flex-row gap-2 flex-1">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="חיפוש לפי שם ספר, מחבר או דאנאק..."
+                      className="w-full pr-9 pl-3 py-2 md:py-2.5 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 text-sm outline-none"
+                    />
+                  </div>
+                  <select
+                    value={inventorySort}
+                    onChange={(e) => setInventorySort(e.target.value)}
+                    className="p-2 md:p-2.5 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 text-sm outline-none"
+                  >
+                    <option value="alphabetical">מיון: אלף-בית</option>
+                    <option value="date">מיון: עודכן לאחרונה</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 sm:flex sm:flex-row sm:flex-wrap gap-2 w-full lg:w-auto print:hidden">
+                  <button
+                    onClick={() => setIsWarehouseMode(!isWarehouseMode)}
+                    className={`px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 whitespace-nowrap font-bold transition-colors ${isWarehouseMode ? 'bg-amber-500 text-white shadow-sm' : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'}`}
+                  >
+                    <ClipboardList className="w-3.5 h-3.5 md:w-4 md:h-4" /> {isWarehouseMode ? 'חזרה לטבלה רגילה' : 'מצב ספירת מלאי (מחסן)'}
+                  </button>
+                  <button onClick={() => setIsCatalogModalOpen(true)} className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 whitespace-nowrap font-medium"><BookMarked className="w-3.5 h-3.5 md:w-4 md:h-4" /> קטלוג לשליחה</button>
+                  <button onClick={() => window.print()} className="bg-white border border-slate-200 hover:bg-slate-50 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap"><Printer className="w-3.5 h-3.5 md:w-4 md:h-4" /> הדפס</button>
+                  <button onClick={handleExportCSV} className="bg-slate-100 hover:bg-slate-200 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap"><Download className="w-3.5 h-3.5 md:w-4 md:h-4" /> ייצוא</button>
+                  <button onClick={() => setIsGiftHistoryOpen(true)} className="bg-purple-50 hover:bg-purple-100 text-purple-700 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap font-medium"><History className="w-3.5 h-3.5 md:w-4 md:h-4" /> מעקב מתנות ({giftLogs.length})</button>
+                  {userRole === 'admin' && (
+                    <>
+                      <button onClick={() => setIsGiftModalOpen(true)} className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap font-medium shadow-sm"><Gift className="w-3.5 h-3.5 md:w-4 md:h-4" /> חלוקה לתורמים</button>
+                      <button onClick={handleImportYhyCatalog} className="bg-pink-100 hover:bg-pink-200 text-pink-700 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap transition-colors font-medium"><Download className="w-3.5 h-3.5 md:w-4 md:h-4" /> ייבוא מהאתר</button>
+                      <button onClick={() => setIsUpdateStockModalOpen(true)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 whitespace-nowrap"><RefreshCw className="w-3.5 h-3.5 md:w-4 md:h-4" /> עדכון ידני</button>
+                      <button onClick={() => setIsAddBookModalOpen(true)} className="col-span-2 sm:col-span-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 md:py-2.5 rounded-lg text-xs md:text-sm flex items-center justify-center gap-1.5 md:gap-2 shadow-sm whitespace-nowrap"><Plus className="w-3.5 h-3.5 md:w-4 md:h-4" /> הוסף ספר</button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {isWarehouseMode ? (
+                /* --- מצב ספירת מלאי מהירה מהטלפון (מחסן) --- */
+                <div className="p-4 md:p-6 bg-amber-50/30 space-y-4">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-amber-50 border border-amber-200 p-3.5 rounded-xl">
+                    <div>
+                      <h4 className="font-bold text-amber-900 text-sm md:text-base flex items-center gap-2"><ClipboardList className="w-4 h-4" /> מצב ספירת מלאי מהירה במחסן</h4>
+                      <p className="text-xs text-amber-700">כל לחיצה מעדכנת מיד את כמות המלאי במחסן הראשי</p>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="font-bold text-amber-900">גודל ארגז:</span>
+                      {[10, 20, 25, 30].map(size => (
+                        <button key={size} onClick={() => setWarehouseBoxSize(size)} className={`px-2.5 py-1 rounded-lg font-bold border ${warehouseBoxSize === size ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-amber-800 border-amber-200'}`}>
+                          {size}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {sortedInventory.map(book => (
+                      <div key={book.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-3">
+                        <div className="flex justify-between items-start gap-2">
+                          <div>
+                            <h5 className="font-bold text-slate-800 text-base">{book.title}</h5>
+                            <p className="text-xs text-slate-400">{book.author}</p>
+                          </div>
+                          <div className="text-left bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100">
+                            <span className="block text-[10px] text-indigo-500">במחסן הראשי</span>
+                            <span className="text-xl font-extrabold text-indigo-700">{Number(book.publisherStock || 0).toLocaleString()}</span>
+                          </div>
+                        </div>
+                        {userRole === 'admin' && (
+                          <div className="grid grid-cols-4 gap-2">
+                            <button onClick={() => handleQuickWarehouseAdjust(book, -warehouseBoxSize)} className="py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs border border-red-200 active:scale-95">-{warehouseBoxSize} ארגז</button>
+                            <button onClick={() => handleQuickWarehouseAdjust(book, -1)} className="py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-base active:scale-95">-1</button>
+                            <button onClick={() => handleQuickWarehouseAdjust(book, 1)} className="py-2.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-base active:scale-95">+1</button>
+                            <button onClick={() => handleQuickWarehouseAdjust(book, warehouseBoxSize)} className="py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs active:scale-95">+{warehouseBoxSize} ארגז</button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                /* --- טבלת המלאי המלאה --- */
+                <div className="overflow-x-auto w-full">
+                  <table className="w-full text-right text-sm min-w-[900px]">
+                    <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs uppercase">
+                      <tr>
+                        <th className="py-3.5 px-4 font-bold">שם הספר / מחבר</th>
+                        <th className="py-3.5 px-4 font-bold text-center">מחירים (צרכן / ספק / ישיבה)</th>
+                        <th className="py-3.5 px-4 font-bold text-center text-rose-700">עלות הפקה</th>
+                        <th className="py-3.5 px-4 font-bold text-center text-emerald-700">רווחיות לעותק</th>
+                        <th className="py-3.5 px-4 font-bold text-center text-indigo-700">במחסן הראשי</th>
+                        <th className="py-3.5 px-4 font-bold">פיזור אצל ספקים</th>
+                        <th className="py-3.5 px-4 font-bold text-center">סה"כ מלאי</th>
+                        {userRole === 'admin' && <th className="py-3.5 px-4 font-bold text-center print:hidden">פעולות</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {sortedInventory.map((book) => {
+                        const totalStock = calculateTotalStock(book);
+                        const isLow = totalStock <= Number(book.threshold || 0);
+                        const cost = Number(book.productionCost || 0);
+                        const retailPrice = Number(book.prices?.general || 0);
+                        const supPrice = Number(book.prices?.supplier || 0);
+                        const retailProfit = retailPrice - cost;
+                        const retailMargin = retailPrice > 0 ? Math.round((retailProfit / retailPrice) * 100) : 0;
+                        const supProfit = supPrice - cost;
+
+                        return (
+                          <tr key={book.id} className={`hover:bg-slate-50/70 transition-colors ${isLow ? 'bg-red-50/20' : ''}`}>
+                            <td className="py-4 px-4">
+                              <div className="font-bold text-slate-800">{book.title}</div>
+                              <div className="text-xs text-slate-500 mt-0.5">{book.author}{book.isbn ? ` · ${book.isbn}` : ''}</div>
+                            </td>
+                            <td className="py-4 px-4 text-center">
+                              <div className="inline-flex flex-col gap-0.5 text-xs">
+                                <span className="font-bold text-slate-700">צרכן: ₪{retailPrice}</span>
+                                <span className="text-indigo-600 font-medium">ספק: ₪{supPrice}</span>
+                                <span className="text-emerald-600">ישיבה: ₪{Number(book.prices?.yeshiva || 0)}</span>
+                              </div>
+                            </td>
+                            <td className="py-4 px-4 text-center bg-rose-50/30 border-x border-slate-100">
+                              <div className="font-bold text-rose-700 text-base">₪{cost.toLocaleString()}</div>
+                            </td>
+                            <td className="py-4 px-4 text-center bg-emerald-50/20">
+                              <div className="text-xs space-y-0.5">
+                                <div className="font-bold text-emerald-700">אתר: ₪{retailProfit.toFixed(1)} ({retailMargin}%)</div>
+                                <div className="text-slate-500">ספק: ₪{supProfit.toFixed(1)}</div>
+                              </div>
+                            </td>
+                            <td className="py-4 px-4 text-center bg-indigo-50/30">
+                              {userRole === 'admin' ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={book.publisherStock}
+                                  onChange={async (e) => {
+                                    const val = Math.max(0, Number(e.target.value));
+                                    setInventoryList(prev => prev.map(b => b.id === book.id ? { ...b, publisherStock: val, updatedAt: Date.now() } : b));
+                                    if (db) await updateDoc(getDocRef('inventory', book.id), { publisherStock: val, updatedAt: Date.now() });
+                                  }}
+                                  className="w-16 md:w-20 font-bold text-indigo-700 text-lg text-center bg-transparent border-b-2 border-transparent hover:border-indigo-300 focus:border-indigo-600 focus:bg-white outline-none transition-all"
+                                  dir="ltr"
+                                />
+                              ) : (
+                                <div className="font-bold text-indigo-700 text-lg">{Number(book.publisherStock).toLocaleString()}</div>
+                              )}
+                            </td>
+                            <td className="py-4 px-4">
+                              {(book.breakdown || []).filter(i => Number(i.amount) > 0).length > 0 ? (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {book.breakdown.filter(i => Number(i.amount) > 0).map((item, i) => (
+                                    <span key={i} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md text-xs border border-slate-200">
+                                      {item.supplier}: <strong>{item.amount}</strong>
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-400">ללא פיזור</span>
+                              )}
+                            </td>
+                            <td className="py-4 px-4 text-center">
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold text-sm ${isLow ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                {isLow && <AlertTriangle className="w-3.5 h-3.5" />}
+                                {totalStock.toLocaleString()}
+                              </span>
+                            </td>
+                            {userRole === 'admin' && (
+                              <td className="py-4 px-4 text-center print:hidden">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button onClick={() => openEditBook(book)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="ערוך ספר"><Edit className="w-4 h-4" /></button>
+                                  <button onClick={() => handleDeleteBook(book.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="מחק ספר"><Trash2 className="w-4 h-4" /></button>
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SUPPLIERS VIEW */}
+          {activeTab === 'suppliers' && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+                <div className="flex items-center gap-3">
+                  <select
+                    value={suppliersSort}
+                    onChange={(e) => setSuppliersSort(e.target.value)}
+                    className="p-2.5 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white text-sm outline-none"
+                  >
+                    <option value="alphabetical">מיון ספקים: אלף-בית</option>
+                    <option value="date">מיון ספקים: עודכן לאחרונה</option>
+                  </select>
+                  {totalOpenSupplierDebt > 0 && (
+                    <div className="hidden md:flex items-center gap-1.5 bg-rose-50 text-rose-700 border border-rose-200 px-3 py-1.5 rounded-lg text-xs font-bold">
+                      <Wallet className="w-4 h-4" /> סה"כ חוב פתוח לגבייה: ₪{totalOpenSupplierDebt.toLocaleString()}
+                    </div>
+                  )}
+                </div>
+                {userRole === 'admin' && (
+                  <button onClick={() => setIsAddSupplierModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg font-medium text-sm flex items-center justify-center gap-2 shadow-sm">
+                    <Plus className="w-4 h-4" /> הוסף ספק / רשת חדשה
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
+                {sortedSuppliers.map((supplier) => {
+                  const openDebt = getSupplierOpenDebt(supplier.name);
+                  return (
+                    <div key={supplier.id} className="bg-white rounded-2xl p-5 md:p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow flex flex-col relative group">
+                      {userRole === 'admin' && (
+                        <button onClick={() => { setEditingSupplier(supplier); setIsEditSupplierModalOpen(true); }} className="absolute top-4 left-4 p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100">
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      )}
+                      <div className="flex justify-between items-start mb-4 pr-2">
+                        <div>
+                          <h4 className="font-bold text-base md:text-lg text-slate-800">{supplier.name}</h4>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            <span className="inline-block px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-md">{supplier.type}</span>
+                            <span className={`inline-block px-2.5 py-1 text-xs font-medium rounded-md border ${getStatusColor(supplier.status)}`}>{supplier.status}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* יתרת חוב פתוחה לגבייה */}
+                      {openDebt > 0 && (
+                        <div className="mb-4 bg-rose-50 border border-rose-200 rounded-xl p-3 flex justify-between items-center gap-2">
+                          <div>
+                            <p className="text-[11px] font-medium text-rose-700">יתרת חוב פתוחה לגבייה:</p>
+                            <p className="text-base font-extrabold text-rose-800">₪{openDebt.toLocaleString()}</p>
+                          </div>
+                          <button
+                            onClick={() => handleSendDebtWhatsAppReminder(supplier)}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm shrink-0"
+                            title="שלח תזכורת מנומסת בוואטסאפ"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" /> תזכורת גבייה
+                          </button>
+                        </div>
+                      )}
+                      
+                      <div className="space-y-3 pt-4 border-t border-slate-100 flex-1">
+                        <div className="flex items-center gap-3 text-sm text-slate-600"><Users className="w-4 h-4 text-slate-400" /> {supplier.contact}</div>
+                        <div className="flex items-center gap-3 text-sm text-slate-600" dir="ltr"><Phone className="w-4 h-4 text-slate-400" /> {supplier.phone}</div>
+                        <div className="flex items-center gap-3 text-sm text-slate-600"><FileText className="w-4 h-4 text-slate-400" /> {supplier.email}</div>
+                      </div>
+                      <div className="pt-5 mt-4 border-t border-slate-50 flex gap-2 flex-col">
+                        <button onClick={() => setSelectedSupplierForStock(supplier)} className="w-full flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-700 py-2.5 rounded-lg text-sm font-medium transition-colors"><Package className="w-4 h-4" /> צפה במלאי</button>
+                        <button onClick={() => { setSelectedSupplierForHistory(supplier); setIsSupplierHistoryModalOpen(true); }} className="w-full flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-700 py-2.5 rounded-lg text-sm font-medium transition-colors"><History className="w-4 h-4" /> היסטוריית פעולות וגבייה</button>
+                        {userRole === 'admin' && (
+                          <>
+                            <button onClick={() => openConsignmentModal(supplier)} className="w-full flex items-center justify-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-2.5 rounded-lg text-sm font-medium transition-colors"><ArrowLeftRight className="w-4 h-4" /> דיווח מכירה / החזרה</button>
+                            <button onClick={() => openSupplierInvoice(supplier)} className="w-full flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-2.5 rounded-lg text-sm font-medium transition-colors"><Receipt className="w-4 h-4" /> הפק הזמנה / קבלה</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* PRODUCTION (KANBAN) VIEW */}
+          {activeTab === 'production' && (
+            <div className="flex flex-col h-full animate-in fade-in duration-300">
+              <div className="flex flex-wrap justify-end gap-2 mb-4">
+                <button
+                  onClick={() => {
+                    setBreakEvenForm({ bookTitle: '', totalCost: 15000, printRun: 1000, sellPrice: 60 });
+                    setIsBreakEvenModalOpen(true);
+                  }}
+                  className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-4 py-2.5 rounded-lg font-bold text-sm transition-colors flex items-center gap-2"
+                >
+                  <Calculator className="w-4 h-4" /> מחשבון נקודת איזון (Break-Even)
+                </button>
+                {userRole === 'admin' && (
+                  <button onClick={() => setIsAddTaskModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg font-medium text-sm transition-colors flex items-center gap-2 shadow-sm">
+                    <Plus className="w-4 h-4" /> הוסף פרויקט הפקה חדש
+                  </button>
+                )}
+              </div>
+// ... existing code ...
+          {/* INTEGRATIONS AND AUTOMATION VIEW */}
+          {activeTab === 'integrations' && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              {/* --- גיבוי ושחזור מלא (JSON Backup) --- */}
+              <div className="bg-white rounded-2xl p-5 md:p-6 shadow-sm border border-indigo-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-3 bg-indigo-100 text-indigo-700 rounded-xl shrink-0"><Database className="w-6 h-6" /></div>
+                  <div>
+                    <h3 className="text-base md:text-lg font-bold text-slate-800">גיבוי ושחזור מלא של כל נתוני המערכת (JSON)</h3>
+                    <p className="text-slate-500 text-xs md:text-sm mt-0.5">הורד קובץ גיבוי אחד הכולל מלאי, ספקים, הזמנות, גבייה, מתנות, קופה ופתקים — או שחזר מגיבוי קודם.</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                  <button onClick={handleExportFullBackup} className="flex-1 md:flex-none bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm transition-colors">
+                    <Download className="w-4 h-4" /> הורד גיבוי מלא
+                  </button>
+                  {userRole === 'admin' && (
+                    <label className="flex-1 md:flex-none bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer transition-colors border border-slate-200">
+                      <Upload className="w-4 h-4" /> שחזר מגיבוי
+                      <input type="file" accept=".json,application/json" onChange={handleImportBackupFile} className="hidden" />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg md:text-xl font-bold text-slate-800">אינטגרציות ומערכות</h3>
+                  <p className="text-slate-500 text-xs md:text-sm mt-1">חיבור אוטומטי למערכות הפקת חשבוניות וחנויות</p>
+                </div>
+              </div>
+// ... existing code ...
+      {/* Supplier History Modal */}
+      {isSupplierHistoryModalOpen && selectedSupplierForHistory && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full overflow-hidden animate-in zoom-in-95 duration-200" dir="rtl">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div>
+                <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><History className="w-5 h-5 text-indigo-600" /> היסטוריית פעולות וגבייה</h3>
+                <p className="text-sm text-slate-500">עבור הספק/רשת: {selectedSupplierForHistory.name} | יתרה פתוחה: <strong className="text-rose-600">₪{getSupplierOpenDebt(selectedSupplierForHistory.name).toLocaleString()}</strong></p>
+              </div>
+              <button onClick={() => setIsSupplierHistoryModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-white p-2 rounded-md shadow-sm border border-slate-200 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 max-h-[65vh] overflow-y-auto bg-slate-50/50">
+              {supplierLogs.filter(log => log.supplierName === selectedSupplierForHistory.name).length > 0 ? (
+                <div className="space-y-4">
+                  {supplierLogs.filter(log => log.supplierName === selectedSupplierForHistory.name)
+                    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                    .map((log, idx) => {
+                      const isBillable = log.type !== 'return' && Number(log.totalAmount || 0) > 0;
+                      const payStatus = log.paymentStatus || 'unpaid';
+                      const remaining = getLogRemainingDebt(log);
+                      const statusBadge = payStatus === 'paid'
+                        ? { text: 'שולם', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' }
+                        : payStatus === 'partial'
+                        ? { text: `שולם חלקית (נותר ₪${remaining.toLocaleString()})`, cls: 'bg-amber-100 text-amber-800 border-amber-200' }
+                        : { text: 'טרם שולם', cls: 'bg-rose-100 text-rose-700 border-rose-200' };
+
+                      return (
+                        <div key={log.id || idx} className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex flex-col gap-3 relative">
+                          <div className="flex justify-between items-start gap-2">
+                            <div className="flex items-center gap-2">
+                              <div className="bg-blue-100 text-blue-600 p-1.5 rounded-lg"><Clock className="w-4 h-4" /></div>
+                              <div>
+                                <p className="font-bold text-slate-700 text-sm">{log.action}</p>
+                                <p className="text-[10px] text-slate-400">{log.date}</p>
+                              </div>
+                            </div>
+                            <div className="text-left flex flex-col items-end gap-1">
+                              <p className="text-sm font-bold text-indigo-600">₪{Number(log.totalAmount).toLocaleString()}</p>
+                              {isBillable && (
+                                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${statusBadge.cls}`}>{statusBadge.text}</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg p-3 text-sm text-slate-700 whitespace-pre-wrap border border-slate-200/60 leading-relaxed shadow-sm">
+                            {log.details}
+                          </div>
+
+                          {/* כפתורי עדכון סטטוס גבייה */}
+                          {isBillable && userRole === 'admin' && (
+                            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap gap-1.5">
+                                <button onClick={() => handleUpdateLogPayment(log, 'unpaid')} className={`px-2.5 py-1 rounded-md text-xs font-bold border transition-colors ${payStatus === 'unpaid' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'}`}>טרם שולם</button>
+                                <button onClick={() => handleUpdateLogPayment(log, 'paid')} className={`px-2.5 py-1 rounded-md text-xs font-bold border transition-colors ${payStatus === 'paid' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50'}`}>סמן כשולם</button>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={log.totalAmount}
+                                  placeholder="סכום חלקי..."
+                                  value={partialPayInputs[log.id] ?? (payStatus === 'partial' ? log.paidAmount : '')}
+                                  onChange={(e) => setPartialPayInputs(prev => ({ ...prev, [log.id]: e.target.value }))}
+                                  className="w-24 p-1 text-xs border border-slate-300 rounded-md bg-white text-center"
+                                  dir="ltr"
+                                />
+                                <button onClick={() => handleUpdateLogPayment(log, 'partial', partialPayInputs[log.id])} className="px-2.5 py-1 rounded-md text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white">שולם חלקית</button>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-2 border-t border-slate-100 mt-1">
+                            <UserCog className="w-3.5 h-3.5" /> בוצע ע"י: <span className="font-semibold text-slate-700">{log.user}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              ) : (
+                <div className="text-center py-10">
+                  <History className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500 font-medium">אין היסטוריית פעולות לספק זה במערכת עדיין.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- Stage B (5): Break-Even Calculator Modal --- */}
+      {isBreakEvenModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col" dir="rtl">
+            <div className="p-4 md:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div>
+                <h3 className="font-bold text-base md:text-lg text-slate-800 flex items-center gap-2"><Calculator className="w-5 h-5 text-amber-600" /> מחשבון נקודת איזון למהדורה (Break-Even)</h3>
+                {breakEvenForm.bookTitle && <p className="text-xs text-slate-500 mt-0.5">עבור: {breakEvenForm.bookTitle}</p>}
+              </div>
+              <button onClick={() => setIsBreakEvenModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-white p-1.5 rounded-md border border-slate-200"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-5 overflow-y-auto space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">עלות הפקה והדפסה כוללת (₪)</label>
+                  <input type="number" min="0" value={breakEvenForm.totalCost} onChange={e => setBreakEvenForm({...breakEvenForm, totalCost: Number(e.target.value)})} className="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-50 font-bold text-slate-800" dir="ltr" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">כמות עותקים במהדורה</label>
+                  <input type="number" min="1" value={breakEvenForm.printRun} onChange={e => setBreakEvenForm({...breakEvenForm, printRun: Math.max(1, Number(e.target.value))})} className="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-50 font-bold text-slate-800" dir="ltr" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">מחיר מכירה ממוצע לעותק (₪)</label>
+                  <input type="number" min="1" value={breakEvenForm.sellPrice} onChange={e => setBreakEvenForm({...breakEvenForm, sellPrice: Math.max(1, Number(e.target.value))})} className="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-50 font-bold text-slate-800" dir="ltr" />
+                </div>
+              </div>
+
+              {(() => {
+                const totalCost = Number(breakEvenForm.totalCost || 0);
+                const printRun = Math.max(1, Number(breakEvenForm.printRun || 1));
+                const sellPrice = Math.max(1, Number(breakEvenForm.sellPrice || 1));
+                const costPerCopy = totalCost / printRun;
+                const breakEvenCopies = Math.ceil(totalCost / sellPrice);
+                const breakEvenPct = Math.round((breakEvenCopies / printRun) * 100);
+                const scenarios = [50, 75, 100].map(pct => {
+                  const copiesSold = Math.round((printRun * pct) / 100);
+                  const revenue = copiesSold * sellPrice;
+                  const netProfit = revenue - totalCost;
+                  return { pct, copiesSold, revenue, netProfit };
+                });
+
+                return (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl text-center">
+                        <p className="text-xs text-indigo-700 font-medium">נקודת איזון (החזר השקעה)</p>
+                        <p className="text-2xl font-extrabold text-indigo-800 mt-1">{breakEvenCopies.toLocaleString()} עותקים</p>
+                        <p className="text-[11px] text-indigo-500 mt-0.5">{breakEvenPct}% מהמהדורה</p>
+                      </div>
+                      <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl text-center">
+                        <p className="text-xs text-slate-600 font-medium">עלות הפקה לעותק בודד</p>
+                        <p className="text-2xl font-extrabold text-slate-800 mt-1">₪{costPerCopy.toFixed(2)}</p>
+                        <p className="text-[11px] text-emerald-600 font-medium mt-0.5">רווח גולמי לעותק: ₪{(sellPrice - costPerCopy).toFixed(2)}</p>
+                      </div>
+                    </div>
+
+                    <div className="border border-slate-200 rounded-xl overflow-hidden">
+                      <table className="w-full text-right text-sm">
+                        <thead className="bg-slate-50 text-slate-600 text-xs border-b border-slate-200">
+                          <tr>
+                            <th className="p-3">תרחיש מכירה</th>
+                            <th className="p-3 text-center">עותקים</th>
+                            <th className="p-3 text-center">הכנסה</th>
+                            <th className="p-3 text-center">רווח נקי</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {scenarios.map(s => (
+                            <tr key={s.pct}>
+                              <td className="p-3 font-bold text-slate-700">{s.pct}% מהמהדורה</td>
+                              <td className="p-3 text-center text-slate-600">{s.copiesSold.toLocaleString()}</td>
+                              <td className="p-3 text-center text-slate-700 font-medium">₪{s.revenue.toLocaleString()}</td>
+                              <td className={`p-3 text-center font-extrabold ${s.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {s.netProfit >= 0 ? '+' : ''}₪{s.netProfit.toLocaleString()}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- Stage B (6): Digital Catalog Export Modal --- */}
+      {isCatalogModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col" dir="rtl">
+            <div className="p-4 md:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-base md:text-lg text-slate-800 flex items-center gap-2"><BookMarked className="w-5 h-5 text-emerald-600" /> קטלוג דיגיטלי לשליחה (וואטסאפ / PDF)</h3>
+              <button onClick={() => setIsCatalogModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-white p-1.5 rounded-md border border-slate-200"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-5 overflow-y-auto space-y-4">
+              <div className="grid grid-cols-3 gap-2 bg-slate-100 p-1 rounded-xl">
+                {[
+                  { id: 'general', label: 'מחיר צרכן' },
+                  { id: 'yeshiva', label: 'מחיר ישיבה' },
+                  { id: 'supplier', label: 'מחיר ספקים' }
+                ].map(t => (
+                  <button key={t.id} type="button" onClick={() => setCatalogPriceTier(t.id)} className={`py-2 rounded-lg text-xs font-bold transition-colors ${catalogPriceTier === t.id ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600'}`}>{t.label}</button>
+                ))}
+              </div>
+              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+                <input type="checkbox" checked={catalogOnlyInStock} onChange={e => setCatalogOnlyInStock(e.target.checked)} className="w-4 h-4 text-indigo-600 rounded" />
+                הצג רק ספרים שנמצאים כרגע במלאי (מעל 0 עותקים)
+              </label>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">תצוגה מקדימה להודעת וואטסאפ:</label>
+                <textarea readOnly value={buildCatalogWhatsAppText()} rows="9" className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 text-xs text-slate-700 leading-relaxed outline-none" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button onClick={handleCopyCatalogText} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm">
+                  <Copy className="w-4 h-4" /> העתק קטלוג לוואטסאפ
+                </button>
+                <button onClick={handlePrintCatalogPdf} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm">
+                  <Printer className="w-4 h-4" /> הדפס / שמור קטלוג כ-PDF
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isUserManageModalOpen && username === 'admin' && (
+// ... existing code ...
+              <table className="w-full text-right border-collapse border border-slate-200 text-sm">
+                <thead className="bg-slate-100">
+                  <tr>
+                    <th className="border border-slate-200 p-2">#</th>
+                    <th className="border border-slate-200 p-2">שם הספר</th>
+                    {printDoc.type === 'catalog' ? (
+                      <>
+                        <th className="border border-slate-200 p-2">מחבר</th>
+                        <th className="border border-slate-200 p-2 text-center">מחיר</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="border border-slate-200 p-2 text-center">כמות</th>
+                        {printDoc.type === 'supplier_delivery' && <th className="border border-slate-200 p-2 text-center">מחיר</th>}
+                        {printDoc.type === 'supplier_delivery' && <th className="border border-slate-200 p-2 text-center">סה"כ</th>}
+                      </>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {printDoc.items.map((item, idx) => (
+                    <tr key={idx}>
+                      <td className="border border-slate-200 p-2">{idx + 1}</td>
+                      <td className="border border-slate-200 p-2 font-medium">{item.name}</td>
+                      {printDoc.type === 'catalog' ? (
+                        <>
+                          <td className="border border-slate-200 p-2 text-slate-600">{item.author}</td>
+                          <td className="border border-slate-200 p-2 text-center font-bold">{item.price > 0 ? `₪${Number(item.price).toLocaleString()}` : 'בתיאום'}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="border border-slate-200 p-2 text-center font-bold">{item.quantity}</td>
+                          {printDoc.type === 'supplier_delivery' && <td className="border border-slate-200 p-2 text-center">₪{Number(item.price || 0).toLocaleString()}</td>}
+                          {printDoc.type === 'supplier_delivery' && <td className="border border-slate-200 p-2 text-center font-bold">₪{Number(item.lineTotal || 0).toLocaleString()}</td>}
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+// ... existing code ...
+                    {!selectedTask.addedToInventory ? (
+                      <button onClick={() => handleTransferTaskToInventory(selectedTask)} className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5 transition-colors">
+                        <Package className="w-3.5 h-3.5" /> העבר אוטומטית למלאי (עם סך ההוצאות)
+                      </button>
+                    ) : (
+                      <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5" /> כבר הועבר למלאי
+                      </span>
+                    )}
+                    <button
+                      onClick={() => {
+                        const totalExpenses = (selectedTask.invoices || []).reduce((s, i) => s + Number(i.amount || 0), 0);
+                        setBreakEvenForm({
+                          bookTitle: selectedTask.title,
+                          totalCost: totalExpenses > 0 ? totalExpenses : 15000,
+                          printRun: 1000,
+                          sellPrice: 60
+                        });
+                        setIsBreakEvenModalOpen(true);
+                      }}
+                      className="text-xs bg-amber-100 hover:bg-amber-200 text-amber-800 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-colors"
+                    >
+                      <Calculator className="w-3.5 h-3.5" /> חשב נקודת איזון
+                    </button>
+                  </div>
+                )}
+              </div>
+// ... existing code ...
