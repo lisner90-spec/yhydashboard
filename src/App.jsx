@@ -69,6 +69,27 @@ const initialUsers = [
   { id: 'user_admin', username: 'admin', password: '1234', name: 'מנהל ההוצאה', role: 'admin', createdAt: Date.now() }
 ];
 
+const emptyBookForm = {
+  title: '',
+  author: 'הוצאת ישיבת ירוחם',
+  isbn: '',
+  threshold: 30,
+  publisherStock: 0,
+  productionCost: 0,
+  prices: { catalog: 0, general: 0, supplier: 0, yeshiva: 0 },
+  editions: [{ name: 'מהדורה 1', printRun: 0 }],
+  breakdown: []
+};
+
+const emptySupplierForm = {
+  name: '',
+  contact: '',
+  phone: '',
+  email: '',
+  address: '',
+  notes: ''
+};
+
 const loadLocal = (key, fallback) => {
   try {
     const raw = localStorage.getItem(key);
@@ -122,6 +143,80 @@ export default function App() {
   // --- Toast & Confirm Dialog ---
   const [toast, setToast] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
+
+  // --- Inventory & Gifts UI States ---
+  const [searchQuery, setSearchQuery] = useState('');
+  const [inventorySort, setInventorySort] = useState('alphabetical');
+  const [isWarehouseMode, setIsWarehouseMode] = useState(false);
+  const [warehouseBoxSize, setWarehouseBoxSize] = useState(20);
+  const [isAddBookModalOpen, setIsAddBookModalOpen] = useState(false);
+  const [newBookForm, setNewBookForm] = useState(emptyBookForm);
+  const [editingBook, setEditingBook] = useState(null);
+  const [isGiftModalOpen, setIsGiftModalOpen] = useState(false);
+  const [isGiftHistoryOpen, setIsGiftHistoryOpen] = useState(false);
+  const [giftForm, setGiftForm] = useState({ bookId: '', quantity: 1, recipient: '', category: 'תורם', notes: '' });
+
+  // --- Suppliers, Orders & Consignment UI States ---
+  const [supplierSearch, setSupplierSearch] = useState('');
+  const [supplierSort, setSupplierSort] = useState('alphabetical');
+  const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState(null);
+  const [supplierForm, setSupplierForm] = useState(emptySupplierForm);
+  const [viewingSupplierStock, setViewingSupplierStock] = useState(null);
+  const [isSupplierInvoiceModalOpen, setIsSupplierInvoiceModalOpen] = useState(false);
+  const [invoiceSupplier, setInvoiceSupplier] = useState(null);
+  const [invoiceItems, setInvoiceItems] = useState([{ bookId: '', quantity: 10 }]);
+  const [deductFromWarehouse, setDeductFromWarehouse] = useState(true);
+  const [invoiceNotes, setInvoiceNotes] = useState('');
+  const [isConsignmentModalOpen, setIsConsignmentModalOpen] = useState(false);
+  const [consignmentSupplier, setConsignmentSupplier] = useState(null);
+  const [consignmentForm, setConsignmentForm] = useState({ type: 'sale', bookId: '', quantity: 1, unitPrice: 0, notes: '' });
+  const [isSupplierHistoryModalOpen, setIsSupplierHistoryModalOpen] = useState(false);
+  const [selectedSupplierForHistory, setSelectedSupplierForHistory] = useState(null);
+  const [partialPayInputs, setPartialPayInputs] = useState({});
+
+  // --- Orders & POS UI States ---
+  const [ordersSubTab, setOrdersSubTab] = useState('pending');
+  const [posPriceMode, setPosPriceMode] = useState('yeshiva');
+  const [posSearch, setPosSearch] = useState('');
+  const [posCart, setPosCart] = useState([]);
+  const [posPaymentMethod, setPosPaymentMethod] = useState('מזומן');
+  const [posBuyerNote, setPosBuyerNote] = useState('');
+
+  // --- Production, Break-Even & Print Quotes UI States ---
+  const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
+  const [newTaskForm, setNewTaskForm] = useState({ title: '', author: '', status: 'planned', notes: '' });
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [taskInvoiceForm, setTaskInvoiceForm] = useState({ description: '', amount: '' });
+  const [isBreakEvenModalOpen, setIsBreakEvenModalOpen] = useState(false);
+  const [breakEvenForm, setBreakEvenForm] = useState({ bookTitle: '', totalCost: 15000, printRun: 1000, sellPrice: 60 });
+  const [selectedQuoteProject, setSelectedQuoteProject] = useState('ALL');
+  const [isAddQuoteModalOpen, setIsAddQuoteModalOpen] = useState(false);
+  const [quoteForm, setQuoteForm] = useState({
+    projectTitle: '',
+    printerName: '',
+    copies: 1000,
+    totalPrice: '',
+    includesVat: true,
+    pages: '',
+    coverType: 'כריכה קשה',
+    paperType: '',
+    deliveryDays: '',
+    notes: '',
+    fileName: '',
+    fileType: '',
+    fileData: ''
+  });
+  const [previewQuoteDoc, setPreviewQuoteDoc] = useState(null);
+
+  // --- Marketing, Notes, Catalog & Print UI States ---
+  const [newCampaignForm, setNewCampaignForm] = useState({ name: '', budget: '', spent: '', channel: 'וואטסאפ / בוגרים' });
+  const [newPrForm, setNewPrForm] = useState({ bookTitle: '', recipient: '', role: 'מבקר / עיתונאי' });
+  const [newNoteText, setNewNoteText] = useState('');
+  const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false);
+  const [catalogPriceTier, setCatalogPriceTier] = useState('general');
+  const [catalogOnlyInStock, setCatalogOnlyInStock] = useState(false);
+  const [printDoc, setPrintDoc] = useState(null);
 
   const showToast = (message, type = 'info') => {
     setToast({ message, type, id: Date.now() });
@@ -1399,6 +1494,14 @@ export default function App() {
               >
                 <span className="flex items-center gap-3"><Icon className="w-4 h-4" />{item.label}</span>
                 {item.badge > 0 && (
+                  <span className="bg-rose-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
         <div className="p-4 border-t border-slate-700/80 space-y-3">
           <div className="flex items-center justify-between text-xs">
             <div>
@@ -3259,6 +3362,60 @@ export default function App() {
                       </>
                     ) : (
                       <>
+                        <th className="border border-slate-200 p-2 text-center">כמות</th>
+                        {printDoc.type === 'supplier_delivery' && (
+                          <>
+                            <th className="border border-slate-200 p-2 text-center">מחיר ליח'</th>
+                            <th className="border border-slate-200 p-2 text-center">סה"כ</th>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(printDoc.items || []).map((item, idx) => (
+                    <tr key={idx}>
+                      <td className="border border-slate-200 p-2 text-center">{idx + 1}</td>
+                      <td className="border border-slate-200 p-2 font-medium">{item.name}</td>
+                      {printDoc.type === 'catalog' ? (
+                        <>
+                          <td className="border border-slate-200 p-2 text-slate-600">{item.author || '—'}</td>
+                          <td className="border border-slate-200 p-2 text-center font-bold">
+                            {Number(item.price) > 0 ? `₪${Number(item.price).toLocaleString()}` : 'בתיאום'}
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="border border-slate-200 p-2 text-center font-bold">{item.quantity}</td>
+                          {printDoc.type === 'supplier_delivery' && (
+                            <>
+                              <td className="border border-slate-200 p-2 text-center">₪{Number(item.price || 0).toLocaleString()}</td>
+                              <td className="border border-slate-200 p-2 text-center font-bold">₪{Number(item.lineTotal || 0).toLocaleString()}</td>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {printDoc.notes && (
+                <p className="text-xs text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                  <strong>הערות:</strong> {printDoc.notes}
+                </p>
+              )}
+              {printDoc.totalAmount > 0 && (
+                <div className="bg-slate-100 p-3.5 rounded-xl flex justify-between items-center font-extrabold text-slate-800">
+                  <span>סה"כ לתשלום:</span>
+                  <span>₪{Number(printDoc.totalAmount).toLocaleString()}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit User Modal */}
       {editingUser && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
