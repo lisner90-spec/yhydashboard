@@ -290,6 +290,8 @@ export default function App() {
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [isTabTransitioning, setIsTabTransitioning] = useState(false);
+  const [webhookCheckState, setWebhookCheckState] = useState({ loading: false, status: null, message: '' });
+  const [sendingTestOrder, setSendingTestOrder] = useState(false);
 
   // --- Auto-Backup System States ---
   const [autoBackupSettings, setAutoBackupSettings] = useState(() =>
@@ -1133,6 +1135,106 @@ export default function App() {
     });
   };
 
+  const handleDeleteOrder = (order) => {
+    setConfirmDialog({
+      title: 'מחיקת הזמנה',
+      message: `האם למחוק את הזמנה #${String(order.orderId || '').replace(/^#/, '')} (${order.customerName})?`,
+      confirmText: 'מחק הזמנה',
+      confirmStyle: 'bg-red-600 hover:bg-red-700',
+      icon: <Trash2 className="w-6 h-6" />,
+      iconStyle: 'bg-red-100 text-red-600',
+      onConfirm: async () => {
+        setOrdersList(prev => prev.filter(o => o.id !== order.id));
+        if (db && dbConnected && order.id) {
+          try { await deleteDoc(getDocRef('orders', order.id)); } catch {}
+        }
+        showToast('ההזמנה נמחקה.', 'info');
+      }
+    });
+  };
+
+  const getWebhookUrl = () => {
+    if (typeof window !== 'undefined' && window.location.hostname && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1') && window.location.protocol.startsWith('http')) {
+      return `${window.location.origin}/api/webhook`;
+    }
+    return 'https://yhydashboard.vercel.app/api/webhook';
+  };
+
+  const handlePingWebhook = async () => {
+    const url = getWebhookUrl();
+    setWebhookCheckState({ loading: true, status: null, message: 'בודק זמינות שרת ה-Webhook...' });
+    try {
+      const res = await fetch(url, { method: 'GET' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setWebhookCheckState({ loading: false, status: 'ok', message: `החיבור תקין! השרת פעיל ומוכן לקבל הזמנות מהאתר.` });
+        showToast('שרת ה-Webhook פעיל ותקין!', 'success');
+      } else {
+        setWebhookCheckState({ loading: false, status: 'error', message: `השרת החזיר שגיאה (${res.status}). ודא שהקובץ api/webhook.js עלה ל-Vercel.` });
+      }
+    } catch {
+      setWebhookCheckState({ loading: false, status: 'error', message: 'לא ניתן להגיע כרגע לכתובת ה-Webhook (ייתכן שאתה בתצוגה מקדימה ולא בשרת Vercel הפעיל).' });
+    }
+  };
+
+  const handleSendTestOrder = async () => {
+    const url = getWebhookUrl();
+    setSendingTestOrder(true);
+    const testId = `TEST-${Date.now().toString().slice(-4)}`;
+    const sampleBookTitle = inventoryList[0]?.title || 'אותך אבקש - שערים לימי התשובה';
+    const samplePayload = {
+      id: testId,
+      number: testId,
+      status: 'processing',
+      is_test: true,
+      total: '59',
+      customer_note: 'הזמנת בדיקה לאימות האוטומציה מהאתר (לא הורד מלאי)',
+      billing: { first_name: 'הזמנת', last_name: 'בדיקה (אתר)', phone: '050-0000000', email: 'test@yhyh.co.il', address_1: 'ישיבת ירוחם', city: 'ירוחם' },
+      shipping_lines: [{ method_title: 'איסוף עצמי / בדיקה' }],
+      line_items: [{ name: sampleBookTitle, quantity: 1 }]
+    };
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(samplePayload)
+      });
+      if (res.ok) {
+        showToast(`הזמנת הבדיקה #${testId} נשלחה דרך ה-Webhook! עבור ל"הזמנות חנות" לצפייה.`, 'success');
+        setActiveTab('orders');
+      } else {
+        throw new Error(`HTTP ${res.status}`);
+      }
+    } catch {
+      // גיבוי אם מריצים בסביבת Preview ללא שרת API — בדיקת כתיבה ישירה ל-Firebase
+      const fallbackOrder = {
+        orderId: testId,
+        customerName: 'הזמנת בדיקה (סימולציה)',
+        phone: '050-0000000',
+        address: 'ישיבת ירוחם, ירוחם',
+        shippingMethod: 'בדיקת מערכת',
+        customerNote: 'נשמר ישירות לבדיקת תצוגה (יש לבדוק שוב לאחר העלאה ל-Vercel)',
+        items: [{ name: sampleBookTitle, quantity: 1 }],
+        total: 59,
+        date: new Date().toLocaleDateString('he-IL'),
+        time: new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
+        timestamp: Date.now(),
+        status: 'pending',
+        isTest: true
+      };
+      if (db && dbConnected) {
+        try { await addDoc(getCollRef('orders'), fallbackOrder); } catch { setOrdersList(prev => [{ ...fallbackOrder, id: testId }, ...prev]); }
+      } else {
+        setOrdersList(prev => [{ ...fallbackOrder, id: testId }, ...prev]);
+      }
+      showToast(`נוצרה הזמנת בדיקה #${testId} במסך "הזמנות חנות".`, 'info');
+      setActiveTab('orders');
+    } finally {
+      setSendingTestOrder(false);
+    }
+  };
+
   // ==========================================
   // פעולות קופה מהירה (POS)
   // ==========================================
@@ -1649,14 +1751,14 @@ export default function App() {
         (s.contact || '').toLowerCase().includes(supplierSearch.toLowerCase()) ||
         (s.phone || '').toLowerCase().includes(supplierSearch.toLowerCase())
       )
-      .sort((a, b) => {
-        if (supplierSort === 'alphabetical') return (a.name || '').localeCompare(b.name || '', 'he');
-        return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
-      });
-  }, [suppliersList, supplierSearch, supplierSort]);
-
-  const pendingOrders = useMemo(() => ordersList.filter(o => o.status !== 'shipped'), [ordersList]);
-  const shippedOrders = useMemo(() => ordersList.filter(o => o.status === 'shipped'), [ordersList]);
+  const pendingOrders = useMemo(
+    () => [...ordersList].filter(o => o.status !== 'shipped').sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0)),
+    [ordersList]
+  );
+  const shippedOrders = useMemo(
+    () => [...ordersList].filter(o => o.status === 'shipped').sort((a, b) => Number(b.shippedAt || b.timestamp || 0) - Number(a.shippedAt || a.timestamp || 0)),
+    [ordersList]
+  );
 
   // --- מדדי דאשבורד חיים ---
   const totalCopiesInSystem = useMemo(() => inventoryList.reduce((sum, b) => sum + calculateTotalStock(b), 0), [inventoryList]);
@@ -2543,9 +2645,18 @@ export default function App() {
                 <div key={order.id} className={`bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 border-r-4 hover:shadow-md transition-all space-y-3.5 ${ordersSubTab === 'pending' ? 'border-r-amber-500' : 'border-r-emerald-500'}`}>
                   <div className="flex justify-between items-start gap-2">
                     <div>
-                      <span className="inline-block text-[11px] font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md mb-1">הזמנה #{String(order.orderId || '').replace(/^#/, '')}</span>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="inline-block text-[11px] font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md">הזמנה #{String(order.orderId || '').replace(/^#/, '')}</span>
+                        {order.isTest && <span className="inline-block text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">בדיקה</span>}
+                      </div>
                       <h4 className="font-extrabold text-slate-900 text-base">{order.customerName}</h4>
                       <p className="text-xs text-slate-500 mt-0.5">{order.address} · {order.shippingMethod}</p>
+                      {(order.phone || order.email) && (
+                        <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-2.5">
+                          {order.phone && <span className="inline-flex items-center gap-1"><Phone className="w-3 h-3 text-slate-400" /> {order.phone}</span>}
+                          {order.email && <span className="inline-flex items-center gap-1"><Mail className="w-3 h-3 text-slate-400" /> {order.email}</span>}
+                        </p>
+                      )}
                     </div>
                     <div className="text-left">
                       <span className="text-lg font-extrabold text-slate-900">₪{Number(order.total || 0).toLocaleString()}</span>
@@ -2560,6 +2671,11 @@ export default function App() {
                       </div>
                     ))}
                   </div>
+                  {order.customerNote && (
+                    <p className="text-xs text-amber-800 bg-amber-50/80 ring-1 ring-amber-200/70 p-2.5 rounded-xl">
+                      <strong>הערת לקוח:</strong> {order.customerNote}
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-2 pt-1">
                     <button
                       onClick={() => setPrintDoc({
@@ -2574,6 +2690,25 @@ export default function App() {
                     >
                       <Printer className="w-4 h-4" /> הדפס דף אריזה
                     </button>
+                    {order.phone && formatWhatsAppPhone(order.phone) && (
+                      <a
+                        href={`https://wa.me/${formatWhatsAppPhone(order.phone)}?text=${encodeURIComponent(`שלום ${order.customerName}, תודה על הזמנתך #${String(order.orderId || '').replace(/^#/, '')} מהוצאת ספרי ישיבת ירוחם!`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200/80 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
+                      >
+                        <MessageCircle className="w-4 h-4" /> וואטסאפ
+                      </a>
+                    )}
+                    {userRole === 'admin' && (
+                      <button
+                        onClick={() => handleDeleteOrder(order)}
+                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
+                        title="מחק הזמנה"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                     {ordersSubTab === 'pending' && userRole === 'admin' && (
                       <button
                         onClick={() => handleMarkOrderShipped(order)}
@@ -3162,66 +3297,66 @@ export default function App() {
                     if (db && dbConnected) { try { await addDoc(getCollRef('campaigns'), obj); } catch {} }
                     setNewCampaignForm({ name: '', budget: '', spent: '', channel: 'וואטסאפ / בוגרים' });
                   }}
-                  className="grid grid-cols-2 gap-2.5 bg-slate-50/90 p-4 rounded-2xl ring-1 ring-slate-200/70"
-                >
-                  <input required placeholder="שם הקמפיין" value={newCampaignForm.name} onChange={e => setNewCampaignForm({ ...newCampaignForm, name: e.target.value })} className="col-span-2 p-2.5 border border-slate-200 rounded-xl text-xs bg-white outline-none focus:border-indigo-500" />
-                  <input type="number" min="0" placeholder="תקציב (₪)" value={newCampaignForm.budget} onChange={e => setNewCampaignForm({ ...newCampaignForm, budget: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white outline-none focus:border-indigo-500" />
-                  <input type="number" min="0" placeholder="נוצל (₪)" value={newCampaignForm.spent} onChange={e => setNewCampaignForm({ ...newCampaignForm, spent: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white outline-none focus:border-indigo-500" />
-                  <button type="submit" className="col-span-2 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors">+ הוסף קמפיין</button>
-                </form>
-              )}
-              <div className="space-y-3">
-                {campaignsList.map(c => {
-                  const pct = Number(c.budget) > 0 ? Math.min(100, Math.round((Number(c.spent || 0) / Number(c.budget)) * 100)) : 0;
-                  return (
-                    <div key={c.id} className="p-4 ring-1 ring-slate-200/80 rounded-2xl space-y-2.5">
-                      <div className="flex justify-between items-center">
-                        <span className="font-bold text-sm text-slate-800">{c.name}</span>
-                        <span className="text-xs font-semibold text-slate-500">₪{Number(c.spent || 0).toLocaleString()} / ₪{Number(c.budget || 0).toLocaleString()} ({pct}%)</span>
-                      </div>
-                      <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                        <div className="bg-gradient-to-l from-indigo-500 to-indigo-600 h-full rounded-full transition-all" style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  );
-                })}
-                {campaignsList.length === 0 && <p className="text-xs text-slate-400 text-center py-6">אין קמפיינים רשומים עדיין.</p>}
+            <div className="bg-white rounded-2xl p-6 shadow-xs ring-1 ring-slate-200/70 space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-amber-500" /> אוטומציה וחיבור Webhook לחנות WooCommerce
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">הזמנות חדשות מהאתר יקפצו מיד ללשונית "הזמנות חנות" ויפחיתו אוטומטית מהמלאי (עם הגנה מכפילויות).</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={webhookCheckState.loading}
+                    onClick={handlePingWebhook}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-slate-200"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${webhookCheckState.loading ? 'animate-spin' : ''}`} /> בדוק חיבור שרת
+                  </button>
+                  <button
+                    type="button"
+                    disabled={sendingTestOrder}
+                    onClick={handleSendTestOrder}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                  >
+                    <Send className="w-3.5 h-3.5" /> {sendingTestOrder ? 'שולח...' : 'שלח הזמנת ניסיון'}
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <div className="bg-white p-6 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-4">
-              <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2.5">
-                <span className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><FileText className="w-4 h-4" /></span>
-                עותקי ביקורת ויח"צ
-              </h3>
-              {userRole === 'admin' && (
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    if (!newPrForm.bookTitle.trim() || !newPrForm.recipient.trim()) return;
-                    const obj = { ...newPrForm, date: new Date().toLocaleDateString('he-IL'), id: Date.now().toString() };
-                    setPrCopies(prev => [obj, ...prev]);
-                    if (db && dbConnected) { try { await addDoc(getCollRef('pr_copies'), obj); } catch {} }
-                    setNewPrForm({ bookTitle: '', recipient: '', role: 'מבקר / עיתונאי' });
+              <div className="flex items-center gap-2 bg-[#0F172A] text-emerald-400 p-3.5 rounded-xl font-mono text-xs ring-1 ring-slate-800" dir="ltr">
+                <span className="flex-1 truncate select-all">{getWebhookUrl()}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(getWebhookUrl());
+                    showToast('כתובת ה-Webhook הועתקה!', 'success');
                   }}
-                  className="grid grid-cols-2 gap-2.5 bg-slate-50/90 p-4 rounded-2xl ring-1 ring-slate-200/70"
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded-lg text-[11px] font-sans font-bold flex items-center gap-1 shrink-0"
                 >
-                  <input required placeholder="שם הספר" value={newPrForm.bookTitle} onChange={e => setNewPrForm({ ...newPrForm, bookTitle: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white outline-none focus:border-emerald-500" />
-                  <input required placeholder="למי נשלח" value={newPrForm.recipient} onChange={e => setNewPrForm({ ...newPrForm, recipient: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white outline-none focus:border-emerald-500" />
-                  <button type="submit" className="col-span-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold shadow-xs transition-colors">+ תעד עותק ביקורת</button>
-                </form>
+                  <Copy className="w-3.5 h-3.5" /> העתק
+                </button>
+              </div>
+
+              {webhookCheckState.message && (
+                <div className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                  webhookCheckState.status === 'ok'
+                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                    : webhookCheckState.status === 'error'
+                      ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
+                      : 'bg-slate-50 text-slate-600 ring-1 ring-slate-200'
+                }`}>
+                  {webhookCheckState.status === 'ok' ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+                  <span>{webhookCheckState.message}</span>
+                </div>
               )}
-              <div className="space-y-2.5">
-                {prCopies.map(pr => (
-                  <div key={pr.id} className="p-3.5 ring-1 ring-slate-200/80 rounded-xl flex justify-between items-center text-xs hover:bg-slate-50/70 transition-colors">
-                    <div>
-                      <p className="font-bold text-slate-800">{pr.bookTitle}</p>
-                      <p className="text-slate-500 mt-0.5">נשלח אל: {pr.recipient}</p>
-                    </div>
-                    <span className="text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">{pr.date}</span>
-                  </div>
-                ))}
-                {prCopies.length === 0 && <p className="text-xs text-slate-400 text-center py-6">לא תועדו עותקי יח"צ.</p>}
+
+              <div className="bg-slate-50/90 p-4 rounded-2xl ring-1 ring-slate-200/70 text-xs text-slate-600 space-y-1.5">
+                <p className="font-extrabold text-slate-800">הגדרות נדרשות בוורדפרס (WooCommerce ← הגדרות ← מתקדם ← Webhooks):</p>
+                <p>1. <strong>סטטוס (Status):</strong> פעיל (Active)</p>
+                <p>2. <strong>נושא (Topic):</strong> הזמנה נוצרה (Order created)</p>
+                <p>3. <strong>כתובת מסירה (Delivery URL):</strong> הדבק את הכתובת שמופיעה למעלה ושמור.</p>
               </div>
             </div>
           </div>
