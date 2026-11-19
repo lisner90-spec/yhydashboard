@@ -139,7 +139,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(() => loadLocal('yhy_erp_session', null));
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
-  const [newUserForm, setNewUserForm] = useState({ name: '', username: '', password: '', role: 'viewer' });
+  const [newUserForm, setNewUserForm] = useState({ name: '', username: '', password: '', email: '', phone: '', role: 'viewer' });
   const [editingUser, setEditingUser] = useState(null);
 
   const userRole = currentUser?.role || 'viewer';
@@ -343,6 +343,8 @@ export default function App() {
       name: newUserForm.name.trim(),
       username: uname,
       password: newUserForm.password,
+      email: (newUserForm.email || '').trim(),
+      phone: (newUserForm.phone || '').trim(),
       role: newUserForm.role,
       createdAt: Date.now()
     };
@@ -355,7 +357,7 @@ export default function App() {
     } else {
       setUsersList(prev => [...prev, { ...userObj, id: 'user_' + Date.now() }]);
     }
-    setNewUserForm({ name: '', username: '', password: '', role: 'viewer' });
+    setNewUserForm({ name: '', username: '', password: '', email: '', phone: '', role: 'viewer' });
     showToast(`המשתמש "${userObj.name}" נוסף בהצלחה!`, 'success');
   };
 
@@ -371,6 +373,8 @@ export default function App() {
     const updatedFields = {
       name: editingUser.name.trim(),
       username: uname,
+      email: (editingUser.email || '').trim(),
+      phone: (editingUser.phone || '').trim(),
       role: editingUser.role,
       ...(editingUser.newPassword ? { password: editingUser.newPassword } : {})
     };
@@ -383,6 +387,37 @@ export default function App() {
     }
     setEditingUser(null);
     showToast('פרטי המשתמש עודכנו בהצלחה!', 'success');
+  };
+
+  const buildUserCredentialsMessage = (user) => {
+    const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    const roleLabel = user.role === 'admin' ? 'מנהל מערכת (גישה מלאה)' : 'צופה בלבד';
+    return (
+      `שלום ${user.name},\n\n` +
+      `להלן פרטי ההתחברות שלך למערכת הניהול של הוצאת ספרי ישיבת ירוחם:\n` +
+      (appUrl ? `🔗 קישור למערכת: ${appUrl}\n` : '') +
+      `👤 שם משתמש: ${user.username}\n` +
+      `🔑 סיסמה: ${user.password}\n` +
+      `🛡️ הרשאה: ${roleLabel}\n\n` +
+      `בהצלחה!`
+    );
+  };
+
+  const handleSendCredentialsEmail = (user) => {
+    const subject = 'פרטי התחברות — מערכת הוצאת ספרי ישיבת ירוחם';
+    const body = buildUserCredentialsMessage(user);
+    window.location.href = `mailto:${user.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    showToast(`נפתח חלון מייל עם פרטי ההתחברות של ${user.name}.`, 'info');
+  };
+
+  const handleSendCredentialsWhatsApp = (user) => {
+    const msg = buildUserCredentialsMessage(user);
+    const waPhone = formatWhatsAppPhone(user.phone);
+    const url = waPhone
+      ? `https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`
+      : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    showToast(`נפתח וואטסאפ לשליחת פרטי ההתחברות של ${user.name}.`, 'success');
   };
 
   const handleDeleteUser = (user) => {
@@ -1364,7 +1399,47 @@ export default function App() {
     return [...suppliersList]
       .filter(s =>
         (s.name || '').toLowerCase().includes(supplierSearch.toLowerCase()) ||
-        (s.contact || '').toLowerCase().includes(supplierSearch.toLowerCase())
+        (s.contact || '').toLowerCase().includes(supplierSearch.toLowerCase()) ||
+        (s.phone || '').toLowerCase().includes(supplierSearch.toLowerCase())
+      )
+      .sort((a, b) => {
+        if (supplierSort === 'alphabetical') return (a.name || '').localeCompare(b.name || '', 'he');
+        return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
+      });
+  }, [suppliersList, supplierSearch, supplierSort]);
+
+  const pendingOrders = useMemo(() => ordersList.filter(o => o.status !== 'shipped'), [ordersList]);
+  const shippedOrders = useMemo(() => ordersList.filter(o => o.status === 'shipped'), [ordersList]);
+
+  // --- מדדי דאשבורד חיים ---
+  const totalCopiesInSystem = useMemo(() => inventoryList.reduce((sum, b) => sum + calculateTotalStock(b), 0), [inventoryList]);
+  const totalWarehouseCopies = useMemo(() => inventoryList.reduce((sum, b) => sum + Number(b.publisherStock || 0), 0), [inventoryList]);
+  const totalRetailValue = useMemo(() => inventoryList.reduce((sum, b) => sum + calculateTotalStock(b) * Number(b.prices?.general || 0), 0), [inventoryList]);
+  const totalProductionValue = useMemo(() => inventoryList.reduce((sum, b) => sum + calculateTotalStock(b) * Number(b.productionCost || 0), 0), [inventoryList]);
+  const liveStoreRevenue = useMemo(() => ordersList.reduce((sum, o) => sum + Number(o.total || 0), 0), [ordersList]);
+  const liveSupplierRevenue = useMemo(() => supplierLogs.filter(l => l.type !== 'return').reduce((sum, l) => sum + Number(l.totalAmount || 0), 0), [supplierLogs]);
+  const livePosRevenue = useMemo(() => posSales.reduce((sum, s) => sum + Number(s.totalAmount || 0), 0), [posSales]);
+  const totalOpenSupplierDebt = useMemo(() => supplierLogs.reduce((sum, l) => sum + getLogRemainingDebt(l), 0), [supplierLogs]);
+  const lowStockBooks = useMemo(() => inventoryList.filter(b => calculateTotalStock(b) < Number(b.threshold || 30)), [inventoryList]);
+
+  // --- תפריט ניווט ראשי ---
+  const navItems = [
+    { id: 'dashboard', label: 'דאשבורד ובקרה', icon: LayoutDashboard, group: 'ראשי' },
+    { id: 'pos', label: 'קופה מהירה (דוכן)', icon: CreditCard, group: 'מכירות והזמנות' },
+    { id: 'orders', label: 'הזמנות חנות', icon: ShoppingCart, group: 'מכירות והזמנות', badge: pendingOrders.length },
+    { id: 'inventory', label: 'ניהול מלאי', icon: Package, group: 'מלאי והפצה' },
+    { id: 'suppliers', label: 'ספקים וחנויות', icon: Truck, group: 'מלאי והפצה' },
+    { id: 'production', label: 'הפקת ספרים', icon: KanbanSquare, group: 'הפקה ושיווק' },
+    { id: 'print_quotes', label: 'השוואת דפוסים', icon: Scale, group: 'הפקה ושיווק' },
+    { id: 'marketing', label: 'שיווק ויח"צ', icon: Megaphone, group: 'הפקה ושיווק' },
+    { id: 'notes', label: 'לוח פתקים', icon: StickyNote, group: 'מערכת' },
+    { id: 'integrations', label: 'אוטומציה וגיבוי', icon: Settings, group: 'מערכת' },
+    ...(userRole === 'admin' ? [{ id: 'users', label: 'ניהול משתמשים', icon: UserCog, group: 'מערכת' }] : [])
+  ];
+
+  const activeNavItem = navItems.find(i => i.id === activeTab) || navItems[0];
+  const userInitial = (currentUserName || 'מ').trim().charAt(0);
+
   // סגנונות מערכת מתקדמים למצב לילה (כהה), אנימציות מעברים וגלילה מודרנית
   const themeStyles = `
     @keyframes pageEnter {
@@ -2567,6 +2642,24 @@ export default function App() {
           </div>
         )}
 
+        {/* ==================== 5. SUPPLIERS & DISTRIBUTION ==================== */}
+        {activeTab === 'suppliers' && (
+          <div className="space-y-6">
+            <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3.5">
+              <div className="flex flex-col sm:flex-row gap-2.5 flex-1">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={supplierSearch}
+                    onChange={e => setSupplierSearch(e.target.value)}
+                    placeholder="חפש ספק, חנות או איש קשר..."
+                    className="w-full pr-10 pl-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 text-sm outline-none transition-all"
+                  />
+                </div>
+                <select
+                  value={supplierSort}
+                  onChange={e => setSupplierSort(e.target.value)}
         {/* ==================== 6. PRODUCTION KANBAN ==================== */}
         {activeTab === 'production' && (
           <div className="space-y-6">
@@ -2953,6 +3046,16 @@ export default function App() {
                   <label className="block text-xs font-bold text-slate-600 mb-1">סיסמה *</label>
                   <input required type="password" placeholder="בחר סיסמה..." value={newUserForm.password} onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" dir="ltr" />
                 </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">אימייל (אופציונלי)</label>
+                    <input type="email" placeholder="name@example.com" value={newUserForm.email} onChange={e => setNewUserForm({ ...newUserForm, email: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">טלפון לוואטסאפ (אופציונלי)</label>
+                    <input type="tel" placeholder="050-0000000" value={newUserForm.phone} onChange={e => setNewUserForm({ ...newUserForm, phone: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" dir="ltr" />
+                  </div>
+                </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">רמת הרשאה</label>
                   <select value={newUserForm.role} onChange={e => setNewUserForm({ ...newUserForm, role: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50">
@@ -3002,7 +3105,21 @@ export default function App() {
                           <td className="p-3.5 text-center">
                             <div className="flex justify-center gap-1">
                               <button
-                                onClick={() => setEditingUser({ ...u, newPassword: '' })}
+                                onClick={() => handleSendCredentialsWhatsApp(u)}
+                                className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors"
+                                title="שלח פרטי התחברות בוואטסאפ"
+                              >
+                                <MessageCircle className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleSendCredentialsEmail(u)}
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
+                                title="שלח פרטי התחברות במייל"
+                              >
+                                <Mail className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => setEditingUser({ ...u, email: u.email || '', phone: u.phone || '', newPassword: '' })}
                                 className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
                                 title="ערוך משתמש / שנה סיסמה"
                               >
@@ -3027,7 +3144,41 @@ export default function App() {
             </div>
           </div>
         )}
+          </div>
         </main>
+
+        {/* Mobile Native-Style Bottom Navigation Bar */}
+        <nav className={`lg:hidden fixed bottom-0 inset-x-0 z-30 border-t backdrop-blur-xl px-2 py-1.5 flex items-center justify-around print:hidden ${darkMode ? 'bg-[#0B1120]/95 border-slate-800' : 'bg-white/95 border-slate-200/90 shadow-[0_-4px_20px_rgba(15,23,42,0.06)]'}`}>
+          {[
+            { id: 'dashboard', label: 'דאשבורד', icon: LayoutDashboard },
+            { id: 'pos', label: 'קופה', icon: CreditCard },
+            { id: 'inventory', label: 'מלאי', icon: Package },
+            { id: 'suppliers', label: 'ספקים', icon: Truck },
+            { id: 'orders', label: 'הזמנות', icon: ShoppingCart, badge: pendingOrders.length },
+          ].map(item => {
+            const Icon = item.icon;
+            const active = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`relative flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-xl min-w-[58px] transition-all ${
+                  active
+                    ? 'text-indigo-600 bg-indigo-50/90 font-extrabold'
+                    : 'text-slate-500 hover:text-slate-800 font-medium'
+                }`}
+              >
+                <Icon className={`w-5 h-5 ${active ? 'scale-110' : ''} transition-transform`} />
+                <span className="text-[10px] leading-none">{item.label}</span>
+                {item.badge > 0 && (
+                  <span className="absolute top-0.5 left-1.5 bg-rose-500 text-white text-[9px] font-extrabold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center">
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
       </div>
 
       {/* ===================================================================== */}
@@ -3056,6 +3207,10 @@ export default function App() {
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-600 mb-1">מחבר</label>
+                      <input type="text" value={formState.author || ''} onChange={e => setFormState({ ...formState, author: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" />
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                     <div>
                       <label className="block text-xs font-bold text-slate-600 mb-1">מחיר באתר (₪)</label>
@@ -3867,6 +4022,16 @@ export default function App() {
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">שם משתמש</label>
                 <input required type="text" value={editingUser.username} onChange={e => setEditingUser({ ...editingUser, username: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">אימייל</label>
+                  <input type="email" value={editingUser.email || ''} onChange={e => setEditingUser({ ...editingUser, email: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">טלפון לוואטסאפ</label>
+                  <input type="tel" value={editingUser.phone || ''} onChange={e => setEditingUser({ ...editingUser, phone: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">סיסמה חדשה (השאר ריק כדי לא לשנות)</label>
