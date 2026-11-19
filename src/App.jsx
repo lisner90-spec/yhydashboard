@@ -10,7 +10,7 @@ import {
   UserCog, StickyNote, History, Clock, ShoppingCart, MessageCircle, Gift,
   ArrowLeftRight, Calculator, ClipboardList, Copy, CreditCard, Database,
   Minus, Wallet, BookMarked, Scale, Award, Eye, Check, Send,
-  LogIn, LogOut, Lock, Shield, KeyRound
+  LogIn, LogOut, Lock, Shield, KeyRound, Sun, Moon, Sparkles
 } from 'lucide-react';
 
 // ==========================================
@@ -112,6 +112,22 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('inventory');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [dbConnected, setDbConnected] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem('yhy_erp_theme');
+      if (saved === 'dark') return true;
+      if (saved === 'light') return false;
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('yhy_erp_theme', darkMode ? 'dark' : 'light');
+    } catch {}
+  }, [darkMode]);
 
   // --- Users & Session State ---
   const [usersList, setUsersList] = useState(() => {
@@ -1381,17 +1397,168 @@ export default function App() {
   const activeNavItem = navItems.find(n => n.id === activeTab) || navItems[0];
   const userInitial = (currentUserName || 'מ').trim().charAt(0);
 
+  // סגנונות מערכת מתקדמים למצב לילה (כהה) וגלילה מודרנית
+  const themeStyles = `
+    .erp-shell ::-webkit-scrollbar { width: 7px; height: 7px; }
+    .erp-shell ::-webkit-scrollbar-track { background: transparent; }
+    .erp-shell ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.35); border-radius: 9999px; }
+    .erp-shell ::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.55); }
+
+    .erp-dark { color-scheme: dark; }
+    .erp-dark .bg-white,
+    .erp-dark .bg-white\\/95,
+    .erp-dark .bg-white\\/80 {
+      background-color: #0F172A !important;
+      color: #F1F5F9 !important;
+    }
+    .erp-dark .bg-slate-50,
+    .erp-dark .bg-slate-50\\/90,
+    .erp-dark .bg-slate-50\\/80,
+    .erp-dark .bg-slate-50\\/70,
+    .erp-dark .bg-slate-50\\/50 {
+      background-color: #162033 !important;
+    }
+    .erp-dark .bg-slate-100,
+    .erp-dark .bg-slate-100\\/90 {
+      background-color: #1E293B !important;
+    }
+    .erp-dark .bg-slate-200 { background-color: #334155 !important; }
+    .erp-dark .bg-indigo-50,
+    .erp-dark .bg-indigo-50\\/80,
+    .erp-dark .bg-indigo-50\\/70,
+    .erp-dark .bg-indigo-50\\/50,
+    .erp-dark .bg-indigo-50\\/40,
+    .erp-dark .bg-indigo-50\\/20 {
+      background-color: rgba(79, 70, 229, 0.16) !important;
+    }
+    .erp-dark .bg-emerald-50,
+    .erp-dark .bg-emerald-50\\/80,
+    .erp-dark .bg-emerald-50\\/70,
+    .erp-dark .bg-emerald-50\\/35 {
+      background-color: rgba(16, 185, 129, 0.14) !important;
+    }
+    .erp-dark .bg-amber-50,
+    .erp-dark .bg-amber-50\\/70,
+    .erp-dark .bg-amber-50\\/30,
+    .erp-dark .from-amber-50 {
+      background-color: rgba(245, 158, 11, 0.14) !important;
+    }
+    .erp-dark .bg-rose-50,
+    .erp-dark .bg-rose-50\\/80,
+    .erp-dark .bg-rose-50\\/40,
+    .erp-dark .bg-rose-50\\/25,
+    .erp-dark .from-rose-50 {
+      background-color: rgba(244, 63, 94, 0.14) !important;
+    }
+    .erp-dark .bg-purple-50,
+    .erp-dark .bg-purple-50\\/70 {
+      background-color: rgba(168, 85, 247, 0.16) !important;
+    }
+    .erp-dark .bg-pink-50 { background-color: rgba(236, 72, 153, 0.16) !important; }
+    .erp-dark .bg-blue-50\\/70 { background-color: rgba(59, 130, 246, 0.14) !important; }
+
+    .erp-dark .text-slate-900,
+    .erp-dark .text-slate-800 { color: #F8FAFC !important; }
+    .erp-dark .text-slate-700 { color: #E2E8F0 !important; }
+    .erp-dark .text-slate-600 { color: #CBD5E1 !important; }
+    .erp-dark .text-slate-500 { color: #94A3B8 !important; }
+    .erp-dark .text-indigo-900,
+    .erp-dark .text-indigo-800,
+    .erp-dark .text-indigo-700,
+    .erp-dark .text-indigo-600 { color: #A5B4FC !important; }
+    .erp-dark .text-emerald-900,
+    .erp-dark .text-emerald-700,
+    .erp-dark .text-emerald-600 { color: #6EE7B7 !important; }
+    .erp-dark .text-amber-900,
+    .erp-dark .text-amber-800,
+    .erp-dark .text-amber-700 { color: #FCD34D !important; }
+    .erp-dark .text-rose-800,
+    .erp-dark .text-rose-700,
+    .erp-dark .text-rose-600 { color: #FDA4AF !important; }
+    .erp-dark .text-purple-900,
+    .erp-dark .text-purple-700 { color: #D8B4FE !important; }
+    .erp-dark .text-pink-700 { color: #F9A8D4 !important; }
+
+    .erp-dark .border-slate-100,
+    .erp-dark .border-slate-200,
+    .erp-dark .border-slate-200\\/80,
+    .erp-dark .border-slate-200\\/70,
+    .erp-dark .border-slate-300,
+    .erp-dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+      border-color: rgba(51, 65, 85, 0.75) !important;
+    }
+    .erp-dark [class*="ring-slate-200"],
+    .erp-dark [class*="ring-slate-100"],
+    .erp-dark [class*="ring-slate-300"] {
+      --tw-ring-color: rgba(51, 65, 85, 0.85) !important;
+    }
+    .erp-dark [class*="ring-indigo-100"],
+    .erp-dark [class*="ring-indigo-200"] {
+      --tw-ring-color: rgba(99, 102, 241, 0.35) !important;
+    }
+    .erp-dark [class*="ring-emerald-200"],
+    .erp-dark [class*="ring-emerald-100"] {
+      --tw-ring-color: rgba(16, 185, 129, 0.35) !important;
+    }
+    .erp-dark [class*="ring-amber-200"] {
+      --tw-ring-color: rgba(245, 158, 11, 0.35) !important;
+    }
+    .erp-dark [class*="ring-rose-200"],
+    .erp-dark [class*="ring-rose-100"] {
+      --tw-ring-color: rgba(244, 63, 94, 0.35) !important;
+    }
+    .erp-dark [class*="ring-purple-200"] {
+      --tw-ring-color: rgba(168, 85, 247, 0.35) !important;
+    }
+    .erp-dark input,
+    .erp-dark select,
+    .erp-dark textarea {
+      background-color: #1E293B !important;
+      color: #F8FAFC !important;
+      border-color: #334155 !important;
+    }
+    .erp-dark input::placeholder,
+    .erp-dark textarea::placeholder {
+      color: #64748B !important;
+    }
+    .erp-dark tr:hover {
+      background-color: rgba(30, 41, 59, 0.65) !important;
+    }
+    /* שמירה על רקע לבן נקי במסמכי הדפסה */
+    .erp-dark .print-paper-surface,
+    .erp-dark .print-paper-surface * {
+      background-color: #FFFFFF !important;
+      color: #0F172A !important;
+      border-color: #CBD5E1 !important;
+    }
+  `;
+
   // ==========================================
   // מסך התחברות (כאשר המשתמש אינו מחובר)
   // ==========================================
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-[#0B1120] relative flex items-center justify-center p-4 font-sans overflow-hidden" dir="rtl">
+      <div className={`min-h-screen relative flex items-center justify-center p-4 font-sans overflow-hidden transition-colors duration-300 ${darkMode ? 'bg-[#060A14]' : 'bg-gradient-to-br from-slate-100 via-indigo-50/60 to-slate-200'}`} dir="rtl">
+        <style>{themeStyles}</style>
+        {/* כפתור החלפת מצב יום / לילה במסך ההתחברות */}
+        <button
+          type="button"
+          onClick={() => setDarkMode(!darkMode)}
+          className={`fixed top-5 left-5 z-20 flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-bold shadow-lg backdrop-blur-md transition-all ${
+            darkMode
+              ? 'bg-slate-800/80 text-amber-300 ring-1 ring-slate-700 hover:bg-slate-700'
+              : 'bg-white/85 text-slate-700 ring-1 ring-slate-200 hover:bg-white'
+          }`}
+        >
+          {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
+          <span>{darkMode ? 'מצב יום' : 'מצב לילה'}</span>
+        </button>
+
         {/* רקע גרדיאנט מודרני */}
         <div className="pointer-events-none absolute -top-32 -right-32 w-96 h-96 rounded-full bg-[#4B5320]/30 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-32 -left-32 w-96 h-96 rounded-full bg-indigo-600/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 -left-32 w-96 h-96 rounded-full bg-indigo-600/25 blur-3xl" />
 
-        <div className="relative bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl w-full max-w-md overflow-hidden ring-1 ring-white/20">
+        <div className={`relative backdrop-blur-xl rounded-3xl shadow-2xl w-full max-w-md overflow-hidden ring-1 transition-colors ${darkMode ? 'bg-slate-900/95 ring-slate-700/80' : 'bg-white/95 ring-white/60'}`}>
           <div className="bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#2B3318] p-8 text-center text-white space-y-3.5 relative">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#5c6628] to-[#3f461b] mx-auto flex items-center justify-center shadow-lg ring-1 ring-amber-200/30">
               <BookOpen className="w-8 h-8 text-amber-100" />
@@ -1404,7 +1571,7 @@ export default function App() {
 
           <form onSubmit={handleLogin} className="p-7 space-y-5">
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-600">שם משתמש</label>
+              <label className={`block text-xs font-bold ${darkMode ? 'text-slate-300' : 'text-slate-600'}`}>שם משתמש</label>
               <div className="relative">
                 <UserCog className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
                 <input
@@ -1414,14 +1581,18 @@ export default function App() {
                   value={loginForm.username}
                   onChange={e => { setLoginForm({ ...loginForm, username: e.target.value }); setLoginError(''); }}
                   placeholder="הזן שם משתמש..."
-                  className="w-full pr-10 pl-3 py-3 border border-slate-200 rounded-xl bg-slate-50/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-sm outline-none transition-all"
+                  className={`w-full pr-10 pl-3 py-3 border rounded-xl text-sm outline-none transition-all ${
+                    darkMode
+                      ? 'bg-slate-800 border-slate-700 text-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30'
+                      : 'bg-slate-50/80 border-slate-200 text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500'
+                  }`}
                   dir="ltr"
                 />
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-600">סיסמה</label>
+              <label className={`block text-xs font-bold ${darkMode ? 'text-slate-300' : 'text-slate-600'}`}>סיסמה</label>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
                 <input
@@ -1430,14 +1601,18 @@ export default function App() {
                   value={loginForm.password}
                   onChange={e => { setLoginForm({ ...loginForm, password: e.target.value }); setLoginError(''); }}
                   placeholder="••••••••"
-                  className="w-full pr-10 pl-3 py-3 border border-slate-200 rounded-xl bg-slate-50/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 text-sm outline-none transition-all"
+                  className={`w-full pr-10 pl-3 py-3 border rounded-xl text-sm outline-none transition-all ${
+                    darkMode
+                      ? 'bg-slate-800 border-slate-700 text-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30'
+                      : 'bg-slate-50/80 border-slate-200 text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500'
+                  }`}
                   dir="ltr"
                 />
               </div>
             </div>
 
             {loginError && (
-              <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold p-3 rounded-xl flex items-center gap-2">
+              <div className="bg-rose-500/15 border border-rose-500/30 text-rose-500 text-xs font-bold p-3 rounded-xl flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
                 <span>{loginError}</span>
               </div>
@@ -1445,7 +1620,7 @@ export default function App() {
 
             <button
               type="submit"
-              className="w-full bg-gradient-to-l from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all active:scale-[0.99]"
+              className="w-full bg-gradient-to-l from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-600 text-white py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 transition-all active:scale-[0.99]"
             >
               <LogIn className="w-4 h-4" /> כניסה למערכת
             </button>
@@ -1464,7 +1639,8 @@ export default function App() {
   // תצוגה ראשית
   // ==========================================
   return (
-    <div className="min-h-screen bg-[#F3F5F9] text-slate-800 flex flex-col lg:flex-row font-sans antialiased" dir="rtl">
+    <div className={`erp-shell min-h-screen flex flex-col lg:flex-row font-sans antialiased transition-colors duration-300 ${darkMode ? 'erp-dark bg-[#070B14] text-slate-100' : 'bg-[#F1F5F9] text-slate-800'}`} dir="rtl">
+      <style>{themeStyles}</style>
       {/* Toast Notification */}
       {toast && (
         <div className={`fixed bottom-5 left-5 z-[100] px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md text-white text-sm font-bold flex items-center gap-2.5 ring-1 ring-white/15 print:hidden transition-all ${
@@ -1480,9 +1656,9 @@ export default function App() {
       )}
 
       {/* Sidebar (Desktop) */}
-      <aside className="hidden lg:flex lg:flex-col w-68 bg-[#0F172A] text-white shrink-0 border-l border-slate-800/80 print:hidden">
+      <aside className="hidden lg:flex lg:flex-col w-68 bg-gradient-to-b from-[#0B1120] via-[#0F172A] to-[#0B1120] text-white shrink-0 border-l border-slate-800/80 print:hidden">
         <div className="p-5 border-b border-slate-800/80 flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#5c6628] to-[#3f461b] flex items-center justify-center shadow-md ring-1 ring-amber-200/25 shrink-0">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#65702c] to-[#3b4219] flex items-center justify-center shadow-lg shadow-black/30 ring-1 ring-amber-200/30 shrink-0">
             <BookOpen className="w-5 h-5 text-amber-100" />
           </div>
           <div className="min-w-0">
@@ -1507,8 +1683,8 @@ export default function App() {
                       onClick={() => setActiveTab(item.id)}
                       className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
                         active
-                          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-950/50 ring-1 ring-indigo-400/30'
-                          : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                          ? 'bg-gradient-to-l from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/60 ring-1 ring-indigo-400/40'
+                          : 'text-slate-300 hover:bg-slate-800/75 hover:text-white'
                       }`}
                     >
                       <span className="flex items-center gap-3">
@@ -1528,10 +1704,25 @@ export default function App() {
           })}
         </nav>
 
-        <div className="p-4 border-t border-slate-800/80 bg-slate-900/50 space-y-3">
+        <div className="p-4 border-t border-slate-800/80 bg-slate-900/60 space-y-3">
+          {/* מתג יום / לילה בסרגל הצד */}
+          <button
+            type="button"
+            onClick={() => setDarkMode(!darkMode)}
+            className="w-full bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 text-slate-200 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-between transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              {darkMode ? <Moon className="w-3.5 h-3.5 text-indigo-400" /> : <Sun className="w-3.5 h-3.5 text-amber-400" />}
+              <span>{darkMode ? 'מצב לילה (כהה)' : 'מצב יום (בהיר)'}</span>
+            </span>
+            <span className={`w-9 h-5 rounded-full p-0.5 flex items-center transition-colors ${darkMode ? 'bg-indigo-600 justify-start' : 'bg-slate-600 justify-end'}`}>
+              <span className="w-4 h-4 rounded-full bg-white shadow-xs" />
+            </span>
+          </button>
+
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 font-extrabold text-sm flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500/30 to-violet-500/20 border border-indigo-400/30 text-indigo-200 font-extrabold text-sm flex items-center justify-center shrink-0">
                 {userInitial}
               </div>
               <div className="min-w-0">
@@ -1564,9 +1755,19 @@ export default function App() {
             <span className="text-[10px] text-slate-400">{activeNavItem?.label}</span>
           </div>
         </div>
-        <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 transition-colors">
-          {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setDarkMode(!darkMode)}
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 transition-colors"
+            title={darkMode ? 'עבור למצב יום (בהיר)' : 'עבור למצב לילה (כהה)'}
+          >
+            {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-300" />}
+          </button>
+          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 transition-colors">
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </header>
 
       {/* Mobile Drawer */}
@@ -1617,12 +1818,12 @@ export default function App() {
       {/* Main Content Wrapper */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Desktop Top Utility Header */}
-        <div className="hidden lg:flex items-center justify-between px-8 py-4 bg-white/80 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-20 print:hidden">
+        <div className={`hidden lg:flex items-center justify-between px-8 py-4 backdrop-blur-xl border-b sticky top-0 z-20 print:hidden transition-colors ${darkMode ? 'bg-[#0B1120]/85 border-slate-800/80' : 'bg-white/80 border-slate-200/80'}`}>
           <div className="flex items-center gap-3">
             {activeNavItem && (() => {
               const ActiveIcon = activeNavItem.icon;
               return (
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center ring-1 ring-indigo-100">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center shadow-sm shadow-indigo-500/25">
                   <ActiveIcon className="w-4 h-4" />
                 </div>
               );
@@ -1651,6 +1852,20 @@ export default function App() {
                 <CreditCard className="w-3.5 h-3.5" /> קופה מהירה
               </button>
             )}
+            {/* כפתור החלפת מצב יום / לילה בראש הדף */}
+            <button
+              type="button"
+              onClick={() => setDarkMode(!darkMode)}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 transition-all ${
+                darkMode
+                  ? 'bg-slate-800 text-amber-300 ring-slate-700 hover:bg-slate-700'
+                  : 'bg-slate-100 text-slate-700 ring-slate-200 hover:bg-slate-200/70'
+              }`}
+              title={darkMode ? 'עבור למצב יום (בהיר)' : 'עבור למצב לילה (כהה)'}
+            >
+              {darkMode ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-indigo-600" />}
+              <span>{darkMode ? 'מצב יום' : 'מצב לילה'}</span>
+            </button>
           </div>
         </div>
 
@@ -1659,10 +1874,29 @@ export default function App() {
         {/* ==================== 1. DASHBOARD ==================== */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">תמונת מצב עסקית</h2>
-                <p className="text-sm text-slate-500 mt-0.5">סיכום חי של המלאי, שווי הספרים, ההכנסות ויתרות הגבייה</p>
+            {/* באנר פתיחה חכם עם פעולות מהירות */}
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-[#0F172A] via-[#1E1B4B] to-[#312E81] p-6 md:p-7 text-white shadow-lg">
+              <div className="pointer-events-none absolute -left-16 -top-16 w-64 h-64 rounded-full bg-indigo-500/20 blur-3xl" />
+              <div className="pointer-events-none absolute -right-10 -bottom-20 w-64 h-64 rounded-full bg-emerald-500/15 blur-3xl" />
+              <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                <div className="space-y-1.5">
+                  <div className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-3 py-1 rounded-full text-[11px] font-bold text-indigo-200 ring-1 ring-white/15">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" /> מרכז הבקרה החי של ההוצאה
+                  </div>
+                  <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight">שלום {currentUserName}, תמונת מצב עסקית</h2>
+                  <p className="text-xs md:text-sm text-indigo-100/80">סקירה בזמן אמת של מלאי הספרים, שווי ההדפסה, הכנסות המכירות ויתרות הגבייה</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => setActiveTab('pos')} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
+                    <CreditCard className="w-4 h-4 text-emerald-300" /> מכירה בדוכן
+                  </button>
+                  <button onClick={() => setActiveTab('inventory')} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
+                    <Package className="w-4 h-4 text-indigo-300" /> ניהול מלאי
+                  </button>
+                  <button onClick={() => setActiveTab('print_quotes')} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
+                    <Scale className="w-4 h-4 text-amber-300" /> השוואת דפוסים
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1704,6 +1938,27 @@ export default function App() {
                 </div>
                 <p className="text-3xl font-extrabold text-rose-700 mt-2 tracking-tight">₪{Math.round(totalOpenSupplierDebt).toLocaleString()}</p>
                 <p className="text-xs text-rose-600/90 font-medium mt-3 pt-2.5 border-t border-rose-100">לחץ למעבר למסך ספקים וגבייה ←</p>
+              </div>
+            </div>
+
+            {/* פס ויזואלי להתפלגות המלאי */}
+            <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-3">
+              <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
+                <span className="font-extrabold text-slate-800 text-sm">התפלגות המלאי: מחסן ראשי מול ספקים וחנויות</span>
+                <div className="flex items-center gap-4">
+                  <span className="flex items-center gap-1.5 font-bold text-indigo-600"><span className="w-2.5 h-2.5 rounded-full bg-indigo-500" /> מחסן ראשי ({totalCopiesInSystem > 0 ? Math.round((totalWarehouseCopies / totalCopiesInSystem) * 100) : 0}%)</span>
+                  <span className="flex items-center gap-1.5 font-bold text-emerald-600"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> אצל ספקים ({totalCopiesInSystem > 0 ? Math.round(((totalCopiesInSystem - totalWarehouseCopies) / totalCopiesInSystem) * 100) : 0}%)</span>
+                </div>
+              </div>
+              <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
+                <div
+                  className="bg-gradient-to-l from-indigo-500 to-violet-500 h-full transition-all duration-500"
+                  style={{ width: `${totalCopiesInSystem > 0 ? (totalWarehouseCopies / totalCopiesInSystem) * 100 : 0}%` }}
+                />
+                <div
+                  className="bg-gradient-to-l from-emerald-400 to-teal-500 h-full transition-all duration-500"
+                  style={{ width: `${totalCopiesInSystem > 0 ? ((totalCopiesInSystem - totalWarehouseCopies) / totalCopiesInSystem) * 100 : 0}%` }}
+                />
               </div>
             </div>
 
@@ -3488,7 +3743,7 @@ export default function App() {
                 <button onClick={() => setPrintDoc(null)} className="p-1.5 bg-white ring-1 ring-slate-200 rounded-xl"><X className="w-4 h-4 text-slate-500" /></button>
               </div>
             </div>
-            <div className="p-6 overflow-y-auto space-y-4">
+            <div className="print-paper-surface p-6 overflow-y-auto space-y-4">
               <div className="border-b pb-4 flex justify-between items-start">
                 <div>
                   <h2 className="text-xl font-extrabold text-slate-900">הוצאת ספרי ישיבת ירוחם</h2>
