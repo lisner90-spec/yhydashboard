@@ -1154,32 +1154,44 @@ export default function App() {
   };
 
   const getWebhookUrl = () => {
-    if (typeof window !== 'undefined' && window.location.hostname && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1') && window.location.protocol.startsWith('http')) {
-      return `${window.location.origin}/api/webhook`;
+    if (typeof window !== 'undefined') {
+      const host = window.location.hostname || '';
+      const isPreviewOrLocal =
+        !host ||
+        host.includes('localhost') ||
+        host.includes('127.0.0.1') ||
+        host.includes('googleusercontent') ||
+        host.includes('webcontainer');
+      if (!isPreviewOrLocal && window.location.protocol.startsWith('http')) {
+        return `${window.location.origin}/api/webhook`;
+      }
     }
     return 'https://yhydashboard.vercel.app/api/webhook';
   };
 
   const handlePingWebhook = async () => {
     const url = getWebhookUrl();
-    setWebhookCheckState({ loading: true, status: null, message: 'בודק זמינות שרת ה-Webhook...' });
+    setWebhookCheckState({ loading: true, status: null, message: `בודק זמינות שרת (${url})...` });
     try {
       const res = await fetch(url, { method: 'GET' });
-      const data = await res.json().catch(() => ({}));
+      const text = await res.text();
       if (res.ok) {
-        setWebhookCheckState({ loading: false, status: 'ok', message: `החיבור תקין! השרת פעיל ומוכן לקבל הזמנות מהאתר.` });
+        setWebhookCheckState({ loading: false, status: 'ok', message: `החיבור תקין! השרת (${url}) פעיל ומוכן לקבל הזמנות מהאתר.` });
         showToast('שרת ה-Webhook פעיל ותקין!', 'success');
       } else {
-        setWebhookCheckState({ loading: false, status: 'error', message: `השרת החזיר שגיאה (${res.status}). ודא שהקובץ api/webhook.js עלה ל-Vercel.` });
+        setWebhookCheckState({ loading: false, status: 'error', message: `השרת החזיר שגיאה ${res.status} בכתובת ${url}. ${res.status === 404 ? 'הקובץ api/webhook.js לא נמצא ב-Vercel.' : text.slice(0, 120)}` });
+        showToast(`שגיאת שרת (${res.status}) בבדיקת ה-Webhook`, 'error');
       }
-    } catch {
-      setWebhookCheckState({ loading: false, status: 'error', message: 'לא ניתן להגיע כרגע לכתובת ה-Webhook (ייתכן שאתה בתצוגה מקדימה ולא בשרת Vercel הפעיל).' });
+    } catch (err) {
+      setWebhookCheckState({ loading: false, status: 'error', message: `שגיאת תקשורת מול ${url}: ${err?.message || 'השרת לא הגיב (בדוק שהאפליקציה ו-api/webhook.js עלו ל-Vercel).'}` });
+      showToast('לא ניתן להתחבר לשרת ה-Webhook.', 'error');
     }
   };
 
   const handleSendTestOrder = async () => {
     const url = getWebhookUrl();
     setSendingTestOrder(true);
+    setWebhookCheckState({ loading: true, status: null, message: `שולח הזמנת ניסיון אמיתית אל ${url}...` });
     const testId = `TEST-${Date.now().toString().slice(-4)}`;
     const sampleBookTitle = inventoryList[0]?.title || 'אותך אבקש - שערים לימי התשובה';
     const samplePayload = {
@@ -1188,7 +1200,7 @@ export default function App() {
       status: 'processing',
       is_test: true,
       total: '59',
-      customer_note: 'הזמנת בדיקה לאימות האוטומציה מהאתר (לא הורד מלאי)',
+      customer_note: 'הזמנת בדיקה אמיתית שעברה דרך שרת ה-Webhook (ללא הורדת מלאי)',
       billing: { first_name: 'הזמנת', last_name: 'בדיקה (אתר)', phone: '050-0000000', email: 'test@yhyh.co.il', address_1: 'ישיבת ירוחם', city: 'ירוחם' },
       shipping_lines: [{ method_title: 'איסוף עצמי / בדיקה' }],
       line_items: [{ name: sampleBookTitle, quantity: 1 }]
@@ -1200,36 +1212,26 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(samplePayload)
       });
+      const responseText = await res.text();
       if (res.ok) {
-        showToast(`הזמנת הבדיקה #${testId} נשלחה דרך ה-Webhook! עבור ל"הזמנות חנות" לצפייה.`, 'success');
+        setWebhookCheckState({ loading: false, status: 'ok', message: `הזמנת הבדיקה #${testId} עברה בהצלחה דרך שרת ה-Webhook ונשמרה!` });
+        showToast(`הזמנת הבדיקה #${testId} נשלחה בהצלחה דרך ה-Webhook!`, 'success');
         setActiveTab('orders');
       } else {
-        throw new Error(`HTTP ${res.status}`);
+        setWebhookCheckState({
+          loading: false,
+          status: 'error',
+          message: `שליחת הזמנת הניסיון נכשלה (שגיאה ${res.status}) בכתובת ${url}. ${res.status === 404 ? 'ודא שהקובץ api/webhook.js קיים בתיקיית api ב-GitHub/Vercel.' : responseText.slice(0, 140)}`
+        });
+        showToast(`שגיאה ${res.status} בשליחת הזמנת ניסיון לשרת.`, 'error');
       }
-    } catch {
-      // גיבוי אם מריצים בסביבת Preview ללא שרת API — בדיקת כתיבה ישירה ל-Firebase
-      const fallbackOrder = {
-        orderId: testId,
-        customerName: 'הזמנת בדיקה (סימולציה)',
-        phone: '050-0000000',
-        address: 'ישיבת ירוחם, ירוחם',
-        shippingMethod: 'בדיקת מערכת',
-        customerNote: 'נשמר ישירות לבדיקת תצוגה (יש לבדוק שוב לאחר העלאה ל-Vercel)',
-        items: [{ name: sampleBookTitle, quantity: 1 }],
-        total: 59,
-        date: new Date().toLocaleDateString('he-IL'),
-        time: new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
-        timestamp: Date.now(),
-        status: 'pending',
-        isTest: true
-      };
-      if (db && dbConnected) {
-        try { await addDoc(getCollRef('orders'), fallbackOrder); } catch { setOrdersList(prev => [{ ...fallbackOrder, id: testId }, ...prev]); }
-      } else {
-        setOrdersList(prev => [{ ...fallbackOrder, id: testId }, ...prev]);
-      }
-      showToast(`נוצרה הזמנת בדיקה #${testId} במסך "הזמנות חנות".`, 'info');
-      setActiveTab('orders');
+    } catch (err) {
+      setWebhookCheckState({
+        loading: false,
+        status: 'error',
+        message: `לא ניתן להגיע לשרת ה-Webhook (${url}): ${err?.message || 'שגיאת רשת / CORS'}.`
+      });
+      showToast('הבקשה לשרת ה-Webhook נכשלה — ראה פירוט בתיבת הסטטוס.', 'error');
     } finally {
       setSendingTestOrder(false);
     }
