@@ -38,23 +38,25 @@ try {
 // נתוני בסיס — מחירון ספרי ישיבת ירוחם
 // ==========================================
 const initialInventory = [
-  { id: 'book_1', title: 'אותך אבקש - שערים לימי התשובה', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 10.03, prices: { catalog: 98, general: 59, supplier: 29, yeshiva: 50 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
-  { id: 'book_2', title: 'ונהר יוצא מעדן - חגי תשרי', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 14.04, prices: { catalog: 98, general: 60, supplier: 30, yeshiva: 50 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
-  { id: 'book_3', title: 'ונהר יוצא מעדן - מועדי חורף', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 14.04, prices: { catalog: 98, general: 60, supplier: 30, yeshiva: 50 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
-  { id: 'book_4', title: 'ונהר יוצא מעדן - חגי האביב', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 14.04, prices: { catalog: 98, general: 60, supplier: 30, yeshiva: 50 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
-  { id: 'book_5', title: 'ונהר יוצא מעדן סט', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 20, publisherStock: 0, productionCost: 42.13, prices: { catalog: 0, general: 160, supplier: 90, yeshiva: 140 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
-  { id: 'book_6', title: 'ונהר יוצא מעדן - אכילה ומצוותיה', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 16.52, prices: { catalog: 98, general: 69, supplier: 32, yeshiva: 55 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
-  { id: 'book_7', title: 'להשקות את הגן - סנהדרין', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 17.84, prices: { catalog: 108, general: 69, supplier: 30, yeshiva: 55 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
-  { id: 'book_8', title: 'להשקות את הגן - סוכה', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 12.50, prices: { catalog: 98, general: 59, supplier: 28, yeshiva: 48 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
-  { id: 'book_9', title: 'שערים למשנתו של מניטו', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 12.66, prices: { catalog: 98, general: 83, supplier: 42, yeshiva: 70 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
-  { id: 'book_10', title: 'והתהלכתי בתוככם א', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 0, prices: { catalog: 98, general: 65, supplier: 35, yeshiva: 55 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
-  { id: 'book_11', title: 'והתהלכתי בתוככם ב', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 0, prices: { catalog: 98, general: 65, supplier: 35, yeshiva: 55 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
-  { id: 'book_12', title: 'והתהלכתי בתוככם סט', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 20, publisherStock: 0, productionCost: 0, prices: { catalog: 0, general: 120, supplier: 68, yeshiva: 100 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
-  { id: 'book_13', title: 'חוברת שובו אליי - הרב בלומנצווייג', author: 'הרב בלומנצווייג', isbn: '', threshold: 50, publisherStock: 0, productionCost: 0, prices: { catalog: 29, general: 29, supplier: 19, yeshiva: 25 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
-  { id: 'book_14', title: 'חוברת כעץ שתול - תפילה', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 50, publisherStock: 0, productionCost: 0, prices: { catalog: 20, general: 20, supplier: 16, yeshiva: 18 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
-  { id: 'book_15', title: 'חוברת כעץ שתול - עיון', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 50, publisherStock: 0, productionCost: 0, prices: { catalog: 20, general: 20, supplier: 16, yeshiva: 18 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
-  { id: 'book_16', title: 'חוברת כעץ שתול - אמונה', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 50, publisherStock: 0, productionCost: 0, prices: { catalog: 20, general: 20, supplier: 16, yeshiva: 18 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
-  { id: 'book_17', title: 'שמיטה', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 0, prices: { catalog: 0, general: 0, supplier: 23, yeshiva: 23 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_1', title: 'אותך אבקש - שערים לימי התשובה', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 10.03, prices: { catalog: 98, general: 59, supplier: 29, yeshiva: 50, yeshivaGuest: 59 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_2', title: 'ונהר יוצא מעדן - חגי תשרי', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 14.04, prices: { catalog: 98, general: 60, supplier: 30, yeshiva: 40, yeshivaGuest: 50 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_3', title: 'ונהר יוצא מעדן - מועדי חורף', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 14.04, prices: { catalog: 98, general: 60, supplier: 30, yeshiva: 40, yeshivaGuest: 50 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_4', title: 'ונהר יוצא מעדן - חגי האביב', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 14.04, prices: { catalog: 98, general: 60, supplier: 30, yeshiva: 40, yeshivaGuest: 50 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_5', title: 'ונהר יוצא מעדן סט', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 20, publisherStock: 0, productionCost: 42.13, prices: { catalog: 0, general: 160, supplier: 90, yeshiva: 120, yeshivaGuest: 140 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_6', title: 'ונהר יוצא מעדן - אכילה ומצוותיה', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 16.52, prices: { catalog: 98, general: 69, supplier: 32, yeshiva: 45, yeshivaGuest: 54 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_7', title: 'להשקות את הגן - סנהדרין', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 17.84, prices: { catalog: 108, general: 69, supplier: 30, yeshiva: 50, yeshivaGuest: 50 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_8', title: 'להשקות את הגן - סוכה', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 12.50, prices: { catalog: 98, general: 59, supplier: 28, yeshiva: 40, yeshivaGuest: 40 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_9', title: 'שערים למשנתו של מניטו', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 12.66, prices: { catalog: 98, general: 83, supplier: 42, yeshiva: 55, yeshivaGuest: 69 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_10', title: 'והתהלכתי בתוככם א', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 0, prices: { catalog: 98, general: 65, supplier: 35, yeshiva: 60, yeshivaGuest: 60 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_11', title: 'והתהלכתי בתוככם ב', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 0, prices: { catalog: 98, general: 65, supplier: 35, yeshiva: 60, yeshivaGuest: 60 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_12', title: 'והתהלכתי בתוככם סט', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 20, publisherStock: 0, productionCost: 0, prices: { catalog: 0, general: 120, supplier: 68, yeshiva: 110, yeshivaGuest: 110 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_13', title: 'חוברת שובו אליי - הרב בלומנצווייג', author: 'הרב בלומנצווייג', isbn: '', threshold: 50, publisherStock: 0, productionCost: 0, prices: { catalog: 29, general: 29, supplier: 19, yeshiva: 25, yeshivaGuest: 25 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_14', title: 'חוברת כעץ שתול - תפילה', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 50, publisherStock: 0, productionCost: 0, prices: { catalog: 20, general: 20, supplier: 16, yeshiva: 15, yeshivaGuest: 15 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_15', title: 'חוברת כעץ שתול - עיון', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 50, publisherStock: 0, productionCost: 0, prices: { catalog: 20, general: 20, supplier: 16, yeshiva: 15, yeshivaGuest: 15 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_16', title: 'חוברת כעץ שתול - אמונה', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 50, publisherStock: 0, productionCost: 0, prices: { catalog: 20, general: 20, supplier: 16, yeshiva: 15, yeshivaGuest: 15 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_17', title: 'שמיטה', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 0, prices: { catalog: 0, general: 0, supplier: 23, yeshiva: 23, yeshivaGuest: 23 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_18', title: 'חוברת כעץ שתול - סט', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 0, prices: { catalog: 0, general: 55, supplier: 0, yeshiva: 40, yeshivaGuest: 40 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
+  { id: 'book_19', title: 'חוברת מעפר קומי', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 40, publisherStock: 0, productionCost: 0, prices: { catalog: 0, general: 30, supplier: 0, yeshiva: 25, yeshivaGuest: 30 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
 ];
 
 const KANBAN_COLUMNS = [
@@ -76,7 +78,7 @@ const emptyBookForm = {
   threshold: 30,
   publisherStock: 0,
   productionCost: 0,
-  prices: { catalog: 0, general: 0, supplier: 0, yeshiva: 0 },
+  prices: { catalog: 0, general: 0, supplier: 0, yeshiva: 0, yeshivaGuest: 0 },
   editions: [{ name: 'מהדורה 1', printRun: 0 }],
   breakdown: []
 };
@@ -532,6 +534,7 @@ export default function App() {
         general: Math.max(0, Number(newBookForm.prices?.general || 0)),
         supplier: Math.max(0, Number(newBookForm.prices?.supplier || 0)),
         yeshiva: Math.max(0, Number(newBookForm.prices?.yeshiva || 0)),
+        yeshivaGuest: Math.max(0, Number(newBookForm.prices?.yeshivaGuest || newBookForm.prices?.yeshiva || 0)),
       },
       editions: (newBookForm.editions || []).map(ed => ({ name: ed.name || 'מהדורה', printRun: Math.max(0, Number(ed.printRun || 0)) })),
       breakdown: (newBookForm.breakdown || []).filter(r => r.location?.trim()).map(r => ({ location: r.location.trim(), amount: Math.max(0, Number(r.amount || 0)) })),
@@ -567,6 +570,7 @@ export default function App() {
         general: Math.max(0, Number(editingBook.prices?.general || 0)),
         supplier: Math.max(0, Number(editingBook.prices?.supplier || 0)),
         yeshiva: Math.max(0, Number(editingBook.prices?.yeshiva || 0)),
+        yeshivaGuest: Math.max(0, Number(editingBook.prices?.yeshivaGuest || editingBook.prices?.yeshiva || 0)),
       },
       editions: (editingBook.editions || []).map(ed => ({ name: ed.name || 'מהדורה', printRun: Math.max(0, Number(ed.printRun || 0)) })),
       breakdown: (editingBook.breakdown || []).filter(r => r.location?.trim()).map(r => ({ location: r.location.trim(), amount: Math.max(0, Number(r.amount || 0)) })),
@@ -985,6 +989,7 @@ export default function App() {
   // ==========================================
   const getPosBookPrice = (book, mode = posPriceMode) => {
     if (mode === 'yeshiva') return Number(book.prices?.yeshiva || book.prices?.general || 0);
+    if (mode === 'yeshivaGuest') return Number(book.prices?.yeshivaGuest || book.prices?.yeshiva || book.prices?.general || 0);
     return Number(book.prices?.general || 0);
   };
 
@@ -1030,7 +1035,7 @@ export default function App() {
     const saleObj = {
       items: saleItems,
       totalAmount,
-      priceMode: posPriceMode === 'yeshiva' ? 'מחיר ישיבה' : 'מחיר צרכן',
+      priceMode: posPriceMode === 'yeshiva' ? 'תלמיד ישיבה (ראשון)' : posPriceMode === 'yeshivaGuest' ? 'ישיבה (שני / אורח)' : 'מחיר אתר (צרכן)',
       paymentMethod: posPaymentMethod,
       buyerNote: posBuyerNote.trim(),
       user: currentUserName,
@@ -1360,45 +1365,45 @@ export default function App() {
       .filter(s =>
         (s.name || '').toLowerCase().includes(supplierSearch.toLowerCase()) ||
         (s.contact || '').toLowerCase().includes(supplierSearch.toLowerCase())
-      )
-      .sort((a, b) => {
-        if (supplierSort === 'alphabetical') return (a.name || '').localeCompare(b.name || '', 'he');
-        return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
-      });
-  }, [suppliersList, supplierSearch, supplierSort]);
-
-  // מדדי דאשבורד חיים
-  const totalCopiesInSystem = inventoryList.reduce((s, b) => s + calculateTotalStock(b), 0);
-  const totalWarehouseCopies = inventoryList.reduce((s, b) => s + Number(b.publisherStock || 0), 0);
-  const totalProductionValue = inventoryList.reduce((s, b) => s + calculateTotalStock(b) * Number(b.productionCost || 0), 0);
-  const totalRetailValue = inventoryList.reduce((s, b) => s + calculateTotalStock(b) * Number(b.prices?.general || 0), 0);
-  const lowStockBooks = inventoryList.filter(b => calculateTotalStock(b) < Number(b.threshold || 30));
-  const liveStoreRevenue = ordersList.reduce((s, o) => s + Number(o.total || 0), 0);
-  const liveSupplierRevenue = supplierLogs.filter(l => l.type !== 'return').reduce((s, l) => s + Number(l.totalAmount || 0), 0);
-  const livePosRevenue = posSales.reduce((s, sale) => s + Number(sale.totalAmount || 0), 0);
-  const totalOpenSupplierDebt = supplierLogs.reduce((s, l) => s + getLogRemainingDebt(l), 0);
-  const pendingOrders = ordersList.filter(o => o.status !== 'shipped');
-  const shippedOrders = ordersList.filter(o => o.status === 'shipped');
-
-  const navItems = [
-    { id: 'dashboard', label: 'דאשבורד', icon: LayoutDashboard, group: 'ראשי' },
-    { id: 'pos', label: 'קופה מהירה (דוכן)', icon: CreditCard, group: 'מכירות והזמנות' },
-    { id: 'orders', label: 'הזמנות חנות (אתר)', icon: ShoppingCart, badge: pendingOrders.length, group: 'מכירות והזמנות' },
-    { id: 'inventory', label: 'ניהול מלאי', icon: Package, group: 'מלאי והפצה' },
-    { id: 'suppliers', label: 'ספקים והפצה', icon: Truck, group: 'מלאי והפצה' },
-    { id: 'production', label: 'הפקת ספרים', icon: KanbanSquare, group: 'הפקה ושיווק' },
-    { id: 'print_quotes', label: 'השוואת דפוסים', icon: Scale, group: 'הפקה ושיווק' },
-    { id: 'marketing', label: 'שיווק ויח״צ', icon: Megaphone, group: 'הפקה ושיווק' },
-    { id: 'notes', label: 'פתקים ומשימות', icon: StickyNote, group: 'מערכת' },
-    { id: 'integrations', label: 'אוטומציה וגיבוי', icon: Settings, group: 'מערכת' },
-    ...(userRole === 'admin' ? [{ id: 'users', label: 'ניהול משתמשים', icon: UserCog, group: 'מערכת' }] : []),
-  ];
-
-  const activeNavItem = navItems.find(n => n.id === activeTab) || navItems[0];
-  const userInitial = (currentUserName || 'מ').trim().charAt(0);
-
-  // סגנונות מערכת מתקדמים למצב לילה (כהה) וגלילה מודרנית
+  // סגנונות מערכת מתקדמים למצב לילה (כהה), אנימציות מעברים וגלילה מודרנית
   const themeStyles = `
+    @keyframes pageEnter {
+      from { opacity: 0; transform: translateY(10px) scale(0.995); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes modalPop {
+      from { opacity: 0; transform: translateY(12px) scale(0.96); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes backdropFade {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes toastSlideIn {
+      from { opacity: 0; transform: translateY(16px) scale(0.95); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .animate-page-enter {
+      animation: pageEnter 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .animate-toast {
+      animation: toastSlideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .erp-shell .fixed.inset-0 {
+      animation: backdropFade 0.2s ease-out both;
+    }
+    .erp-shell .fixed.inset-0 > div {
+      animation: modalPop 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .erp-shell {
+      font-feature-settings: "tnum" on, "lnum" on;
+    }
+    .erp-shell button {
+      transition: transform 0.14s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s ease, color 0.18s ease, box-shadow 0.2s ease, border-color 0.18s ease;
+    }
+    .erp-shell button:active:not(:disabled) {
+      transform: scale(0.975);
+    }
     .erp-shell ::-webkit-scrollbar { width: 7px; height: 7px; }
     .erp-shell ::-webkit-scrollbar-track { background: transparent; }
     .erp-shell ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.35); border-radius: 9999px; }
@@ -1643,7 +1648,7 @@ export default function App() {
       <style>{themeStyles}</style>
       {/* Toast Notification */}
       {toast && (
-        <div className={`fixed bottom-5 left-5 z-[100] px-4 py-3 rounded-2xl shadow-xl backdrop-blur-md text-white text-sm font-bold flex items-center gap-2.5 ring-1 ring-white/15 print:hidden transition-all ${
+        <div className={`animate-toast fixed bottom-20 lg:bottom-6 left-5 z-[100] px-4 py-3 rounded-2xl shadow-2xl backdrop-blur-md text-white text-sm font-bold flex items-center gap-2.5 ring-1 ring-white/20 print:hidden ${
           toast.type === 'success' ? 'bg-emerald-600/95' :
           toast.type === 'error' ? 'bg-rose-600/95' :
           toast.type === 'warning' ? 'bg-amber-600/95' : 'bg-slate-900/95'
@@ -1870,7 +1875,8 @@ export default function App() {
         </div>
 
         {/* Main Content Area */}
-        <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-[1600px] w-full mx-auto overflow-x-hidden">
+        <main className="flex-1 p-4 pb-24 md:p-6 lg:p-8 lg:pb-10 max-w-[1600px] w-full mx-auto overflow-x-hidden">
+          <div key={activeTab} className="animate-page-enter">
         {/* ==================== 1. DASHBOARD ==================== */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
@@ -2029,8 +2035,9 @@ export default function App() {
                 <p className="text-slate-500 text-xs mt-1">בחר ספרים להוספה לסל — המלאי יופחת אוטומטית מהמחסן הראשי</p>
               </div>
               <div className="bg-slate-100 p-1 rounded-xl flex items-center ring-1 ring-slate-200/80 w-full sm:w-auto">
-                <button onClick={() => setPosPriceMode('yeshiva')} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-bold transition-all ${posPriceMode === 'yeshiva' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>מחירון ישיבה</button>
-                <button onClick={() => setPosPriceMode('general')} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-bold transition-all ${posPriceMode === 'general' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>מחירון צרכן</button>
+                <button onClick={() => setPosPriceMode('yeshiva')} className={`flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${posPriceMode === 'yeshiva' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>תלמיד (ראשון)</button>
+                <button onClick={() => setPosPriceMode('yeshivaGuest')} className={`flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${posPriceMode === 'yeshivaGuest' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>ישיבה (שני/אורח)</button>
+                <button onClick={() => setPosPriceMode('general')} className={`flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${posPriceMode === 'general' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>אתר (צרכן)</button>
               </div>
             </div>
 
@@ -2326,7 +2333,10 @@ export default function App() {
                             <div className="flex flex-wrap justify-center gap-1 text-[11px]">
                               <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded-md">אתר ₪{webPrice}</span>
                               <span className="bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-md">ספק ₪{supPrice}</span>
-                              <span className="bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-md">ישיבה ₪{Number(book.prices?.yeshiva || 0)}</span>
+                              <span className="bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-md">
+                                תלמיד ₪{Number(book.prices?.yeshiva || 0)}
+                                {Number(book.prices?.yeshivaGuest || 0) > 0 && Number(book.prices?.yeshivaGuest) !== Number(book.prices?.yeshiva) ? ` / אורח ₪${Number(book.prices?.yeshivaGuest)}` : ''}
+                              </span>
                             </div>
                           </td>
 
@@ -2388,7 +2398,7 @@ export default function App() {
                                 <button
                                   onClick={() => setEditingBook({
                                     ...book,
-                                    prices: { catalog: 0, general: 0, supplier: 0, yeshiva: 0, ...(book.prices || {}) },
+                                    prices: { catalog: 0, general: 0, supplier: 0, yeshiva: 0, yeshivaGuest: book.prices?.yeshiva || 0, ...(book.prices || {}) },
                                     editions: book.editions?.length ? book.editions : [{ name: 'מהדורה 1', printRun: 0 }],
                                     breakdown: book.breakdown || []
                                   })}
@@ -2412,22 +2422,42 @@ export default function App() {
             )}
           </div>
         )}
+          </div>
+        </main>
 
-        {/* ==================== 5. SUPPLIERS & DISTRIBUTION ==================== */}
-        {activeTab === 'suppliers' && (
-          <div className="space-y-6">
-            <div className="bg-white p-4 md:p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3.5">
-              <div className="flex flex-col sm:flex-row gap-2.5 flex-1">
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={supplierSearch}
-                    onChange={e => setSupplierSearch(e.target.value)}
-                    placeholder="חיפוש ספק, חנות או איש קשר..."
-                    className="w-full pr-10 pl-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 text-sm outline-none transition-all"
-                  />
-                </div>
+        {/* Mobile Native-Style Bottom Navigation Bar */}
+        <nav className={`lg:hidden fixed bottom-0 inset-x-0 z-30 border-t backdrop-blur-xl px-2 py-1.5 flex items-center justify-around print:hidden ${darkMode ? 'bg-[#0B1120]/95 border-slate-800' : 'bg-white/95 border-slate-200/90 shadow-[0_-4px_20px_rgba(15,23,42,0.06)]'}`}>
+          {[
+            { id: 'dashboard', label: 'דאשבורד', icon: LayoutDashboard },
+            { id: 'pos', label: 'קופה', icon: CreditCard },
+            { id: 'inventory', label: 'מלאי', icon: Package },
+            { id: 'suppliers', label: 'ספקים', icon: Truck },
+            { id: 'orders', label: 'הזמנות', icon: ShoppingCart, badge: pendingOrders.length },
+          ].map(item => {
+            const Icon = item.icon;
+            const active = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`relative flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-xl min-w-[58px] transition-all ${
+                  active
+                    ? 'text-indigo-600 bg-indigo-50/90 font-extrabold'
+                    : 'text-slate-500 hover:text-slate-800 font-medium'
+                }`}
+              >
+                <Icon className={`w-5 h-5 ${active ? 'scale-110' : ''} transition-transform`} />
+                <span className="text-[10px] leading-none">{item.label}</span>
+                {item.badge > 0 && (
+                  <span className="absolute top-0.5 left-1.5 bg-rose-500 text-white text-[9px] font-extrabold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center">
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
                 <select
                   value={supplierSort}
                   onChange={e => setSupplierSort(e.target.value)}
@@ -3026,11 +3056,7 @@ export default function App() {
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-600 mb-1">מחבר</label>
-                      <input type="text" value={formState.author || ''} onChange={e => setFormState({ ...formState, author: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                     <div>
                       <label className="block text-xs font-bold text-slate-600 mb-1">מחיר באתר (₪)</label>
                       <input type="number" min="0" step="0.01" value={formState.prices?.general ?? 0} onChange={e => setFormState({ ...formState, prices: { ...formState.prices, general: e.target.value } })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
@@ -3040,8 +3066,12 @@ export default function App() {
                       <input type="number" min="0" step="0.01" value={formState.prices?.supplier ?? 0} onChange={e => setFormState({ ...formState, prices: { ...formState.prices, supplier: e.target.value } })} className="w-full p-2.5 border border-indigo-200 rounded-xl text-sm" dir="ltr" />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-emerald-700 mb-1">מחיר ישיבה (₪)</label>
+                      <label className="block text-xs font-bold text-emerald-700 mb-1">תלמיד ישיבה (₪)</label>
                       <input type="number" min="0" step="0.01" value={formState.prices?.yeshiva ?? 0} onChange={e => setFormState({ ...formState, prices: { ...formState.prices, yeshiva: e.target.value } })} className="w-full p-2.5 border border-emerald-200 rounded-xl text-sm" dir="ltr" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-teal-700 mb-1">ישיבה שני/אורח (₪)</label>
+                      <input type="number" min="0" step="0.01" value={formState.prices?.yeshivaGuest ?? formState.prices?.yeshiva ?? 0} onChange={e => setFormState({ ...formState, prices: { ...formState.prices, yeshivaGuest: e.target.value } })} className="w-full p-2.5 border border-teal-200 rounded-xl text-sm" dir="ltr" />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-rose-700 mb-1">עלות הפקה (₪)</label>
