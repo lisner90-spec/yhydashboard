@@ -2497,42 +2497,22 @@ export default function App() {
             )}
           </div>
         )}
-          </div>
-        </main>
 
-        {/* Mobile Native-Style Bottom Navigation Bar */}
-        <nav className={`lg:hidden fixed bottom-0 inset-x-0 z-30 border-t backdrop-blur-xl px-2 py-1.5 flex items-center justify-around print:hidden ${darkMode ? 'bg-[#0B1120]/95 border-slate-800' : 'bg-white/95 border-slate-200/90 shadow-[0_-4px_20px_rgba(15,23,42,0.06)]'}`}>
-          {[
-            { id: 'dashboard', label: 'דאשבורד', icon: LayoutDashboard },
-            { id: 'pos', label: 'קופה', icon: CreditCard },
-            { id: 'inventory', label: 'מלאי', icon: Package },
-            { id: 'suppliers', label: 'ספקים', icon: Truck },
-            { id: 'orders', label: 'הזמנות', icon: ShoppingCart, badge: pendingOrders.length },
-          ].map(item => {
-            const Icon = item.icon;
-            const active = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`relative flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-xl min-w-[58px] transition-all ${
-                  active
-                    ? 'text-indigo-600 bg-indigo-50/90 font-extrabold'
-                    : 'text-slate-500 hover:text-slate-800 font-medium'
-                }`}
-              >
-                <Icon className={`w-5 h-5 ${active ? 'scale-110' : ''} transition-transform`} />
-                <span className="text-[10px] leading-none">{item.label}</span>
-                {item.badge > 0 && (
-                  <span className="absolute top-0.5 left-1.5 bg-rose-500 text-white text-[9px] font-extrabold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center">
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
+        {/* ==================== 5. SUPPLIERS & DISTRIBUTION ==================== */}
+        {activeTab === 'suppliers' && (
+          <div className="space-y-6">
+            <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3.5">
+              <div className="flex flex-col sm:flex-row gap-2.5 flex-1">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={supplierSearch}
+                    onChange={e => setSupplierSearch(e.target.value)}
+                    placeholder="חפש ספק, חנות או איש קשר..."
+                    className="w-full pr-10 pl-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 text-sm outline-none transition-all"
+                  />
+                </div>
                 <select
                   value={supplierSort}
                   onChange={e => setSupplierSort(e.target.value)}
@@ -2642,24 +2622,6 @@ export default function App() {
           </div>
         )}
 
-        {/* ==================== 5. SUPPLIERS & DISTRIBUTION ==================== */}
-        {activeTab === 'suppliers' && (
-          <div className="space-y-6">
-            <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3.5">
-              <div className="flex flex-col sm:flex-row gap-2.5 flex-1">
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={supplierSearch}
-                    onChange={e => setSupplierSearch(e.target.value)}
-                    placeholder="חפש ספק, חנות או איש קשר..."
-                    className="w-full pr-10 pl-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 text-sm outline-none transition-all"
-                  />
-                </div>
-                <select
-                  value={supplierSort}
-                  onChange={e => setSupplierSort(e.target.value)}
         {/* ==================== 6. PRODUCTION KANBAN ==================== */}
         {activeTab === 'production' && (
           <div className="space-y-6">
