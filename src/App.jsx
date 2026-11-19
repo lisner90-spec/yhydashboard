@@ -3488,6 +3488,67 @@ export default function App() {
                             <p className="text-xs text-slate-500 mt-0.5">
                               {snap.summary?.books || 0} ספרים · {snap.summary?.suppliers || 0} ספקים · {snap.summary?.orders || 0} הזמנות · {snap.sizeKB || 1}KB
                             </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleRestoreSnapshot(snap)}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" /> שחזר
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadSnapshot(snap)}
+                            className="bg-white hover:bg-slate-100 text-slate-700 ring-1 ring-slate-200 px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1"
+                            title="הורד קובץ JSON"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSnapshot(snap.id)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl"
+                            title="מחק נקודת שחזור"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* גיבוי ושחזור ידני מלא (קובץ JSON) */}
+            <div className="bg-white rounded-2xl p-6 shadow-xs ring-1 ring-slate-200/70 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div className="flex items-start gap-3">
+                <div className="p-3 rounded-2xl bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base">גיבוי ושחזור ידני מלא (קובץ JSON)</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">הורד קובץ גיבוי אחד של כל הנתונים למחשב שלך או שחזר מקובץ שמור.</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportFullBackup}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                >
+                  <Download className="w-4 h-4" /> הורד גיבוי מלא
+                </button>
+                <label className="bg-slate-100 hover:bg-slate-200 text-slate-700 ring-1 ring-slate-200 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+                  <Upload className="w-4 h-4" /> שחזר מקובץ גיבוי
+                  <input type="file" accept=".json" onChange={handleImportBackupFile} className="hidden" />
+                </label>
+              </div>
+            </div>
+
+            {/* אוטומציה וחיבור Webhook לחנות WooCommerce */}
             <div className="bg-white rounded-2xl p-6 shadow-xs ring-1 ring-slate-200/70 space-y-4">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div>
