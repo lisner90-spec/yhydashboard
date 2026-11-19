@@ -1751,6 +1751,12 @@ export default function App() {
         (s.contact || '').toLowerCase().includes(supplierSearch.toLowerCase()) ||
         (s.phone || '').toLowerCase().includes(supplierSearch.toLowerCase())
       )
+      .sort((a, b) => {
+        if (supplierSort === 'alphabetical') return (a.name || '').localeCompare(b.name || '', 'he');
+        return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
+      });
+  }, [suppliersList, supplierSearch, supplierSort]);
+
   const pendingOrders = useMemo(
     () => [...ordersList].filter(o => o.status !== 'shipped').sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0)),
     [ordersList]
@@ -3296,67 +3302,77 @@ export default function App() {
                     setCampaignsList(prev => [obj, ...prev]);
                     if (db && dbConnected) { try { await addDoc(getCollRef('campaigns'), obj); } catch {} }
                     setNewCampaignForm({ name: '', budget: '', spent: '', channel: 'וואטסאפ / בוגרים' });
+                    showToast('הקמפיין נוסף בהצלחה!', 'success');
                   }}
-            <div className="bg-white rounded-2xl p-6 shadow-xs ring-1 ring-slate-200/70 space-y-4">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <div>
-                  <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
-                    <Zap className="w-5 h-5 text-amber-500" /> אוטומציה וחיבור Webhook לחנות WooCommerce
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">הזמנות חדשות מהאתר יקפצו מיד ללשונית "הזמנות חנות" ויפחיתו אוטומטית מהמלאי (עם הגנה מכפילויות).</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={webhookCheckState.loading}
-                    onClick={handlePingWebhook}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-slate-200"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${webhookCheckState.loading ? 'animate-spin' : ''}`} /> בדוק חיבור שרת
-                  </button>
-                  <button
-                    type="button"
-                    disabled={sendingTestOrder}
-                    onClick={handleSendTestOrder}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs"
-                  >
-                    <Send className="w-3.5 h-3.5" /> {sendingTestOrder ? 'שולח...' : 'שלח הזמנת ניסיון'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 bg-[#0F172A] text-emerald-400 p-3.5 rounded-xl font-mono text-xs ring-1 ring-slate-800" dir="ltr">
-                <span className="flex-1 truncate select-all">{getWebhookUrl()}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard?.writeText(getWebhookUrl());
-                    showToast('כתובת ה-Webhook הועתקה!', 'success');
-                  }}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded-lg text-[11px] font-sans font-bold flex items-center gap-1 shrink-0"
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-slate-50/90 p-3.5 rounded-2xl ring-1 ring-slate-200/70"
                 >
-                  <Copy className="w-3.5 h-3.5" /> העתק
-                </button>
-              </div>
-
-              {webhookCheckState.message && (
-                <div className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
-                  webhookCheckState.status === 'ok'
-                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                    : webhookCheckState.status === 'error'
-                      ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
-                      : 'bg-slate-50 text-slate-600 ring-1 ring-slate-200'
-                }`}>
-                  {webhookCheckState.status === 'ok' ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
-                  <span>{webhookCheckState.message}</span>
-                </div>
+                  <input required placeholder="שם הקמפיין *" value={newCampaignForm.name} onChange={e => setNewCampaignForm({ ...newCampaignForm, name: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white sm:col-span-2" />
+                  <input type="number" min="0" placeholder="תקציב (₪)" value={newCampaignForm.budget} onChange={e => setNewCampaignForm({ ...newCampaignForm, budget: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white" dir="ltr" />
+                  <input type="number" min="0" placeholder="הוצאה בפועל (₪)" value={newCampaignForm.spent} onChange={e => setNewCampaignForm({ ...newCampaignForm, spent: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white" dir="ltr" />
+                  <input placeholder="ערוץ פרסום" value={newCampaignForm.channel} onChange={e => setNewCampaignForm({ ...newCampaignForm, channel: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white" />
+                  <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 px-4 rounded-xl text-xs font-bold">+ הוסף קמפיין</button>
+                </form>
               )}
+              <div className="space-y-2.5">
+                {campaignsList.length === 0 ? (
+                  <p className="text-center text-slate-400 text-xs py-6">עדיין לא הוגדרו קמפיינים.</p>
+                ) : campaignsList.map(c => {
+                  const pct = Number(c.budget) > 0 ? Math.min(100, Math.round((Number(c.spent || 0) / Number(c.budget)) * 100)) : 0;
+                  return (
+                    <div key={c.id} className="p-3.5 bg-slate-50/90 rounded-xl ring-1 ring-slate-200/70 space-y-2">
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="font-bold text-slate-800">{c.name}</span>
+                        <span className="text-xs text-slate-500">{c.channel}</span>
+                      </div>
+                      <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                        <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
+                      <div className="flex justify-between text-xs text-slate-500">
+                        <span>נוצל: ₪{Number(c.spent || 0).toLocaleString()}</span>
+                        <span>תקציב: ₪{Number(c.budget || 0).toLocaleString()} ({pct}%)</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
-              <div className="bg-slate-50/90 p-4 rounded-2xl ring-1 ring-slate-200/70 text-xs text-slate-600 space-y-1.5">
-                <p className="font-extrabold text-slate-800">הגדרות נדרשות בוורדפרס (WooCommerce ← הגדרות ← מתקדם ← Webhooks):</p>
-                <p>1. <strong>סטטוס (Status):</strong> פעיל (Active)</p>
-                <p>2. <strong>נושא (Topic):</strong> הזמנה נוצרה (Order created)</p>
-                <p>3. <strong>כתובת מסירה (Delivery URL):</strong> הדבק את הכתובת שמופיעה למעלה ושמור.</p>
+            <div className="bg-white p-6 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-4">
+              <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2.5">
+                <span className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><FileText className="w-4 h-4" /></span>
+                עותקי ביקורת ויח"צ
+              </h3>
+              {userRole === 'admin' && (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!newPrForm.bookTitle.trim() || !newPrForm.recipient.trim()) return;
+                    const obj = { ...newPrForm, date: new Date().toLocaleDateString('he-IL'), id: Date.now().toString() };
+                    setPrCopies(prev => [obj, ...prev]);
+                    if (db && dbConnected) { try { await addDoc(getCollRef('pr_copies'), obj); } catch {} }
+                    setNewPrForm({ bookTitle: '', recipient: '', role: 'מבקר / עיתונאי' });
+                    showToast('עותק ביקורת תועד בהצלחה!', 'success');
+                  }}
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-slate-50/90 p-3.5 rounded-2xl ring-1 ring-slate-200/70"
+                >
+                  <input required placeholder="שם הספר *" value={newPrForm.bookTitle} onChange={e => setNewPrForm({ ...newPrForm, bookTitle: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white sm:col-span-2" />
+                  <input required placeholder="שם המקבל *" value={newPrForm.recipient} onChange={e => setNewPrForm({ ...newPrForm, recipient: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white" />
+                  <input placeholder="תפקיד / גוף תקשורת" value={newPrForm.role} onChange={e => setNewPrForm({ ...newPrForm, role: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white" />
+                  <button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white py-2.5 px-4 rounded-xl text-xs font-bold sm:col-span-2">+ תעד שליחת עותק יח"צ</button>
+                </form>
+              )}
+              <div className="space-y-2">
+                {prCopies.length === 0 ? (
+                  <p className="text-center text-slate-400 text-xs py-6">עדיין לא תועדו עותקי ביקורת.</p>
+                ) : prCopies.map(pr => (
+                  <div key={pr.id} className="p-3.5 bg-slate-50/90 rounded-xl ring-1 ring-slate-200/70 flex justify-between items-center text-xs">
+                    <div>
+                      <p className="font-bold text-slate-800">{pr.bookTitle}</p>
+                      <p className="text-slate-500 mt-0.5">{pr.recipient} · {pr.role}</p>
+                    </div>
+                    <span className="text-slate-400">{pr.date}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -3472,66 +3488,66 @@ export default function App() {
                             <p className="text-xs text-slate-500 mt-0.5">
                               {snap.summary?.books || 0} ספרים · {snap.summary?.suppliers || 0} ספקים · {snap.summary?.orders || 0} הזמנות · {snap.sizeKB || 1}KB
                             </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => handleDownloadSnapshot(snap)}
-                            className="bg-white hover:bg-slate-100 text-slate-700 ring-1 ring-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1"
-                            title="הורד קובץ JSON"
-                          >
-                            <Download className="w-3.5 h-3.5" /> הורד
-                          </button>
-                          {userRole === 'admin' && (
-                            <>
-                              <button
-                                onClick={() => handleRestoreSnapshot(snap)}
-                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 shadow-2xs"
-                              >
-                                <RotateCcw className="w-3.5 h-3.5" /> שחזר
-                              </button>
-                              <button
-                                onClick={() => handleDeleteSnapshot(snap.id)}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl"
-                                title="מחק נקודה"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* גיבוי ושחזור ידני לקובץ חיצוני */}
-            <div className="bg-white rounded-2xl p-6 shadow-xs ring-1 ring-indigo-200/70 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div className="flex items-start gap-3.5">
-                <div className="p-3.5 bg-indigo-50 text-indigo-600 rounded-2xl ring-1 ring-indigo-100"><Database className="w-6 h-6" /></div>
+            <div className="bg-white rounded-2xl p-6 shadow-xs ring-1 ring-slate-200/70 space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div>
-                  <h3 className="text-lg font-extrabold text-slate-900">גיבוי ושחזור ידני לקובץ מחשב (JSON)</h3>
-                  <p className="text-slate-500 text-sm mt-0.5">הורד קובץ גיבוי חיצוני לשמירה במחשב או ב-Google Drive.</p>
+                  <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-amber-500" /> אוטומציה וחיבור Webhook לחנות WooCommerce
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">הזמנות חדשות מהאתר יקפצו מיד ללשונית "הזמנות חנות" ויפחיתו אוטומטית מהמלאי (עם הגנה מכפילויות).</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={webhookCheckState.loading}
+                    onClick={handlePingWebhook}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-slate-200"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${webhookCheckState.loading ? 'animate-spin' : ''}`} /> בדוק חיבור שרת
+                  </button>
+                  <button
+                    type="button"
+                    disabled={sendingTestOrder}
+                    onClick={handleSendTestOrder}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                  >
+                    <Send className="w-3.5 h-3.5" /> {sendingTestOrder ? 'שולח...' : 'שלח הזמנת ניסיון'}
+                  </button>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2.5">
-                <button onClick={handleExportFullBackup} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-sm shadow-indigo-600/20 transition-all"><Download className="w-4 h-4" /> הורד גיבוי מלא</button>
-                {userRole === 'admin' && (
-                  <label className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 cursor-pointer ring-1 ring-slate-200 transition-colors">
-                    <Upload className="w-4 h-4" /> שחזר מגיבוי
-                    <input type="file" accept=".json,application/json" onChange={handleImportBackupFile} className="hidden" />
-                  </label>
-                )}
-              </div>
-            </div>
 
-            <div className="bg-white rounded-2xl p-6 shadow-xs ring-1 ring-slate-200/70 space-y-3">
-              <h3 className="font-extrabold text-slate-900 text-base">חיבור Webhook לחנות WooCommerce</h3>
-              <p className="text-sm text-slate-600">כדי שהזמנות מהאתר יקפצו אוטומטית ללשונית "הזמנות חנות" ויפחיתו מלאי, הגדר בוורדפרס את הכתובת הבאה תחת WooCommerce → הגדרות → מתקדם → Webhooks:</p>
-              <div className="bg-[#0F172A] text-emerald-400 p-4 rounded-xl font-mono text-xs select-all ring-1 ring-slate-800" dir="ltr">
-                https://yhydashboard.vercel.app/api/webhook
+              <div className="flex items-center gap-2 bg-[#0F172A] text-emerald-400 p-3.5 rounded-xl font-mono text-xs ring-1 ring-slate-800" dir="ltr">
+                <span className="flex-1 truncate select-all">{getWebhookUrl()}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(getWebhookUrl());
+                    showToast('כתובת ה-Webhook הועתקה!', 'success');
+                  }}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded-lg text-[11px] font-sans font-bold flex items-center gap-1 shrink-0"
+                >
+                  <Copy className="w-3.5 h-3.5" /> העתק
+                </button>
+              </div>
+
+              {webhookCheckState.message && (
+                <div className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                  webhookCheckState.status === 'ok'
+                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                    : webhookCheckState.status === 'error'
+                      ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
+                      : 'bg-slate-50 text-slate-600 ring-1 ring-slate-200'
+                }`}>
+                  {webhookCheckState.status === 'ok' ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+                  <span>{webhookCheckState.message}</span>
+                </div>
+              )}
+
+              <div className="bg-slate-50/90 p-4 rounded-2xl ring-1 ring-slate-200/70 text-xs text-slate-600 space-y-1.5">
+                <p className="font-extrabold text-slate-800">הגדרות נדרשות בוורדפרס (WooCommerce ← הגדרות ← מתקדם ← Webhooks):</p>
+                <p>1. <strong>סטטוס (Status):</strong> פעיל (Active)</p>
+                <p>2. <strong>נושא (Topic):</strong> הזמנה נוצרה (Order created)</p>
+                <p>3. <strong>כתובת מסירה (Delivery URL):</strong> הדבק את הכתובת שמופיעה למעלה ושמור.</p>
               </div>
             </div>
           </div>
