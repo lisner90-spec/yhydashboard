@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp, getApps } from 'firebase/app';
 import {
   getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, setDoc, onSnapshot
@@ -10,7 +10,8 @@ import {
   UserCog, StickyNote, History, Clock, ShoppingCart, MessageCircle, Gift,
   ArrowLeftRight, Calculator, ClipboardList, Copy, CreditCard, Database,
   Minus, Wallet, BookMarked, Scale, Award, Eye, Check, Send,
-  LogIn, LogOut, Lock, Shield, KeyRound, Sun, Moon, Sparkles
+  LogIn, LogOut, Lock, Shield, KeyRound, Sun, Moon, Sparkles,
+  ShieldCheck, RotateCcw, Command, Zap, HardDrive
 } from 'lucide-react';
 
 // ==========================================
@@ -58,6 +59,55 @@ const initialInventory = [
   { id: 'book_18', title: 'חוברת כעץ שתול - סט', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 30, publisherStock: 0, productionCost: 0, prices: { catalog: 0, general: 55, supplier: 0, yeshiva: 40, yeshivaGuest: 40 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
   { id: 'book_19', title: 'חוברת מעפר קומי', author: 'הוצאת ישיבת ירוחם', isbn: '', threshold: 40, publisherStock: 0, productionCost: 0, prices: { catalog: 0, general: 30, supplier: 0, yeshiva: 25, yeshivaGuest: 30 }, editions: [{ name: 'מהדורה 1', printRun: 0 }], breakdown: [], updatedAt: Date.now() },
 ];
+
+const normalizeBookTitle = (str = '') =>
+  String(str).replace(/[-–—״"'׳.,]/g, ' ').replace(/\s+/g, ' ').trim();
+
+const findMatchingCatalogBook = (title = '') => {
+  const norm = normalizeBookTitle(title);
+  if (!norm) return null;
+  const exact = initialInventory.find(b => normalizeBookTitle(b.title) === norm);
+  if (exact) return exact;
+
+  if (norm.includes('אותך אבקש')) return initialInventory.find(b => b.id === 'book_1');
+  if (norm.includes('חגי תשרי')) return initialInventory.find(b => b.id === 'book_2');
+  if (norm.includes('מועדי חורף')) return initialInventory.find(b => b.id === 'book_3');
+  if (norm.includes('חגי האביב')) return initialInventory.find(b => b.id === 'book_4');
+  if (norm.includes('ונהר יוצא מעדן') && norm.includes('סט')) return initialInventory.find(b => b.id === 'book_5');
+  if (norm.includes('אכילה ומצוותיה')) return initialInventory.find(b => b.id === 'book_6');
+  if (norm.includes('סנהדרין')) return initialInventory.find(b => b.id === 'book_7');
+  if (norm.includes('סוכה')) return initialInventory.find(b => b.id === 'book_8');
+  if (norm.includes('מניטו')) return initialInventory.find(b => b.id === 'book_9');
+  if (norm.includes('והתהלכתי') && norm.includes('סט')) return initialInventory.find(b => b.id === 'book_12');
+  if (norm.includes('והתהלכתי') && (norm.includes(' ב') || norm.endsWith('ב'))) return initialInventory.find(b => b.id === 'book_11');
+  if (norm.includes('והתהלכתי')) return initialInventory.find(b => b.id === 'book_10');
+  if (norm.includes('שובו אלי')) return initialInventory.find(b => b.id === 'book_13');
+  if (norm.includes('כעץ שתול') && norm.includes('סט')) return initialInventory.find(b => b.id === 'book_18');
+  if (norm.includes('כעץ שתול') && norm.includes('תפילה')) return initialInventory.find(b => b.id === 'book_14');
+  if (norm.includes('כעץ שתול') && norm.includes('עיון')) return initialInventory.find(b => b.id === 'book_15');
+  if (norm.includes('כעץ שתול') && norm.includes('אמונה')) return initialInventory.find(b => b.id === 'book_16');
+  if (norm.includes('שמיטה')) return initialInventory.find(b => b.id === 'book_17');
+  if (norm.includes('מעפר קומי')) return initialInventory.find(b => b.id === 'book_19');
+  return null;
+};
+
+const getEffectiveBookPrices = (book) => {
+  const catalogMatch = findMatchingCatalogBook(book?.title);
+  const p = book?.prices || {};
+  const general = Number(p.general || catalogMatch?.prices?.general || 0);
+  const supplier = Number(p.supplier || catalogMatch?.prices?.supplier || 0);
+  const hasExplicitGuest = p.yeshivaGuest !== undefined && p.yeshivaGuest !== null && Number(p.yeshivaGuest) > 0;
+
+  // אם לספר הקיים עדיין לא נשמר מחיר "שני/אורח", מושכים את זוג מחירי הישיבה המעודכנים מהמחירון
+  const yeshiva = hasExplicitGuest
+    ? Number(p.yeshiva || catalogMatch?.prices?.yeshiva || general)
+    : Number(catalogMatch?.prices?.yeshiva ?? p.yeshiva ?? general);
+  const yeshivaGuest = hasExplicitGuest
+    ? Number(p.yeshivaGuest)
+    : Number(catalogMatch?.prices?.yeshivaGuest ?? p.yeshiva ?? general);
+
+  return { general, supplier, yeshiva, yeshivaGuest };
+};
 
 const KANBAN_COLUMNS = [
   { id: 'planned', title: 'בתכנון', color: 'bg-slate-100 border-slate-200', badge: 'bg-slate-200 text-slate-700' },
@@ -235,6 +285,66 @@ export default function App() {
   const [catalogPriceTier, setCatalogPriceTier] = useState('general');
   const [catalogOnlyInStock, setCatalogOnlyInStock] = useState(false);
   const [printDoc, setPrintDoc] = useState(null);
+
+  // --- Command Palette & Transition Polish States ---
+  const [isCommandOpen, setIsCommandOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState('');
+  const [isTabTransitioning, setIsTabTransitioning] = useState(false);
+
+  // --- Auto-Backup System States ---
+  const [autoBackupSettings, setAutoBackupSettings] = useState(() =>
+    loadLocal('yhy_erp_autobackup_settings', {
+      enabled: true,
+      intervalMinutes: 30,
+      maxSnapshots: 5
+    })
+  );
+  const [autoSnapshots, setAutoSnapshots] = useState(() =>
+    loadLocal('yhy_erp_auto_snapshots', [])
+  );
+
+  // שמירת הפניה עדכנית לנתונים עבור טיימר הגיבוי האוטומטי (ללא איפוס הטיימר בכל עריכה)
+  const latestDataRef = useRef({});
+  latestDataRef.current = {
+    inventory: inventoryList,
+    suppliers: suppliersList,
+    tasks: tasksList,
+    orders: ordersList,
+    notes: notesList,
+    supplierLogs,
+    giftLogs,
+    posSales,
+    printQuotes,
+    campaigns: campaignsList,
+    prCopies
+  };
+
+  // פס מעבר עליון חלק בעת החלפת מסכים
+  useEffect(() => {
+    setIsTabTransitioning(true);
+    const t = setTimeout(() => setIsTabTransitioning(false), 360);
+    return () => clearTimeout(t);
+  }, [activeTab]);
+
+  // קיצור מקלדת Ctrl+K / Cmd+K לחיפוש וניווט מהיר
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandOpen(prev => !prev);
+        setCommandQuery('');
+      } else if (e.key === 'Escape') {
+        setIsCommandOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  // שמירת הגדרות הגיבוי האוטומטי
+  useEffect(() => {
+    try { localStorage.setItem('yhy_erp_autobackup_settings', JSON.stringify(autoBackupSettings)); } catch {}
+  }, [autoBackupSettings]);
 
   const showToast = (message, type = 'info') => {
     setToast({ message, type, id: Date.now() });
@@ -500,7 +610,11 @@ export default function App() {
       const nextList = [...inventoryList];
 
       for (const catalogBook of initialInventory) {
-        const idx = nextList.findIndex(b => b.title.trim() === catalogBook.title.trim());
+        const idx = nextList.findIndex(b => {
+          if (normalizeBookTitle(b.title) === normalizeBookTitle(catalogBook.title)) return true;
+          const matched = findMatchingCatalogBook(b.title);
+          return matched && matched.id === catalogBook.id;
+        });
         if (idx !== -1) {
           const existing = nextList[idx];
           const updatedFields = {
@@ -1023,9 +1137,10 @@ export default function App() {
   // פעולות קופה מהירה (POS)
   // ==========================================
   const getPosBookPrice = (book, mode = posPriceMode) => {
-    if (mode === 'yeshiva') return Number(book.prices?.yeshiva || book.prices?.general || 0);
-    if (mode === 'yeshivaGuest') return Number(book.prices?.yeshivaGuest || book.prices?.yeshiva || book.prices?.general || 0);
-    return Number(book.prices?.general || 0);
+    const eff = getEffectiveBookPrices(book);
+    if (mode === 'yeshiva') return eff.yeshiva;
+    if (mode === 'yeshivaGuest') return eff.yeshivaGuest;
+    return eff.general;
   };
 
   const handleAddToPosCart = (book) => {
@@ -1358,6 +1473,138 @@ export default function App() {
     e.target.value = '';
   };
 
+  // ==========================================
+  // מנוע גיבוי אוטומטי ונקודות שחזור (Time Machine)
+  // ==========================================
+  const persistSnapshotsSafely = (snapshotsArr) => {
+    let list = [...snapshotsArr];
+    while (list.length > 0) {
+      try {
+        localStorage.setItem('yhy_erp_auto_snapshots', JSON.stringify(list));
+        setAutoSnapshots(list);
+        return true;
+      } catch {
+        // במקרה של חריגת זיכרון דפדפן, מסירים את הנקודה הישנה ביותר ומנסים שוב
+        list.pop();
+      }
+    }
+    return false;
+  };
+
+  const createAutoSnapshot = (reason = 'גיבוי אוטומטי מתוזמן', silent = true) => {
+    try {
+      const current = latestDataRef.current;
+      // להפחתת נפח בזיכרון המקומי, אם יש קבצים גדולים בהצעות הדפוס שומרים את הנתונים שלהם בבטחה
+      const compactQuotes = (current.printQuotes || []).map(q => {
+        if (q.fileData && String(q.fileData).length > 150000) {
+          return { ...q, fileData: '' };
+        }
+        return q;
+      });
+      const dataPayload = { ...current, printQuotes: compactQuotes };
+      const jsonStr = JSON.stringify(dataPayload);
+      const sizeKB = Math.max(1, Math.round((jsonStr.length * 2) / 1024));
+
+      const snapshot = {
+        id: 'snap_' + Date.now(),
+        createdAt: Date.now(),
+        dateLabel: new Date().toLocaleString('he-IL'),
+        reason,
+        sizeKB,
+        summary: {
+          books: (current.inventory || []).length,
+          suppliers: (current.suppliers || []).length,
+          orders: (current.orders || []).length,
+          quotes: (current.printQuotes || []).length
+        },
+        data: dataPayload
+      };
+
+      const maxKeep = Math.max(1, Number(autoBackupSettings.maxSnapshots || 5));
+      const existing = loadLocal('yhy_erp_auto_snapshots', []);
+      const nextSnapshots = [snapshot, ...existing].slice(0, maxKeep);
+      const saved = persistSnapshotsSafely(nextSnapshots);
+      if (saved && !silent) {
+        showToast('נקודת שחזור נוצרה ונשמרה בהצלחה!', 'success');
+      }
+    } catch (err) {
+      console.warn('Auto-backup snapshot error:', err);
+      if (!silent) showToast('לא ניתן היה לשמור נקודת שחזור בזיכרון הדפדפן.', 'warning');
+    }
+  };
+
+  // טיימר גיבוי אוטומטי רציף (בודק כל דקה האם הגיע הזמן ליצור גיבוי חדש)
+  useEffect(() => {
+    if (!currentUser || !autoBackupSettings.enabled) return;
+
+    const checkAndRunBackup = () => {
+      const intervalMs = Math.max(5, Number(autoBackupSettings.intervalMinutes || 30)) * 60 * 1000;
+      const existing = loadLocal('yhy_erp_auto_snapshots', []);
+      const lastTime = existing[0]?.createdAt || 0;
+      if (Date.now() - lastTime >= intervalMs) {
+        createAutoSnapshot('גיבוי אוטומטי מתוזמן', true);
+      }
+    };
+
+    // בדיקה ראשונית 10 שניות לאחר הכניסה למערכת
+    const initialTimer = setTimeout(checkAndRunBackup, 10000);
+    const intervalId = setInterval(checkAndRunBackup, 60000);
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(intervalId);
+    };
+  }, [currentUser, autoBackupSettings.enabled, autoBackupSettings.intervalMinutes, autoBackupSettings.maxSnapshots]);
+
+  const handleRestoreSnapshot = (snapshot) => {
+    if (!snapshot?.data) return;
+    setConfirmDialog({
+      title: 'שחזור מנקודת גיבוי אוטומטי',
+      message: `האם לשחזר את כל נתוני המערכת לנקודת הזמן ${snapshot.dateLabel}? (${snapshot.summary?.books || 0} ספרים, ${snapshot.summary?.suppliers || 0} ספקים)`,
+      confirmText: 'שחזר נקודה זו',
+      confirmStyle: 'bg-indigo-600 hover:bg-indigo-700',
+      icon: <RotateCcw className="w-6 h-6" />,
+      iconStyle: 'bg-indigo-100 text-indigo-600',
+      onConfirm: () => {
+        const d = snapshot.data;
+        if (d.inventory) setInventoryList(d.inventory);
+        if (d.suppliers) setSuppliersList(d.suppliers);
+        if (d.tasks) setTasksList(d.tasks);
+        if (d.orders) setOrdersList(d.orders);
+        if (d.notes) setNotesList(d.notes);
+        if (d.supplierLogs) setSupplierLogs(d.supplierLogs);
+        if (d.giftLogs) setGiftLogs(d.giftLogs);
+        if (d.posSales) setPosSales(d.posSales);
+        if (d.printQuotes) setPrintQuotes(d.printQuotes);
+        if (d.campaigns) setCampaignsList(d.campaigns);
+        if (d.prCopies) setPrCopies(d.prCopies);
+        showToast(`המערכת שוחזרה בהצלחה לנקודה מתאריך ${snapshot.dateLabel}!`, 'success');
+      }
+    });
+  };
+
+  const handleDownloadSnapshot = (snapshot) => {
+    const payload = {
+      version: '3.1-snapshot',
+      exportedAt: new Date(snapshot.createdAt).toISOString(),
+      reason: snapshot.reason,
+      data: snapshot.data
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `yhy_autobackup_${new Date(snapshot.createdAt).toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('קובץ נקודת השחזור הורד למחשב!', 'success');
+  };
+
+  const handleDeleteSnapshot = (snapId) => {
+    const next = autoSnapshots.filter(s => s.id !== snapId);
+    persistSnapshotsSafely(next);
+    showToast('נקודת השחזור הוסרה.', 'info');
+  };
+
   // --- קטלוג דיגיטלי ---
   const getCatalogBooks = () => [...inventoryList].filter(b => !catalogOnlyInStock || calculateTotalStock(b) > 0).sort((a, b) => a.title.localeCompare(b.title, 'he'));
   const getCatalogBookPrice = (book) => catalogPriceTier === 'supplier' ? Number(book.prices?.supplier || 0) : catalogPriceTier === 'yeshiva' ? Number(book.prices?.yeshiva || book.prices?.general || 0) : Number(book.prices?.general || 0);
@@ -1443,41 +1690,68 @@ export default function App() {
   // סגנונות מערכת מתקדמים למצב לילה (כהה), אנימציות מעברים וגלילה מודרנית
   const themeStyles = `
     @keyframes pageEnter {
-      from { opacity: 0; transform: translateY(10px) scale(0.995); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
+      0% { opacity: 0; transform: translateY(14px) scale(0.99); filter: blur(4px); }
+      100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+    }
+    @keyframes staggerItem {
+      0% { opacity: 0; transform: translateY(10px); }
+      100% { opacity: 1; transform: translateY(0); }
     }
     @keyframes modalPop {
-      from { opacity: 0; transform: translateY(12px) scale(0.96); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
+      0% { opacity: 0; transform: translateY(16px) scale(0.95); filter: blur(3px); }
+      100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
     }
     @keyframes backdropFade {
       from { opacity: 0; }
       to { opacity: 1; }
     }
     @keyframes toastSlideIn {
-      from { opacity: 0; transform: translateY(16px) scale(0.95); }
+      from { opacity: 0; transform: translateY(18px) scale(0.94); }
       to { opacity: 1; transform: translateY(0) scale(1); }
     }
+    @keyframes tabProgressBar {
+      0% { transform: scaleX(0); opacity: 1; }
+      70% { transform: scaleX(0.88); opacity: 1; }
+      100% { transform: scaleX(1); opacity: 0; }
+    }
     .animate-page-enter {
-      animation: pageEnter 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+      animation: pageEnter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .animate-page-enter .grid > div {
+      animation: staggerItem 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .animate-page-enter .grid > div:nth-child(2) { animation-delay: 45ms; }
+    .animate-page-enter .grid > div:nth-child(3) { animation-delay: 90ms; }
+    .animate-page-enter .grid > div:nth-child(4) { animation-delay: 135ms; }
+    .animate-page-enter .grid > div:nth-child(5) { animation-delay: 180ms; }
+    .animate-tab-progress {
+      transform-origin: right center;
+      animation: tabProgressBar 0.36s cubic-bezier(0.22, 1, 0.36, 1) forwards;
     }
     .animate-toast {
-      animation: toastSlideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+      animation: toastSlideIn 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
     }
     .erp-shell .fixed.inset-0 {
-      animation: backdropFade 0.2s ease-out both;
+      animation: backdropFade 0.22s ease-out both;
     }
     .erp-shell .fixed.inset-0 > div {
-      animation: modalPop 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+      animation: modalPop 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
     }
     .erp-shell {
       font-feature-settings: "tnum" on, "lnum" on;
+      background-image: radial-gradient(at 100% 0%, rgba(99, 102, 241, 0.06) 0px, transparent 42%),
+                        radial-gradient(at 0% 100%, rgba(16, 185, 129, 0.05) 0px, transparent 42%);
+      background-attachment: fixed;
+    }
+    .erp-shell.erp-dark {
+      background-image: radial-gradient(at 100% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 45%),
+                        radial-gradient(at 0% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 45%);
     }
     .erp-shell button {
-      transition: transform 0.14s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.18s ease, color 0.18s ease, box-shadow 0.2s ease, border-color 0.18s ease;
+      transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.2s ease, color 0.2s ease, box-shadow 0.22s ease, border-color 0.2s ease;
     }
     .erp-shell button:active:not(:disabled) {
-      transform: scale(0.975);
+      transform: scale(0.97);
     }
     .erp-shell ::-webkit-scrollbar { width: 7px; height: 7px; }
     .erp-shell ::-webkit-scrollbar-track { background: transparent; }
@@ -1896,7 +2170,14 @@ export default function App() {
       )}
 
       {/* Main Content Wrapper */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 relative">
+        {/* פס טעינה דינמי בראש המסך בעת מעבר בין לשוניות */}
+        {isTabTransitioning && (
+          <div className="fixed top-0 inset-x-0 h-[3px] z-50 pointer-events-none print:hidden overflow-hidden">
+            <div className="animate-tab-progress h-full w-full bg-gradient-to-l from-indigo-500 via-violet-500 to-emerald-400 shadow-[0_0_10px_rgba(99,102,241,0.7)]" />
+          </div>
+        )}
+
         {/* Desktop Top Utility Header */}
         <div className={`hidden lg:flex items-center justify-between px-8 py-4 backdrop-blur-xl border-b sticky top-0 z-20 print:hidden transition-colors ${darkMode ? 'bg-[#0B1120]/85 border-slate-800/80' : 'bg-white/80 border-slate-200/80'}`}>
           <div className="flex items-center gap-3">
@@ -1915,13 +2196,44 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2.5">
+            {/* כפתור חיפוש וניווט מהיר (Ctrl+K) */}
+            <button
+              type="button"
+              onClick={() => { setIsCommandOpen(true); setCommandQuery(''); }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-2 ring-1 transition-all ${
+                darkMode
+                  ? 'bg-slate-800/90 text-slate-300 ring-slate-700 hover:bg-slate-700'
+                  : 'bg-slate-100/90 text-slate-500 ring-slate-200/80 hover:bg-white hover:text-slate-800'
+              }`}
+              title="חיפוש וניווט מהיר (Ctrl+K)"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>חיפוש מהיר...</span>
+              <kbd className="text-[10px] font-mono bg-white/80 text-slate-500 px-1.5 py-0.5 rounded-md ring-1 ring-slate-200" dir="ltr">Ctrl+K</kbd>
+            </button>
+
+            {/* חיווי סטטוס גיבוי אוטומטי */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('integrations')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 transition-all ${
+                autoBackupSettings.enabled
+                  ? 'bg-emerald-50/90 text-emerald-700 ring-emerald-200/80 hover:bg-emerald-100'
+                  : 'bg-slate-100 text-slate-500 ring-slate-200 hover:bg-slate-200/70'
+              }`}
+              title={autoSnapshots[0] ? `גיבוי אוטומטי אחרון: ${autoSnapshots[0].dateLabel}` : 'הגדרות גיבוי אוטומטי'}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>{autoBackupSettings.enabled ? (autoSnapshots[0] ? `גובה אוטומטית` : 'גיבוי אוטומטי פעיל') : 'גיבוי אוטומטי כבוי'}</span>
+            </button>
+
             {pendingOrders.length > 0 && activeTab !== 'orders' && (
               <button
                 onClick={() => setActiveTab('orders')}
                 className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
               >
                 <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                {pendingOrders.length} הזמנות ממתינות לאריזה
+                {pendingOrders.length} הזמנות
               </button>
             )}
             {activeTab !== 'pos' && (
@@ -2101,18 +2413,18 @@ export default function App() {
         {/* ==================== 2. POS (QUICK STALL SALES) ==================== */}
         {activeTab === 'pos' && (
           <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70">
-              <div>
+            <div className="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-4 bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70">
+              <div className="min-w-0">
                 <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
-                  <span className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><CreditCard className="w-5 h-5" /></span>
+                  <span className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0"><CreditCard className="w-5 h-5" /></span>
                   קופה מהירה למכירות בישיבה / דוכן
                 </h2>
                 <p className="text-slate-500 text-xs mt-1">בחר ספרים להוספה לסל — המלאי יופחת אוטומטית מהמחסן הראשי</p>
               </div>
-              <div className="bg-slate-100 p-1 rounded-xl flex items-center ring-1 ring-slate-200/80 w-full sm:w-auto">
-                <button onClick={() => setPosPriceMode('yeshiva')} className={`flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${posPriceMode === 'yeshiva' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>תלמיד (ראשון)</button>
-                <button onClick={() => setPosPriceMode('yeshivaGuest')} className={`flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${posPriceMode === 'yeshivaGuest' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>ישיבה (שני/אורח)</button>
-                <button onClick={() => setPosPriceMode('general')} className={`flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${posPriceMode === 'general' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>אתר (צרכן)</button>
+              <div className="bg-slate-100 p-1.5 rounded-xl grid grid-cols-3 gap-1 ring-1 ring-slate-200/80 w-full xl:w-auto shrink-0 overflow-hidden">
+                <button onClick={() => setPosPriceMode('yeshiva')} className={`px-2.5 sm:px-3.5 py-2 rounded-lg text-xs font-bold whitespace-nowrap text-center transition-all ${posPriceMode === 'yeshiva' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>תלמיד ראשון</button>
+                <button onClick={() => setPosPriceMode('yeshivaGuest')} className={`px-2.5 sm:px-3.5 py-2 rounded-lg text-xs font-bold whitespace-nowrap text-center transition-all ${posPriceMode === 'yeshivaGuest' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>שני / אורח</button>
+                <button onClick={() => setPosPriceMode('general')} className={`px-2.5 sm:px-3.5 py-2 rounded-lg text-xs font-bold whitespace-nowrap text-center transition-all ${posPriceMode === 'general' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>צרכן (אתר)</button>
               </div>
             </div>
 
@@ -2388,8 +2700,9 @@ export default function App() {
                       const totalStock = calculateTotalStock(book);
                       const isLow = totalStock < Number(book.threshold || 30);
                       const cost = Number(book.productionCost || 0);
-                      const webPrice = Number(book.prices?.general || 0);
-                      const supPrice = Number(book.prices?.supplier || 0);
+                      const effPrices = getEffectiveBookPrices(book);
+                      const webPrice = effPrices.general;
+                      const supPrice = effPrices.supplier;
                       const webProfit = webPrice > 0 ? webPrice - cost : 0;
                       const webMargin = webPrice > 0 ? Math.round((webProfit / webPrice) * 100) : 0;
                       const supProfit = supPrice > 0 ? supPrice - cost : 0;
@@ -2409,8 +2722,8 @@ export default function App() {
                               <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded-md">אתר ₪{webPrice}</span>
                               <span className="bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-md">ספק ₪{supPrice}</span>
                               <span className="bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-md">
-                                תלמיד ₪{Number(book.prices?.yeshiva || 0)}
-                                {Number(book.prices?.yeshivaGuest || 0) > 0 && Number(book.prices?.yeshivaGuest) !== Number(book.prices?.yeshiva) ? ` / אורח ₪${Number(book.prices?.yeshivaGuest)}` : ''}
+                                תלמיד ₪{effPrices.yeshiva}
+                                {effPrices.yeshivaGuest > 0 && effPrices.yeshivaGuest !== effPrices.yeshiva ? ` / שני ₪${effPrices.yeshivaGuest}` : ''}
                               </span>
                             </div>
                           </td>
@@ -2917,12 +3230,155 @@ export default function App() {
         {/* ==================== 9. INTEGRATIONS & BACKUP ==================== */}
         {activeTab === 'integrations' && (
           <div className="space-y-6">
+            {/* מנוע גיבוי אוטומטי ונקודות שחזור */}
+            <div className="bg-white rounded-3xl p-6 shadow-xs ring-1 ring-emerald-200/80 space-y-5">
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-100 pb-5">
+                <div className="flex items-start gap-3.5">
+                  <div className={`p-3.5 rounded-2xl ring-1 ${autoBackupSettings.enabled ? 'bg-emerald-50 text-emerald-600 ring-emerald-200' : 'bg-slate-100 text-slate-500 ring-slate-200'}`}>
+                    <ShieldCheck className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-extrabold text-slate-900">גיבוי אוטומטי ונקודות שחזור</h3>
+                      <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${autoBackupSettings.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {autoBackupSettings.enabled ? 'פעיל' : 'מושהה'}
+                      </span>
+                    </div>
+                    <p className="text-slate-500 text-sm mt-0.5">
+                      המערכת שומרת אוטומטית נקודות שחזור של כל הנתונים לפי התדירות שתבחר, כך שתמיד אפשר לחזור לאחור במקרה של תקלה.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => createAutoSnapshot('נקודת שחזור ידנית', false)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-sm shadow-emerald-600/20"
+                  >
+                    <HardDrive className="w-4 h-4" /> צור נקודת שחזור עכשיו
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAutoBackupSettings(prev => ({ ...prev, enabled: !prev.enabled }))}
+                    className={`px-4 py-2.5 rounded-xl font-bold text-xs ring-1 transition-all ${
+                      autoBackupSettings.enabled
+                        ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 ring-slate-200'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white ring-indigo-600'
+                    }`}
+                  >
+                    {autoBackupSettings.enabled ? 'השהה גיבוי אוטומטי' : 'הפעל גיבוי אוטומטי'}
+                  </button>
+                </div>
+              </div>
+
+              {/* הגדרות תדירות וכמות שמירה */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-slate-50/90 p-4 rounded-2xl ring-1 ring-slate-200/70 space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-600">תדירות גיבוי אוטומטי</label>
+                  <select
+                    value={autoBackupSettings.intervalMinutes}
+                    onChange={e => setAutoBackupSettings(prev => ({ ...prev, intervalMinutes: Number(e.target.value) }))}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-sm font-bold outline-none"
+                  >
+                    <option value={15}>כל 15 דקות</option>
+                    <option value={30}>כל 30 דקות (מומלץ)</option>
+                    <option value={60}>כל שעה</option>
+                    <option value={240}>כל 4 שעות</option>
+                    <option value={1440}>פעם ביום</option>
+                  </select>
+                </div>
+
+                <div className="bg-slate-50/90 p-4 rounded-2xl ring-1 ring-slate-200/70 space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-600">מספר נקודות שחזור לשמירה</label>
+                  <select
+                    value={autoBackupSettings.maxSnapshots}
+                    onChange={e => setAutoBackupSettings(prev => ({ ...prev, maxSnapshots: Number(e.target.value) }))}
+                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-sm font-bold outline-none"
+                  >
+                    <option value={3}>3 נקודות אחרונות</option>
+                    <option value={5}>5 נקודות אחרונות (מומלץ)</option>
+                    <option value={10}>10 נקודות אחרונות</option>
+                  </select>
+                </div>
+
+                <div className="bg-indigo-50/70 p-4 rounded-2xl ring-1 ring-indigo-100 flex flex-col justify-center">
+                  <span className="text-xs font-bold text-indigo-700">גיבוי אוטומטי אחרון</span>
+                  <span className="text-base font-extrabold text-indigo-900 mt-1">
+                    {autoSnapshots[0] ? autoSnapshots[0].dateLabel : 'טרם נוצר גיבוי'}
+                  </span>
+                  <span className="text-[11px] text-indigo-600 mt-0.5">
+                    נשמרו {autoSnapshots.length} מתוך {autoBackupSettings.maxSnapshots} נקודות
+                  </span>
+                </div>
+              </div>
+
+              {/* רשימת נקודות השחזור */}
+              <div className="space-y-2.5">
+                <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                  <History className="w-4 h-4 text-indigo-600" /> היסטוריית נקודות שחזור זמינות ({autoSnapshots.length})
+                </h4>
+                {autoSnapshots.length === 0 ? (
+                  <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl p-6 text-center text-xs text-slate-400">
+                    עדיין לא נשמרו נקודות שחזור. לחץ על "צור נקודת שחזור עכשיו" או המתן לגיבוי האוטומטי הראשון.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {autoSnapshots.map((snap, idx) => (
+                      <div key={snap.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-slate-50/90 hover:bg-indigo-50/30 rounded-2xl ring-1 ring-slate-200/70 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-extrabold text-xs shrink-0 ${idx === 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200/80 text-slate-600'}`}>
+                            {idx === 0 ? <CheckCircle className="w-4 h-4" /> : `#${idx + 1}`}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900 text-sm">{snap.dateLabel}</span>
+                              <span className="text-[10px] font-bold bg-white ring-1 ring-slate-200 text-slate-600 px-2 py-0.5 rounded-full">{snap.reason}</span>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {snap.summary?.books || 0} ספרים · {snap.summary?.suppliers || 0} ספקים · {snap.summary?.orders || 0} הזמנות · {snap.sizeKB || 1}KB
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleDownloadSnapshot(snap)}
+                            className="bg-white hover:bg-slate-100 text-slate-700 ring-1 ring-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1"
+                            title="הורד קובץ JSON"
+                          >
+                            <Download className="w-3.5 h-3.5" /> הורד
+                          </button>
+                          {userRole === 'admin' && (
+                            <>
+                              <button
+                                onClick={() => handleRestoreSnapshot(snap)}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 shadow-2xs"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" /> שחזר
+                              </button>
+                              <button
+                                onClick={() => handleDeleteSnapshot(snap.id)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl"
+                                title="מחק נקודה"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* גיבוי ושחזור ידני לקובץ חיצוני */}
             <div className="bg-white rounded-2xl p-6 shadow-xs ring-1 ring-indigo-200/70 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div className="flex items-start gap-3.5">
                 <div className="p-3.5 bg-indigo-50 text-indigo-600 rounded-2xl ring-1 ring-indigo-100"><Database className="w-6 h-6" /></div>
                 <div>
-                  <h3 className="text-lg font-extrabold text-slate-900">גיבוי ושחזור מלא של כל נתוני המערכת (JSON)</h3>
-                  <p className="text-slate-500 text-sm mt-0.5">הורד קובץ גיבוי אחד עם כל המלאי, הספקים, ההזמנות, הצעות הדפוס והפתקים.</p>
+                  <h3 className="text-lg font-extrabold text-slate-900">גיבוי ושחזור ידני לקובץ מחשב (JSON)</h3>
+                  <p className="text-slate-500 text-sm mt-0.5">הורד קובץ גיבוי חיצוני לשמירה במחשב או ב-Google Drive.</p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2.5">
@@ -4042,6 +4498,101 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Command Palette / Quick Search Modal (Ctrl+K) */}
+      {isCommandOpen && (() => {
+        const q = commandQuery.trim().toLowerCase();
+        const matchingTabs = navItems.filter(i => !q || i.label.toLowerCase().includes(q));
+        const matchingBooks = q ? inventoryList.filter(b => (b.title || '').toLowerCase().includes(q)).slice(0, 5) : [];
+        const matchingSuppliers = q ? suppliersList.filter(s => (s.name || '').toLowerCase().includes(q)).slice(0, 4) : [];
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-sm z-[95] flex items-start justify-center pt-[12vh] p-4" onClick={() => setIsCommandOpen(false)}>
+            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-xl overflow-hidden" dir="rtl" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
+                <Search className="w-5 h-5 text-indigo-500 shrink-0" />
+                <input
+                  type="text"
+                  autoFocus
+                  value={commandQuery}
+                  onChange={e => setCommandQuery(e.target.value)}
+                  placeholder="קפוץ למסך, חפש ספר או ספק, או הפעל פעולה..."
+                  className="flex-1 bg-transparent text-sm font-medium outline-none"
+                />
+                <button onClick={() => setIsCommandOpen(false)} className="text-[11px] font-mono bg-slate-100 text-slate-500 px-2 py-1 rounded-lg">ESC</button>
+              </div>
+              <div className="max-h-[60vh] overflow-y-auto p-3 space-y-4">
+                {matchingTabs.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="px-3 text-[11px] font-bold text-slate-400">ניווט מהיר בין מסכים</p>
+                    {matchingTabs.map(item => {
+                      const Icon = item.icon;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => { setActiveTab(item.id); setIsCommandOpen(false); }}
+                          className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl hover:bg-indigo-50/80 text-sm font-bold text-slate-700 hover:text-indigo-700 transition-colors"
+                        >
+                          <span className="flex items-center gap-3"><Icon className="w-4 h-4 text-indigo-500" /> {item.label}</span>
+                          <span className="text-[11px] text-slate-400 font-normal">{item.group}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {matchingBooks.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="px-3 text-[11px] font-bold text-slate-400">ספרים במלאי</p>
+                    {matchingBooks.map(book => (
+                      <button
+                        key={book.id}
+                        onClick={() => { setSearchQuery(book.title); setActiveTab('inventory'); setIsCommandOpen(false); }}
+                        className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl hover:bg-emerald-50/70 text-sm text-slate-700 transition-colors"
+                      >
+                        <span className="font-bold flex items-center gap-2.5"><BookOpen className="w-4 h-4 text-emerald-600" /> {book.title}</span>
+                        <span className="text-xs text-slate-500">במחסן: {book.publisherStock}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {matchingSuppliers.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="px-3 text-[11px] font-bold text-slate-400">ספקים וחנויות</p>
+                    {matchingSuppliers.map(sup => (
+                      <button
+                        key={sup.id}
+                        onClick={() => { setSupplierSearch(sup.name); setActiveTab('suppliers'); setIsCommandOpen(false); }}
+                        className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl hover:bg-amber-50/70 text-sm text-slate-700 transition-colors"
+                      >
+                        <span className="font-bold flex items-center gap-2.5"><Truck className="w-4 h-4 text-amber-600" /> {sup.name}</span>
+                        <span className="text-xs text-slate-500">{sup.phone || ''}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="space-y-1 pt-2 border-t border-slate-100">
+                  <p className="px-3 text-[11px] font-bold text-slate-400">פעולות מהירות</p>
+                  <button
+                    onClick={() => { createAutoSnapshot('נקודת שחזור מהירה', false); setIsCommandOpen(false); }}
+                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl hover:bg-emerald-50 text-sm font-bold text-emerald-700 transition-colors"
+                  >
+                    <Zap className="w-4 h-4" /> צור נקודת שחזור (גיבוי) עכשיו
+                  </button>
+                  <button
+                    onClick={() => { setDarkMode(!darkMode); setIsCommandOpen(false); }}
+                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl hover:bg-indigo-50 text-sm font-bold text-indigo-700 transition-colors"
+                  >
+                    {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />} החלף ל{darkMode ? 'מצב יום (בהיר)' : 'מצב לילה (כהה)'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
