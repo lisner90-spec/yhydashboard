@@ -2370,7 +2370,7 @@ export default function App() {
         </div>
 
         {/* Main Content Area */}
-        <main className="flex-1 p-4 pb-24 md:p-6 lg:p-8 lg:pb-10 max-w-[1600px] w-full mx-auto overflow-x-hidden">
+        <main className="flex-1 p-4 pb-28 md:p-6 lg:p-8 lg:pb-10 max-w-[1600px] w-full mx-auto overflow-x-hidden">
           <div key={activeTab} className="animate-page-enter">
         {/* ==================== 1. DASHBOARD ==================== */}
         {activeTab === 'dashboard' && (
@@ -2632,18 +2632,55 @@ export default function App() {
         {/* ==================== 3. STORE ORDERS ==================== */}
         {activeTab === 'orders' && (
           <div className="space-y-5">
-            <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
-                  <span className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><ShoppingCart className="w-5 h-5" /></span>
-                  הזמנות מהחנות (אתר הישיבה)
-                </h2>
-                <p className="text-xs text-slate-500 mt-1">הזמנות שנכנסות מהאתר וממתינות לאריזה ומשלוח</p>
+            <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
+                    <span className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><ShoppingCart className="w-5 h-5" /></span>
+                    הזמנות מהחנות (אתר הישיבה)
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">הזמנות שנכנסות מהאתר וממתינות לאריזה ומשלוח</p>
+                </div>
+                <div className="bg-slate-100 p-1 rounded-xl flex gap-1 ring-1 ring-slate-200/80 w-full sm:w-auto">
+                  <button onClick={() => setOrdersSubTab('pending')} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-bold transition-all ${ordersSubTab === 'pending' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>הזמנות פתוחות ({pendingOrders.length})</button>
+                  <button onClick={() => setOrdersSubTab('shipped')} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-bold transition-all ${ordersSubTab === 'shipped' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>הזמנות שנשלחו ({shippedOrders.length})</button>
+                </div>
               </div>
-              <div className="bg-slate-100 p-1 rounded-xl flex gap-1 ring-1 ring-slate-200/80">
-                <button onClick={() => setOrdersSubTab('pending')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${ordersSubTab === 'pending' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>הזמנות פתוחות ({pendingOrders.length})</button>
-                <button onClick={() => setOrdersSubTab('shipped')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${ordersSubTab === 'shipped' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>הזמנות שנשלחו ({shippedOrders.length})</button>
-              </div>
+
+              {userRole === 'admin' && (
+                <div className="pt-3 border-t border-slate-100 space-y-2.5">
+                  <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={webhookCheckState.loading}
+                      onClick={handlePingWebhook}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 ring-1 ring-slate-200"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${webhookCheckState.loading ? 'animate-spin' : ''}`} /> בדוק חיבור שרת
+                    </button>
+                    <button
+                      type="button"
+                      disabled={sendingTestOrder}
+                      onClick={handleSendTestOrder}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs"
+                    >
+                      <Send className="w-3.5 h-3.5" /> {sendingTestOrder ? 'שולח...' : 'שלח הזמנת ניסיון'}
+                    </button>
+                  </div>
+                  {webhookCheckState.message && (
+                    <div className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                      webhookCheckState.status === 'ok'
+                        ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                        : webhookCheckState.status === 'error'
+                          ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
+                          : 'bg-slate-50 text-slate-600 ring-1 ring-slate-200'
+                    }`}>
+                      {webhookCheckState.status === 'ok' ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+                      <span>{webhookCheckState.message}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3381,6 +3418,70 @@ export default function App() {
         {/* ==================== 9. INTEGRATIONS & BACKUP ==================== */}
         {activeTab === 'integrations' && (
           <div className="space-y-6">
+            {/* אוטומציה וחיבור Webhook לחנות WooCommerce (בראש העמוד לנוחות מקסימלית בנייד) */}
+            <div className="bg-white rounded-3xl p-5 md:p-6 shadow-xs ring-1 ring-indigo-200/80 space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-amber-500 shrink-0" /> אוטומציה וחיבור Webhook לחנות WooCommerce
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">הזמנות חדשות מהאתר יקפצו מיד ללשונית "הזמנות חנות" ויפחיתו אוטומטית מהמלאי (עם הגנה מכפילויות).</p>
+                </div>
+                <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto shrink-0">
+                  <button
+                    type="button"
+                    disabled={webhookCheckState.loading}
+                    onClick={handlePingWebhook}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 ring-1 ring-slate-200"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${webhookCheckState.loading ? 'animate-spin' : ''}`} /> בדוק חיבור שרת
+                  </button>
+                  <button
+                    type="button"
+                    disabled={sendingTestOrder}
+                    onClick={handleSendTestOrder}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs"
+                  >
+                    <Send className="w-3.5 h-3.5" /> {sendingTestOrder ? 'שולח...' : 'שלח הזמנת ניסיון'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 bg-[#0F172A] text-emerald-400 p-3.5 rounded-xl font-mono text-xs ring-1 ring-slate-800" dir="ltr">
+                <span className="flex-1 truncate select-all">{getWebhookUrl()}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(getWebhookUrl());
+                    showToast('כתובת ה-Webhook הועתקה!', 'success');
+                  }}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded-lg text-[11px] font-sans font-bold flex items-center gap-1 shrink-0"
+                >
+                  <Copy className="w-3.5 h-3.5" /> העתק
+                </button>
+              </div>
+
+              {webhookCheckState.message && (
+                <div className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                  webhookCheckState.status === 'ok'
+                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                    : webhookCheckState.status === 'error'
+                      ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
+                      : 'bg-slate-50 text-slate-600 ring-1 ring-slate-200'
+                }`}>
+                  {webhookCheckState.status === 'ok' ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+                  <span>{webhookCheckState.message}</span>
+                </div>
+              )}
+
+              <div className="bg-slate-50/90 p-4 rounded-2xl ring-1 ring-slate-200/70 text-xs text-slate-600 space-y-1.5">
+                <p className="font-extrabold text-slate-800">הגדרות נדרשות בוורדפרס (WooCommerce ← הגדרות ← מתקדם ← Webhooks):</p>
+                <p>1. <strong>סטטוס (Status):</strong> פעיל (Active)</p>
+                <p>2. <strong>נושא (Topic):</strong> הזמנה נוצרה (Order created)</p>
+                <p>3. <strong>כתובת מסירה (Delivery URL):</strong> הדבק את הכתובת שמופיעה למעלה ושמור.</p>
+              </div>
+            </div>
+
             {/* מנוע גיבוי אוטומטי ונקודות שחזור */}
             <div className="bg-white rounded-3xl p-6 shadow-xs ring-1 ring-emerald-200/80 space-y-5">
               <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-100 pb-5">
@@ -3545,70 +3646,6 @@ export default function App() {
                   <Upload className="w-4 h-4" /> שחזר מקובץ גיבוי
                   <input type="file" accept=".json" onChange={handleImportBackupFile} className="hidden" />
                 </label>
-              </div>
-            </div>
-
-            {/* אוטומציה וחיבור Webhook לחנות WooCommerce */}
-            <div className="bg-white rounded-2xl p-6 shadow-xs ring-1 ring-slate-200/70 space-y-4">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <div>
-                  <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
-                    <Zap className="w-5 h-5 text-amber-500" /> אוטומציה וחיבור Webhook לחנות WooCommerce
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">הזמנות חדשות מהאתר יקפצו מיד ללשונית "הזמנות חנות" ויפחיתו אוטומטית מהמלאי (עם הגנה מכפילויות).</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={webhookCheckState.loading}
-                    onClick={handlePingWebhook}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-slate-200"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${webhookCheckState.loading ? 'animate-spin' : ''}`} /> בדוק חיבור שרת
-                  </button>
-                  <button
-                    type="button"
-                    disabled={sendingTestOrder}
-                    onClick={handleSendTestOrder}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs"
-                  >
-                    <Send className="w-3.5 h-3.5" /> {sendingTestOrder ? 'שולח...' : 'שלח הזמנת ניסיון'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 bg-[#0F172A] text-emerald-400 p-3.5 rounded-xl font-mono text-xs ring-1 ring-slate-800" dir="ltr">
-                <span className="flex-1 truncate select-all">{getWebhookUrl()}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard?.writeText(getWebhookUrl());
-                    showToast('כתובת ה-Webhook הועתקה!', 'success');
-                  }}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded-lg text-[11px] font-sans font-bold flex items-center gap-1 shrink-0"
-                >
-                  <Copy className="w-3.5 h-3.5" /> העתק
-                </button>
-              </div>
-
-              {webhookCheckState.message && (
-                <div className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
-                  webhookCheckState.status === 'ok'
-                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                    : webhookCheckState.status === 'error'
-                      ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
-                      : 'bg-slate-50 text-slate-600 ring-1 ring-slate-200'
-                }`}>
-                  {webhookCheckState.status === 'ok' ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
-                  <span>{webhookCheckState.message}</span>
-                </div>
-              )}
-
-              <div className="bg-slate-50/90 p-4 rounded-2xl ring-1 ring-slate-200/70 text-xs text-slate-600 space-y-1.5">
-                <p className="font-extrabold text-slate-800">הגדרות נדרשות בוורדפרס (WooCommerce ← הגדרות ← מתקדם ← Webhooks):</p>
-                <p>1. <strong>סטטוס (Status):</strong> פעיל (Active)</p>
-                <p>2. <strong>נושא (Topic):</strong> הזמנה נוצרה (Order created)</p>
-                <p>3. <strong>כתובת מסירה (Delivery URL):</strong> הדבק את הכתובת שמופיעה למעלה ושמור.</p>
               </div>
             </div>
           </div>
