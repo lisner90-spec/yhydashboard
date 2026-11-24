@@ -264,11 +264,11 @@ export default function App() {
   const [deductFromWarehouse, setDeductFromWarehouse] = useState(true);
   const [invoiceNotes, setInvoiceNotes] = useState('');
 
-  // מחשבון קניית ספרים מהיר (ללא הזמנה)
+  // מחשבון קניית ספרים מהיר (ללא הזמנה — כולל עריכת מחיר לכל ספר)
   const [isPurchaseCalcOpen, setIsPurchaseCalcOpen] = useState(false);
   const [calcPriceTier, setCalcPriceTier] = useState('supplier');
   const [calcDiscountPct, setCalcDiscountPct] = useState(0);
-  const [calcItems, setCalcItems] = useState([{ bookId: '', quantity: 10 }]);
+  const [calcItems, setCalcItems] = useState([{ bookId: '', quantity: 10, customPrice: '' }]);
 
   // קליטת הזמנה וקבלה אוטומטית מהודעת טקסט של ספק
   const [isParseOrderModalOpen, setIsParseOrderModalOpen] = useState(false);
@@ -338,7 +338,15 @@ export default function App() {
 
   // --- Advanced Suite States (Sets, Barcode Scanner, QR Payment, Daily Summary, Royalties) ---
   const [autoDecomposeSets, setAutoDecomposeSets] = useState(() => loadLocal('yhy_erp_decompose_sets', true));
-  const [paymentLinkBase, setPaymentLinkBase] = useState(() => loadLocal('yhy_erp_payment_link', 'https://www.bitpay.co.il/app/'));
+  const DEFAULT_PAYBOX_LINK = 'https://links.payboxapp.com/MnccydNGLUb';
+  const DEFAULT_CREDIT_BIT_LINK = 'https://donation.asakimerp.com/Campaing/?CampaingID=50936';
+  const [paymentLinks, setPaymentLinks] = useState(() =>
+    loadLocal('yhy_erp_payment_links', {
+      paybox: DEFAULT_PAYBOX_LINK,
+      creditBit: DEFAULT_CREDIT_BIT_LINK
+    })
+  );
+  const [selectedPaymentChannel, setSelectedPaymentChannel] = useState('creditBit'); // 'creditBit' | 'paybox'
   const [paymentModalData, setPaymentModalData] = useState(null);
   const [isDailyReportOpen, setIsDailyReportOpen] = useState(false);
   const [isRoyaltiesModalOpen, setIsRoyaltiesModalOpen] = useState(false);
@@ -351,8 +359,8 @@ export default function App() {
     try { localStorage.setItem('yhy_erp_decompose_sets', JSON.stringify(autoDecomposeSets)); } catch {}
   }, [autoDecomposeSets]);
   useEffect(() => {
-    try { localStorage.setItem('yhy_erp_payment_link', paymentLinkBase); } catch {}
-  }, [paymentLinkBase]);
+    try { localStorage.setItem('yhy_erp_payment_links', JSON.stringify(paymentLinks)); } catch {}
+  }, [paymentLinks]);
 
   // --- Auto-Backup System States ---
   const [autoBackupSettings, setAutoBackupSettings] = useState(() =>
@@ -492,487 +500,259 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem('yhy_erp_dashboard_adj', JSON.stringify(dashboardAdjustments)); } catch {} }, [dashboardAdjustments]);
 
   // ==========================================
-  // התחברות וניהול משתמשים
+  // פונקציות ליבה: מלאי, סטים, ספקים והתחברות
   // ==========================================
+  function calculateSuppliersStock(book) {
+    return (book?.breakdown || []).reduce((sum, row) => sum + Math.max(0, Number(row.amount || 0)), 0);
+  }
+
+  function calculateTotalStock(book) {
+    return Math.max(0, Number(book?.publisherStock || 0)) + calculateSuppliersStock(book);
+  }
+
+  function getPossibleSetsFromComponents(setBook, inv = inventoryList) {
+    const compIds = Array.isArray(setBook?.setComponents) ? setBook.setComponents.filter(Boolean) : [];
+    if (compIds.length === 0) return null;
+    const stocks = compIds.map(cid => {
+      const comp = inv.find(b => b.id === cid);
+      return comp ? Math.max(0, Number(comp.publisherStock || 0)) : 0;
+    });
+    return Math.min(...stocks);
+  }
+
+  function applySaleInventoryDeduction(inv, soldEntries) {
+    const mapById = new Map(inv.map(b => [b.id, { ...b }]));
+    const touchedIds = new Set();
+    const now = Date.now();
+
+    for (const entry of soldEntries) {
+      const qty = Math.max(0, Number(entry.qty ?? entry.quantity ?? 0));
+      if (!entry.bookId || qty <= 0) continue;
+      const target = mapById.get(entry.bookId);
+      if (!target) continue;
+
+      const compIds = Array.isArray(target.setComponents) ? target.setComponents.filter(Boolean) : [];
+      const shouldDecompose = autoDecomposeSets && (target.isSet || compIds.length > 0) && compIds.length > 0;
+
+      if (shouldDecompose) {
+        for (const cid of compIds) {
+          const comp = mapById.get(cid);
+          if (comp) {
+            comp.publisherStock = Math.max(0, Number(comp.publisherStock || 0) - qty);
+            comp.updatedAt = now;
+            touchedIds.add(cid);
+          }
+        }
+      } else {
+        target.publisherStock = Math.max(0, Number(target.publisherStock || 0) - qty);
+        target.updatedAt = now;
+        touchedIds.add(target.id);
+      }
+    }
+
+    const nextInventory = inv.map(b => mapById.get(b.id) || b);
+    const updatedBooks = Array.from(touchedIds).map(id => mapById.get(id)).filter(Boolean);
+    return { nextInventory, updatedBooks };
+  }
+
+  function getLogRemainingDebt(log) {
+    if (!log || log.type === 'return') return 0;
+    const total = Math.max(0, Number(log.totalAmount || 0));
+    if (total === 0) return 0;
+    const status = log.paymentStatus || 'unpaid';
+    if (status === 'paid') return 0;
+    if (status === 'partial') return Math.max(0, total - Math.max(0, Number(log.paidAmount || 0)));
+    return total;
+  }
+
+  function getSupplierInventoryItems(supplierName) {
+    if (!supplierName) return [];
+    const items = [];
+    for (const book of inventoryList) {
+      const row = (book.breakdown || []).find(r => (r.location || '').trim() === supplierName.trim() && Number(r.amount) > 0);
+      if (row) {
+        items.push({
+          bookId: book.id,
+          title: book.title,
+          amount: Number(row.amount || 0),
+          supplierPrice: Number(book.prices?.supplier || 0)
+        });
+      }
+    }
+    return items.sort((a, b) => a.title.localeCompare(b.title, 'he'));
+  }
+
+  function getSupplierOpenDebt(supplierName) {
+    return supplierLogs
+      .filter(l => (l.supplierName || '').trim() === (supplierName || '').trim())
+      .reduce((sum, l) => sum + getLogRemainingDebt(l), 0);
+  }
+
+  // --- התחברות וניהול משתמשים ---
   const handleLogin = (e) => {
     e.preventDefault();
-    const uname = loginForm.username.trim().toLowerCase();
-    const pwd = loginForm.password;
-    const found = usersList.find(
-      u => (u.username || '').trim().toLowerCase() === uname && String(u.password) === String(pwd)
-    );
+    const u = loginForm.username.trim().toLowerCase();
+    const p = loginForm.password;
+    const found = usersList.find(user => (user.username || '').trim().toLowerCase() === u && user.password === p);
     if (!found) {
-      setLoginError('שם משתמש או סיסמה שגויים. אנא נסה שנית.');
+      setLoginError('שם משתמש או סיסמה שגויים.');
       return;
     }
-    setCurrentUser({ id: found.id, username: found.username, name: found.name, role: found.role });
+    setCurrentUser(found);
     setLoginForm({ username: '', password: '' });
     setLoginError('');
-    setActiveTab('dashboard');
-    showToast(`שלום ${found.name}, התחברת בהצלחה!`, 'success');
+    showToast(`ברוך הבא, ${found.name}!`, 'success');
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
     setMobileMenuOpen(false);
-    setActiveTab('dashboard');
-    showToast('התנתקת מהמערכת.', 'info');
   };
 
   const handleAddUser = async (e) => {
     e.preventDefault();
-    const uname = newUserForm.username.trim().toLowerCase();
-    if (!newUserForm.name.trim() || !uname || !newUserForm.password) return;
-    if (usersList.some(u => (u.username || '').trim().toLowerCase() === uname)) {
-      showToast('שם המשתמש כבר קיים במערכת.', 'warning');
+    if (!newUserForm.name.trim() || !newUserForm.username.trim() || !newUserForm.password) return;
+    const exists = usersList.some(u => (u.username || '').toLowerCase() === newUserForm.username.trim().toLowerCase());
+    if (exists) {
+      showToast('שם משתמש זה כבר קיים במערכת.', 'error');
       return;
     }
     const userObj = {
       name: newUserForm.name.trim(),
-      username: uname,
+      username: newUserForm.username.trim(),
       password: newUserForm.password,
-      email: (newUserForm.email || '').trim(),
-      phone: (newUserForm.phone || '').trim(),
+      email: newUserForm.email.trim(),
+      phone: newUserForm.phone.trim(),
       role: newUserForm.role,
       createdAt: Date.now()
     };
     if (db && dbConnected) {
-      try {
-        await addDoc(getCollRef('users'), userObj);
-      } catch {
-        setUsersList(prev => [...prev, { ...userObj, id: 'user_' + Date.now() }]);
-      }
+      try { await addDoc(getCollRef('users'), userObj); } catch { setUsersList(prev => [...prev, { ...userObj, id: 'user_' + Date.now() }]); }
     } else {
       setUsersList(prev => [...prev, { ...userObj, id: 'user_' + Date.now() }]);
     }
     setNewUserForm({ name: '', username: '', password: '', email: '', phone: '', role: 'viewer' });
-    showToast(`המשתמש "${userObj.name}" נוסף בהצלחה!`, 'success');
+    showToast(`המשתמש "${userObj.name}" נוצר בהצלחה!`, 'success');
   };
 
   const handleSaveEditUser = async (e) => {
     e.preventDefault();
-    if (!editingUser || !editingUser.name.trim() || !editingUser.username.trim()) return;
-    const uname = editingUser.username.trim().toLowerCase();
-    const duplicate = usersList.find(u => u.id !== editingUser.id && (u.username || '').trim().toLowerCase() === uname);
-    if (duplicate) {
-      showToast('שם משתמש זה כבר תפוס.', 'warning');
-      return;
-    }
-    const updatedFields = {
+    if (!editingUser) return;
+    const updated = {
+      ...editingUser,
       name: editingUser.name.trim(),
-      username: uname,
+      username: editingUser.username.trim(),
       email: (editingUser.email || '').trim(),
       phone: (editingUser.phone || '').trim(),
-      role: editingUser.role,
-      ...(editingUser.newPassword ? { password: editingUser.newPassword } : {})
+      password: editingUser.newPassword ? editingUser.newPassword : editingUser.password
     };
-    setUsersList(prev => prev.map(u => u.id === editingUser.id ? { ...u, ...updatedFields } : u));
-    if (currentUser?.id === editingUser.id) {
-      setCurrentUser(prev => ({ ...prev, name: updatedFields.name, username: updatedFields.username, role: updatedFields.role }));
-    }
-    if (db && dbConnected && editingUser.id) {
-      try { await updateDoc(getDocRef('users', editingUser.id), updatedFields); } catch {}
+    delete updated.newPassword;
+    setUsersList(prev => prev.map(u => u.id === updated.id ? updated : u));
+    if (currentUser?.id === updated.id) setCurrentUser(updated);
+    if (db && dbConnected && updated.id) {
+      try { await updateDoc(getDocRef('users', updated.id), updated); } catch {}
     }
     setEditingUser(null);
-    showToast('פרטי המשתמש עודכנו בהצלחה!', 'success');
+    showToast('פרטי המשתמש עודכנו!', 'success');
   };
 
-  const buildUserCredentialsMessage = (user) => {
-    const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
-    const roleLabel = user.role === 'admin' ? 'מנהל מערכת (גישה מלאה)' : 'צופה בלבד';
-    return (
-      `שלום ${user.name},\n\n` +
-      `להלן פרטי ההתחברות שלך למערכת הניהול של הוצאת ספרי ישיבת ירוחם:\n` +
-      (appUrl ? `🔗 קישור למערכת: ${appUrl}\n` : '') +
-      `👤 שם משתמש: ${user.username}\n` +
-      `🔑 סיסמה: ${user.password}\n` +
-      `🛡️ הרשאה: ${roleLabel}\n\n` +
-      `בהצלחה!`
-    );
-  };
-
-  const handleSendCredentialsEmail = (user) => {
-    const subject = 'פרטי התחברות — מערכת הוצאת ספרי ישיבת ירוחם';
-    const body = buildUserCredentialsMessage(user);
-    window.location.href = `mailto:${user.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    showToast(`נפתח חלון מייל עם פרטי ההתחברות של ${user.name}.`, 'info');
-  };
-
-  const handleSendCredentialsWhatsApp = (user) => {
-    const msg = buildUserCredentialsMessage(user);
-    const waPhone = formatWhatsAppPhone(user.phone);
-    const url = waPhone
-      ? `https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`
-      : `https://wa.me/?text=${encodeURIComponent(msg)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
-    showToast(`נפתח וואטסאפ לשליחת פרטי ההתחברות של ${user.name}.`, 'success');
-  };
-
-  const handleDeleteUser = (user) => {
-    if (user.id === currentUser?.id) {
-      showToast('לא ניתן למחוק את המשתמש המחובר כרגע.', 'warning');
-      return;
-    }
-    const adminsCount = usersList.filter(u => u.role === 'admin').length;
-    if (user.role === 'admin' && adminsCount <= 1) {
-      showToast('חייב להישאר לפחות מנהל אחד במערכת.', 'warning');
-      return;
-    }
+  const handleDeleteUser = (u) => {
+    if (u.id === currentUser?.id) return;
     setConfirmDialog({
       title: 'מחיקת משתמש',
-      message: `האם למחוק את המשתמש "${user.name}" (${user.username}) מהמערכת?`,
+      message: `האם למחוק את המשתמש "${u.name}"?`,
       confirmText: 'מחק משתמש',
-      confirmStyle: 'bg-red-600 hover:bg-red-700',
-      icon: <Trash2 className="w-6 h-6" />,
-      iconStyle: 'bg-red-100 text-red-600',
       onConfirm: async () => {
-        setUsersList(prev => prev.filter(u => u.id !== user.id));
-        if (db && dbConnected && user.id) {
-          try { await deleteDoc(getDocRef('users', user.id)); } catch {}
+        setUsersList(prev => prev.filter(x => x.id !== u.id));
+        if (db && dbConnected && u.id) {
+          try { await deleteDoc(getDocRef('users', u.id)); } catch {}
         }
         showToast('המשתמש נמחק.', 'info');
       }
     });
   };
 
-  // ==========================================
-  // חישובים ועזרים למלאי ולספקים
-  // ==========================================
-  const calculateSuppliersStock = (book) => {
-    return (book.breakdown || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const handleSendCredentialsWhatsApp = (u) => {
+    const phone = formatWhatsAppPhone(u.phone);
+    const msg = `שלום ${u.name},\nלהלן פרטי ההתחברות שלך למערכת הניהול של הוצאת ספרי ישיבת ירוחם:\nקישור: ${window.location.origin}\nשם משתמש: ${u.username}\nסיסמה: ${u.password}`;
+    const url = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank');
   };
 
-  const calculateTotalStock = (book) => {
-    return Number(book.publisherStock || 0) + calculateSuppliersStock(book);
+  const handleSendCredentialsEmail = (u) => {
+    const subject = 'פרטי התחברות — מערכת הוצאת ספרי ישיבת ירוחם';
+    const body = `שלום ${u.name},\n\nלהלן פרטי ההתחברות שלך:\nקישור: ${window.location.origin}\nשם משתמש: ${u.username}\nסיסמה: ${u.password}`;
+    window.open(`mailto:${u.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
   };
 
-  // חישוב כמה סטים שלמים ניתן להרכיב מתוך הכרכים הבודדים במחסן
-  const getPossibleSetsFromComponents = (book) => {
-    const compIds = Array.isArray(book?.setComponents) ? book.setComponents : [];
-    if (compIds.length === 0) return null;
-    const stocks = compIds.map(cid => {
-      const comp = inventoryList.find(b => b.id === cid);
-      return comp ? Math.max(0, Number(comp.publisherStock || 0)) : 0;
-    });
-    return Math.min(...stocks);
-  };
-
-  // הפחתת מלאי חכמה התומכת בפירוק סטים לכרכים בודדים
-  const applySaleInventoryDeduction = (currentInventory, soldItems /* [{ bookId, qty }] */) => {
-    const deltaMap = new Map();
-    const addDelta = (id, delta) => deltaMap.set(id, (deltaMap.get(id) || 0) + delta);
-
-    soldItems.forEach(({ bookId, qty }) => {
-      const q = Math.max(0, Number(qty || 0));
-      if (!bookId || q <= 0) return;
-      const book = currentInventory.find(b => b.id === bookId);
-      if (!book) return;
-      const compIds = Array.isArray(book.setComponents) ? book.setComponents.filter(Boolean) : [];
-      if (autoDecomposeSets && (book.isSet || compIds.length > 0) && compIds.length > 0) {
-        compIds.forEach(cid => addDelta(cid, q));
-      } else {
-        addDelta(bookId, q);
-      }
-    });
-
-    const updatedBooks = [];
-    const nextInventory = currentInventory.map(b => {
-      const sub = deltaMap.get(b.id);
-      if (!sub) return b;
-      const newStock = Math.max(0, Number(b.publisherStock || 0) - sub);
-      const updated = { ...b, publisherStock: newStock, updatedAt: Date.now() };
-      updatedBooks.push(updated);
-      return updated;
-    });
-
-    return { nextInventory, updatedBooks };
-  };
-
-  // ==========================================
-  // סריקת ברקוד / דאנאק מהמצלמה של הטלפון
-  // ==========================================
-  const handleBarcodeDetected = (codeRaw) => {
-    const code = String(codeRaw || '').trim();
-    if (!code) return;
-    const matched = inventoryList.find(
-      b => String(b.isbn || '').trim().toLowerCase() === code.toLowerCase() ||
-           String(b.title || '').toLowerCase().includes(code.toLowerCase())
-    );
-    if (!matched) {
-      setScannerError(`לא נמצא ספר תואם לקוד "${code}". ודא שהקוד מוזן בשדה דאנאק/מק"ט של הספר.`);
-      return;
-    }
-    setScannerTarget(null);
-    setManualBarcodeInput('');
-    setScannerError('');
-    if (scannerTarget === 'pos') {
-      handleAddToPosCart(matched);
-      showToast(`נסרק והתווסף לסל: ${matched.title}`, 'success');
-    } else {
-      setSearchQuery(matched.title);
-      setActiveTab('inventory');
-      showToast(`אותר במלאי: ${matched.title}`, 'success');
-    }
-  };
-
-  useEffect(() => {
-    if (!scannerTarget) return;
-    let stream = null;
-    let timerId = null;
-    let cancelled = false;
-
-    const startCamera = async () => {
-      try {
-        if (!navigator.mediaDevices?.getUserMedia) {
-          setScannerError('הדפדפן אינו תומך בגישה למצלמה — ניתן להזין קוד ידנית למטה.');
-          return;
-        }
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        if (cancelled) {
-          stream.getTracks().forEach(t => t.stop());
-          return;
-        }
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play().catch(() => {});
-        }
-        if ('BarcodeDetector' in window) {
-          const detector = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128', 'qr_code', 'upc_a'] });
-          timerId = setInterval(async () => {
-            if (!videoRef.current || videoRef.current.readyState < 2) return;
-            try {
-              const codes = await detector.detect(videoRef.current);
-              if (codes && codes.length > 0 && codes[0].rawValue) {
-                handleBarcodeDetected(codes[0].rawValue);
-              }
-            } catch {}
-          }, 450);
-        } else {
-          setScannerError('המצלמה פעילה! אם זיהוי אוטומטי אינו נתמך בדפדפן זה, הקלד את הדאנאק למטה.');
-        }
-      } catch {
-        setScannerError('לא ניתנה הרשאה למצלמה — ניתן להקליד ברקוד / דאנאק ידנית למטה.');
-      }
-    };
-
-    startCamera();
-    return () => {
-      cancelled = true;
-      if (timerId) clearInterval(timerId);
-      if (stream) stream.getTracks().forEach(t => t.stop());
-    };
-  }, [scannerTarget]);
-
-  const getLogRemainingDebt = (log) => {
-    if (log.type === 'return') return 0;
-    const total = Number(log.totalAmount || 0);
-    if (total <= 0) return 0;
-    if (log.paymentStatus === 'paid') return 0;
-    if (log.paymentStatus === 'partial') return Math.max(0, total - Number(log.paidAmount || 0));
-    return total;
-  };
-
-  const getSupplierOpenDebt = (supplierName) => {
-    return supplierLogs
-      .filter(log => log.supplierName === supplierName)
-      .reduce((sum, log) => sum + getLogRemainingDebt(log), 0);
-  };
-
-  const getSupplierInventoryItems = (supplierName) => {
-    const items = [];
-    inventoryList.forEach(book => {
-      const match = (book.breakdown || []).find(b => b.location === supplierName);
-      if (match && Number(match.amount) > 0) {
-        items.push({
-          bookId: book.id,
-          title: book.title,
-          amount: Number(match.amount),
-          supplierPrice: Number(book.prices?.supplier || 0)
-        });
-      }
-    });
-    return items.sort((a, b) => a.title.localeCompare(b.title, 'he'));
-  };
-
-  // ==========================================
-  // התאמות ידניות לדאשבורד וניקוי חובות רפאים
-  // ==========================================
-  const handleSaveDashboardAdjustments = async (e) => {
-    e.preventDefault();
-    if (db && dbConnected) {
-      try {
-        await setDoc(getDocRef('settings', 'dashboard_adjustments'), dashboardAdjustments, { merge: true });
-      } catch {}
-    }
-    setIsDashboardEditOpen(false);
-    showToast('נתוני הדאשבורד הידניים נשמרו בהצלחה!', 'success');
-  };
-
-  const handlePurgeOrphanSupplierDebts = async () => {
-    const activeNames = new Set(suppliersList.map(s => (s.name || '').trim()));
-    const orphanLogs = supplierLogs.filter(l => !activeNames.has((l.supplierName || '').trim()));
-    if (orphanLogs.length === 0) {
-      showToast('לא נמצאו חובות פתוחים מספקים שנמחקו.', 'info');
-      return;
-    }
-    setSupplierLogs(prev => prev.filter(l => activeNames.has((l.supplierName || '').trim())));
-    if (db && dbConnected) {
-      try {
-        await Promise.all(orphanLogs.filter(l => l.id).map(l => deleteDoc(getDocRef('supplier_logs', l.id))));
-      } catch {}
-    }
-    showToast(`נוקו ${orphanLogs.length} רשומות חוב של ספקים שכבר נמחקו!`, 'success');
-  };
-
-  // ==========================================
-  // פעולות ניהול מלאי
-  // ==========================================
-  const handleImportYhyCatalog = async () => {
-    showToast('מסנכרן מחירון מהקטלוג (שומר על כמויות מלאי קיימות)...', 'info');
-    try {
-      let updatedCount = 0;
-      let addedCount = 0;
-      const nextList = [...inventoryList];
-
-      for (const catalogBook of initialInventory) {
-        const idx = nextList.findIndex(b => {
-          if (normalizeBookTitle(b.title) === normalizeBookTitle(catalogBook.title)) return true;
-          const matched = findMatchingCatalogBook(b.title);
-          return matched && matched.id === catalogBook.id;
-        });
-        if (idx !== -1) {
-          const existing = nextList[idx];
-          const updatedFields = {
-            prices: catalogBook.prices,
-            productionCost: catalogBook.productionCost,
-            updatedAt: Date.now()
-          };
-          nextList[idx] = { ...existing, ...updatedFields };
-          if (db && dbConnected && existing.id) {
-            try { await updateDoc(getDocRef('inventory', existing.id), updatedFields); } catch {}
-          }
-          updatedCount++;
-        } else {
-          const toAdd = { ...catalogBook, updatedAt: Date.now() };
-          if (db && dbConnected) {
-            try {
-              const ref = await addDoc(getCollRef('inventory'), toAdd);
-              nextList.push({ ...toAdd, id: ref.id });
-            } catch {
-              nextList.push({ ...toAdd, id: 'book_' + Date.now() + '_' + addedCount });
-            }
-          } else {
-            nextList.push({ ...toAdd, id: 'book_' + Date.now() + '_' + addedCount });
-          }
-          addedCount++;
-        }
-      }
-      setInventoryList(nextList);
-      showToast(`הסנכרון הושלם! ${updatedCount} ספרים עודכנו, ${addedCount} נוספו.`, 'success');
-    } catch (err) {
-      console.error(err);
-      showToast('שגיאה בסנכרון הקטלוג.', 'error');
-    }
-  };
-
-  const handleInlineStockChange = async (book, rawValue) => {
-    const val = Math.max(0, Number(rawValue) || 0);
-    const updatedAt = Date.now();
-    setInventoryList(prev => prev.map(b => b.id === book.id ? { ...b, publisherStock: val, updatedAt } : b));
-    if (db && dbConnected && book.id) {
-      try { await updateDoc(getDocRef('inventory', book.id), { publisherStock: val, updatedAt }); } catch {}
-    }
-  };
-
-  const handleQuickWarehouseAdjust = async (book, delta) => {
-    const newStock = Math.max(0, Number(book.publisherStock || 0) + delta);
-    const updatedAt = Date.now();
-    setInventoryList(prev => prev.map(b => b.id === book.id ? { ...b, publisherStock: newStock, updatedAt } : b));
-    if (db && dbConnected && book.id) {
-      try { await updateDoc(getDocRef('inventory', book.id), { publisherStock: newStock, updatedAt }); } catch {}
-    }
-  };
-
+  // --- ניהול ספרים ומלאי ---
   const handleSaveNewBook = async (e) => {
     e.preventDefault();
     if (!newBookForm.title.trim()) return;
     const bookObj = {
+      ...newBookForm,
       title: newBookForm.title.trim(),
-      author: newBookForm.author.trim(),
-      isbn: newBookForm.isbn.trim(),
-      threshold: Math.max(0, Number(newBookForm.threshold || 0)),
+      author: (newBookForm.author || '').trim(),
+      isbn: (newBookForm.isbn || '').trim(),
+      threshold: Number(newBookForm.threshold || 30),
       publisherStock: Math.max(0, Number(newBookForm.publisherStock || 0)),
       productionCost: Math.max(0, Number(newBookForm.productionCost || 0)),
-      royaltyPct: Math.max(0, Math.min(100, Number(newBookForm.royaltyPct || 0))),
-      isSet: Boolean(newBookForm.isSet || (newBookForm.setComponents || []).length > 0),
-      setComponents: Array.isArray(newBookForm.setComponents) ? newBookForm.setComponents.filter(Boolean) : [],
+      royaltyPct: Math.max(0, Number(newBookForm.royaltyPct || 0)),
       prices: {
-        catalog: Math.max(0, Number(newBookForm.prices?.catalog || 0)),
-        general: Math.max(0, Number(newBookForm.prices?.general || 0)),
-        supplier: Math.max(0, Number(newBookForm.prices?.supplier || 0)),
-        yeshiva: Math.max(0, Number(newBookForm.prices?.yeshiva || 0)),
-        yeshivaGuest: Math.max(0, Number(newBookForm.prices?.yeshivaGuest || newBookForm.prices?.yeshiva || 0)),
+        catalog: Number(newBookForm.prices?.catalog || 0),
+        general: Number(newBookForm.prices?.general || 0),
+        supplier: Number(newBookForm.prices?.supplier || 0),
+        yeshiva: Number(newBookForm.prices?.yeshiva || 0),
+        yeshivaGuest: Number(newBookForm.prices?.yeshivaGuest || newBookForm.prices?.yeshiva || 0)
       },
-      editions: (newBookForm.editions || []).map(ed => ({ name: ed.name || 'מהדורה', printRun: Math.max(0, Number(ed.printRun || 0)) })),
-      breakdown: (newBookForm.breakdown || []).filter(r => r.location?.trim()).map(r => ({ location: r.location.trim(), amount: Math.max(0, Number(r.amount || 0)) })),
+      breakdown: (newBookForm.breakdown || []).filter(r => r.location.trim() && Number(r.amount) > 0).map(r => ({ location: r.location.trim(), amount: Number(r.amount) })),
       updatedAt: Date.now()
     };
-
     if (db && dbConnected) {
-      try {
-        await addDoc(getCollRef('inventory'), bookObj);
-      } catch {
-        setInventoryList(prev => [...prev, { ...bookObj, id: 'book_' + Date.now() }]);
-      }
+      try { await addDoc(getCollRef('inventory'), bookObj); } catch { setInventoryList(prev => [...prev, { ...bookObj, id: 'book_' + Date.now() }]); }
     } else {
       setInventoryList(prev => [...prev, { ...bookObj, id: 'book_' + Date.now() }]);
     }
-    setNewBookForm(emptyBookForm);
     setIsAddBookModalOpen(false);
-    showToast(`הספר "${bookObj.title}" נוסף בהצלחה!`, 'success');
+    setNewBookForm(emptyBookForm);
+    showToast(`הספר "${bookObj.title}" נוסף למלאי!`, 'success');
   };
 
   const handleSaveEditBook = async (e) => {
     e.preventDefault();
-    if (!editingBook || !editingBook.title.trim()) return;
-    const updatedFields = {
+    if (!editingBook) return;
+    const updated = {
+      ...editingBook,
       title: editingBook.title.trim(),
       author: (editingBook.author || '').trim(),
       isbn: (editingBook.isbn || '').trim(),
-      threshold: Math.max(0, Number(editingBook.threshold || 0)),
+      threshold: Number(editingBook.threshold || 30),
       publisherStock: Math.max(0, Number(editingBook.publisherStock || 0)),
       productionCost: Math.max(0, Number(editingBook.productionCost || 0)),
-      royaltyPct: Math.max(0, Math.min(100, Number(editingBook.royaltyPct || 0))),
-      isSet: Boolean(editingBook.isSet || (editingBook.setComponents || []).length > 0),
-      setComponents: Array.isArray(editingBook.setComponents) ? editingBook.setComponents.filter(Boolean) : [],
+      royaltyPct: Math.max(0, Number(editingBook.royaltyPct || 0)),
       prices: {
-        catalog: Math.max(0, Number(editingBook.prices?.catalog || 0)),
-        general: Math.max(0, Number(editingBook.prices?.general || 0)),
-        supplier: Math.max(0, Number(editingBook.prices?.supplier || 0)),
-        yeshiva: Math.max(0, Number(editingBook.prices?.yeshiva || 0)),
-        yeshivaGuest: Math.max(0, Number(editingBook.prices?.yeshivaGuest || editingBook.prices?.yeshiva || 0)),
+        catalog: Number(editingBook.prices?.catalog || 0),
+        general: Number(editingBook.prices?.general || 0),
+        supplier: Number(editingBook.prices?.supplier || 0),
+        yeshiva: Number(editingBook.prices?.yeshiva || 0),
+        yeshivaGuest: Number(editingBook.prices?.yeshivaGuest || editingBook.prices?.yeshiva || 0)
       },
-      editions: (editingBook.editions || []).map(ed => ({ name: ed.name || 'מהדורה', printRun: Math.max(0, Number(ed.printRun || 0)) })),
-      breakdown: (editingBook.breakdown || []).filter(r => r.location?.trim()).map(r => ({ location: r.location.trim(), amount: Math.max(0, Number(r.amount || 0)) })),
+      breakdown: (editingBook.breakdown || []).filter(r => (r.location || '').trim() && Number(r.amount) > 0).map(r => ({ location: r.location.trim(), amount: Number(r.amount) })),
       updatedAt: Date.now()
     };
-
-    setInventoryList(prev => prev.map(b => b.id === editingBook.id ? { ...b, ...updatedFields } : b));
-    if (db && dbConnected && editingBook.id) {
-      try { await updateDoc(getDocRef('inventory', editingBook.id), updatedFields); } catch {}
+    setInventoryList(prev => prev.map(b => b.id === updated.id ? updated : b));
+    if (db && dbConnected && updated.id) {
+      try { await updateDoc(getDocRef('inventory', updated.id), updated); } catch {}
     }
     setEditingBook(null);
-    showToast(`פרטי הספר "${updatedFields.title}" עודכנו בהצלחה!`, 'success');
+    showToast(`הספר "${updated.title}" עודכן בהצלחה!`, 'success');
   };
 
   const handleDeleteBook = (book) => {
     setConfirmDialog({
       title: 'מחיקת ספר מהמלאי',
-      message: `האם למחוק את הספר "${book.title}" לצמיתות מהמערכת?`,
+      message: `האם למחוק את הספר "${book.title}" לצמיתות?`,
       confirmText: 'מחק ספר',
-      confirmStyle: 'bg-red-600 hover:bg-red-700',
-      icon: <Trash2 className="w-6 h-6" />,
-      iconStyle: 'bg-red-100 text-red-600',
       onConfirm: async () => {
         setInventoryList(prev => prev.filter(b => b.id !== book.id));
         if (db && dbConnected && book.id) {
@@ -983,11 +763,98 @@ export default function App() {
     });
   };
 
+  const handleInlineStockChange = async (book, rawVal) => {
+    const val = Math.max(0, Number(rawVal || 0));
+    const now = Date.now();
+    setInventoryList(prev => prev.map(b => b.id === book.id ? { ...b, publisherStock: val, updatedAt: now } : b));
+    if (db && dbConnected && book.id) {
+      try { await updateDoc(getDocRef('inventory', book.id), { publisherStock: val, updatedAt: now }); } catch {}
+    }
+  };
+
+  const handleQuickWarehouseAdjust = async (book, delta) => {
+    const nextStock = Math.max(0, Number(book.publisherStock || 0) + delta);
+    const now = Date.now();
+    setInventoryList(prev => prev.map(b => b.id === book.id ? { ...b, publisherStock: nextStock, updatedAt: now } : b));
+    if (db && dbConnected && book.id) {
+      try { await updateDoc(getDocRef('inventory', book.id), { publisherStock: nextStock, updatedAt: now }); } catch {}
+    }
+  };
+
+  const handleImportYhyCatalog = async () => {
+    let added = 0;
+    let updated = 0;
+    const now = Date.now();
+    const nextInv = [...inventoryList];
+
+    for (const catBook of initialInventory) {
+      const idx = nextInv.findIndex(b => b.id === catBook.id || normalizeBookTitle(b.title) === normalizeBookTitle(catBook.title));
+      if (idx === -1) {
+        nextInv.push({ ...catBook, updatedAt: now });
+        added++;
+      } else {
+        nextInv[idx] = {
+          ...nextInv[idx],
+          isSet: Boolean(catBook.isSet),
+          setComponents: catBook.setComponents || nextInv[idx].setComponents || [],
+          productionCost: Number(nextInv[idx].productionCost || 0) > 0 ? nextInv[idx].productionCost : catBook.productionCost,
+          prices: { ...catBook.prices, ...(nextInv[idx].prices || {}) },
+          updatedAt: now
+        };
+        updated++;
+      }
+    }
+
+    setInventoryList(nextInv);
+    if (db && dbConnected) {
+      try {
+        await Promise.all(nextInv.map(b => setDoc(getDocRef('inventory', b.id), b, { merge: true })));
+      } catch {}
+    }
+    showToast(`סנכרון מחירון הושלם! (${added} נוספו, ${updated} עודכנו)`, 'success');
+  };
+
+  const handleRecordGift = async (e) => {
+    e.preventDefault();
+    const book = inventoryList.find(b => b.id === giftForm.bookId);
+    if (!book || !giftForm.recipient.trim()) return;
+    const qty = Math.max(1, Number(giftForm.quantity || 1));
+
+    const { nextInventory, updatedBooks } = applySaleInventoryDeduction(inventoryList, [{ bookId: book.id, qty }]);
+    setInventoryList(nextInventory);
+    if (db && dbConnected && updatedBooks.length > 0) {
+      try {
+        await Promise.all(updatedBooks.map(b => updateDoc(getDocRef('inventory', b.id), { publisherStock: b.publisherStock, updatedAt: b.updatedAt })));
+      } catch {}
+    }
+
+    const logObj = {
+      bookId: book.id,
+      bookTitle: book.title,
+      quantity: qty,
+      recipient: giftForm.recipient.trim(),
+      category: giftForm.category,
+      notes: giftForm.notes.trim(),
+      user: currentUserName,
+      date: new Date().toLocaleDateString('he-IL'),
+      timestamp: Date.now()
+    };
+    if (db && dbConnected) {
+      try { await addDoc(getCollRef('gift_logs'), logObj); } catch { setGiftLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]); }
+    } else {
+      setGiftLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]);
+    }
+    setIsGiftModalOpen(false);
+    setGiftForm({ bookId: '', quantity: 1, recipient: '', category: 'תורם', notes: '' });
+    showToast(`תועדה חלוקה של ${qty} עותקים ל-${logObj.recipient}!`, 'success');
+  };
+
   const handleExportCSV = () => {
-    const headers = ['שם הספר', 'מחבר', 'מחיר אתר', 'מחיר ספק', 'מחיר ישיבה', 'עלות הפקה', 'במחסן הראשי', 'אצל ספקים', 'סה"כ מלאי'];
-    const rows = inventoryList.map(b => [
+    const headers = ['שם הספר', 'מחבר', 'דאנאק', 'מחיר אתר', 'מחיר ספק', 'מחיר ישיבה', 'עלות הפקה', 'במחסן הראשי', 'אצל ספקים', 'סה"כ מלאי'];
+    const rows = sortedInventory.map(b => [
       `"${(b.title || '').replace(/"/g, '""')}"`,
       `"${(b.author || '').replace(/"/g, '""')}"`,
+      `"${b.isbn || ''}"`,
       b.prices?.general || 0,
       b.prices?.supplier || 0,
       b.prices?.yeshiva || 0,
@@ -1001,83 +868,41 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `yhy_inventory_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `inventory_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('קובץ האקסל (CSV) הורד בהצלחה!', 'success');
+    showToast('קובץ CSV יוצא בהצלחה!', 'success');
   };
 
-  const handleRecordGift = async (e) => {
-    e.preventDefault();
-    const book = inventoryList.find(b => b.id === giftForm.bookId);
-    const qty = Math.max(1, Number(giftForm.quantity || 1));
-    if (!book || !giftForm.recipient.trim()) {
-      showToast('אנא בחר ספר והזן שם מקבל.', 'warning');
-      return;
-    }
-    const newStock = Math.max(0, Number(book.publisherStock || 0) - qty);
-    setInventoryList(prev => prev.map(b => b.id === book.id ? { ...b, publisherStock: newStock, updatedAt: Date.now() } : b));
-    if (db && dbConnected && book.id) {
-      try { await updateDoc(getDocRef('inventory', book.id), { publisherStock: newStock, updatedAt: Date.now() }); } catch {}
-    }
-
-    const logObj = {
-      bookTitle: book.title,
-      quantity: qty,
-      recipient: giftForm.recipient.trim(),
-      category: giftForm.category,
-      notes: giftForm.notes.trim(),
-      user: currentUserName,
-      date: new Date().toLocaleString('he-IL'),
-      timestamp: Date.now()
-    };
-    if (db && dbConnected) {
-      try { await addDoc(getCollRef('gift_logs'), logObj); } catch { setGiftLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]); }
-    } else {
-      setGiftLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]);
-    }
-    setGiftForm({ bookId: '', quantity: 1, recipient: '', category: 'תורם', notes: '' });
-    setIsGiftModalOpen(false);
-    showToast(`נרשמה חלוקה של ${qty} עותקים ל${logObj.recipient}!`, 'success');
-  };
-
-  // ==========================================
-  // פעולות ספקים, עריכת מלאי ספק והפקת הזמנות
-  // ==========================================
+  // --- ניהול ספקים, עריכת מלאי אצל ספק, הזמנות וקונסיגנציה ---
   const handleSaveSupplier = async (e) => {
     e.preventDefault();
     if (!supplierForm.name.trim()) return;
-    const payload = {
-      name: supplierForm.name.trim(),
-      contact: supplierForm.contact.trim(),
-      phone: supplierForm.phone.trim(),
-      email: supplierForm.email.trim(),
-      address: supplierForm.address.trim(),
-      notes: supplierForm.notes.trim(),
-      updatedAt: Date.now()
-    };
-
+    const now = Date.now();
     if (editingSupplier) {
       const oldName = editingSupplier.name;
-      setSuppliersList(prev => prev.map(s => s.id === editingSupplier.id ? { ...s, ...payload } : s));
-      if (oldName && oldName !== payload.name) {
+      const newName = supplierForm.name.trim();
+      const updated = { ...editingSupplier, ...supplierForm, name: newName, updatedAt: now };
+      setSuppliersList(prev => prev.map(s => s.id === updated.id ? updated : s));
+      if (oldName !== newName) {
         setInventoryList(prev => prev.map(b => ({
           ...b,
-          breakdown: (b.breakdown || []).map(r => r.location === oldName ? { ...r, location: payload.name } : r)
+          breakdown: (b.breakdown || []).map(r => r.location === oldName ? { ...r, location: newName } : r)
         })));
-        setSupplierLogs(prev => prev.map(l => l.supplierName === oldName ? { ...l, supplierName: payload.name } : l));
+        setSupplierLogs(prev => prev.map(l => l.supplierName === oldName ? { ...l, supplierName: newName } : l));
       }
-      if (db && dbConnected && editingSupplier.id) {
-        try { await updateDoc(getDocRef('suppliers', editingSupplier.id), payload); } catch {}
+      if (db && dbConnected && updated.id) {
+        try { await updateDoc(getDocRef('suppliers', updated.id), updated); } catch {}
       }
-      showToast(`פרטי הספק "${payload.name}" עודכנו!`, 'success');
+      showToast('פרטי הספק עודכנו!', 'success');
     } else {
+      const supObj = { ...supplierForm, name: supplierForm.name.trim(), createdAt: now, updatedAt: now };
       if (db && dbConnected) {
-        try { await addDoc(getCollRef('suppliers'), payload); } catch { setSuppliersList(prev => [...prev, { ...payload, id: 'sup_' + Date.now() }]); }
+        try { await addDoc(getCollRef('suppliers'), supObj); } catch { setSuppliersList(prev => [...prev, { ...supObj, id: 'sup_' + now }]); }
       } else {
-        setSuppliersList(prev => [...prev, { ...payload, id: 'sup_' + Date.now() }]);
+        setSuppliersList(prev => [...prev, { ...supObj, id: 'sup_' + now }]);
       }
-      showToast(`הספק "${payload.name}" נוסף בהצלחה!`, 'success');
+      showToast(`הספק "${supObj.name}" נוסף בהצלחה!`, 'success');
     }
     setIsSupplierModalOpen(false);
     setEditingSupplier(null);
@@ -1086,49 +911,36 @@ export default function App() {
 
   const handleDeleteSupplier = (supplier) => {
     setConfirmDialog({
-      title: 'מחיקת ספק וחובותיו',
-      message: `האם למחוק את הספק "${supplier.name}" כולל כל היסטוריית החובות והמלאי המשויך אליו?`,
-      confirmText: 'מחק ספק לצמיתות',
-      confirmStyle: 'bg-red-600 hover:bg-red-700',
-      icon: <Trash2 className="w-6 h-6" />,
-      iconStyle: 'bg-red-100 text-red-600',
+      title: 'מחיקת ספק / חנות',
+      message: `האם למחוק את "${supplier.name}"? פעולה זו תמחק גם את יתרת החוב וההיסטוריה המשויכת אליו.`,
+      confirmText: 'מחק ספק וחובותיו',
       onConfirm: async () => {
+        const logsToDelete = supplierLogs.filter(l => (l.supplierName || '').trim() === supplier.name.trim());
         setSuppliersList(prev => prev.filter(s => s.id !== supplier.id));
-        const logsToDelete = supplierLogs.filter(l => l.supplierName === supplier.name);
-        setSupplierLogs(prev => prev.filter(l => l.supplierName !== supplier.name));
-
-        const affectedBooks = [];
-        setInventoryList(prev => prev.map(book => {
-          const hasSup = (book.breakdown || []).some(r => r.location === supplier.name);
-          if (!hasSup) return book;
-          const nextBreakdown = (book.breakdown || []).filter(r => r.location !== supplier.name);
-          const updated = { ...book, breakdown: nextBreakdown, updatedAt: Date.now() };
-          affectedBooks.push(updated);
-          return updated;
-        }));
-
+        setSupplierLogs(prev => prev.filter(l => (l.supplierName || '').trim() !== supplier.name.trim()));
+        setInventoryList(prev => prev.map(b => ({
+          ...b,
+          breakdown: (b.breakdown || []).filter(r => (r.location || '').trim() !== supplier.name.trim())
+        })));
         if (db && dbConnected) {
           try {
             if (supplier.id) await deleteDoc(getDocRef('suppliers', supplier.id));
-            await Promise.all([
-              ...logsToDelete.filter(l => l.id).map(l => deleteDoc(getDocRef('supplier_logs', l.id))),
-              ...affectedBooks.filter(b => b.id).map(b => updateDoc(getDocRef('inventory', b.id), { breakdown: b.breakdown, updatedAt: b.updatedAt }))
-            ]);
+            await Promise.all(logsToDelete.filter(l => l.id).map(l => deleteDoc(getDocRef('supplier_logs', l.id))));
           } catch {}
         }
-        showToast(`הספק "${supplier.name}" וכל חובותיו נמחקו!`, 'info');
+        showToast(`הספק "${supplier.name}" וכל רשומות החוב שלו נמחקו.`, 'info');
       }
     });
   };
 
   const openEditSupplierStockModal = (supplier) => {
     const draft = {};
-    inventoryList.forEach(book => {
-      const match = (book.breakdown || []).find(r => r.location === supplier.name);
-      if (match && Number(match.amount) > 0) {
-        draft[book.id] = Number(match.amount);
+    for (const book of inventoryList) {
+      const row = (book.breakdown || []).find(r => (r.location || '').trim() === supplier.name.trim());
+      if (row && Number(row.amount) > 0) {
+        draft[book.id] = Number(row.amount);
       }
-    });
+    }
     setSupplierStockDraft(draft);
     setNewBookForSupplier({ bookId: inventoryList[0]?.id || '', amount: 10 });
     setViewingSupplierStock(supplier);
@@ -1136,29 +948,31 @@ export default function App() {
 
   const handleSaveSupplierStockChanges = async () => {
     if (!viewingSupplierStock) return;
-    const supName = viewingSupplierStock.name;
-    const updatedBooks = [];
+    const supName = viewingSupplierStock.name.trim();
+    const now = Date.now();
+    const changedBooks = [];
 
-    setInventoryList(prev => prev.map(book => {
-      const desiredAmount = Math.max(0, Number(supplierStockDraft[book.id] || 0));
-      const existingMatch = (book.breakdown || []).find(r => r.location === supName);
-      const oldAmount = existingMatch ? Number(existingMatch.amount || 0) : 0;
-      if (desiredAmount === oldAmount) return book;
+    const nextInv = inventoryList.map(book => {
+      const desiredAmt = Math.max(0, Number(supplierStockDraft[book.id] || 0));
+      const prevBreakdown = book.breakdown || [];
+      const existingIdx = prevBreakdown.findIndex(r => (r.location || '').trim() === supName);
+      const prevAmt = existingIdx >= 0 ? Number(prevBreakdown[existingIdx].amount || 0) : 0;
 
-      let nextBreakdown = (book.breakdown || []).filter(r => r.location !== supName);
-      if (desiredAmount > 0) {
-        nextBreakdown.push({ location: supName, amount: desiredAmount });
+      if (desiredAmt === prevAmt) return book;
+
+      let nextBreakdown = prevBreakdown.filter(r => (r.location || '').trim() !== supName);
+      if (desiredAmt > 0) {
+        nextBreakdown = [...nextBreakdown, { location: supName, amount: desiredAmt }];
       }
-      const updated = { ...book, breakdown: nextBreakdown, updatedAt: Date.now() };
-      updatedBooks.push(updated);
-      return updated;
-    }));
+      const updatedBook = { ...book, breakdown: nextBreakdown, updatedAt: now };
+      changedBooks.push(updatedBook);
+      return updatedBook;
+    });
 
-    if (db && dbConnected && updatedBooks.length > 0) {
+    setInventoryList(nextInv);
+    if (db && dbConnected && changedBooks.length > 0) {
       try {
-        await Promise.all(updatedBooks.map(b =>
-          updateDoc(getDocRef('inventory', b.id), { breakdown: b.breakdown, updatedAt: b.updatedAt })
-        ));
+        await Promise.all(changedBooks.map(b => updateDoc(getDocRef('inventory', b.id), { breakdown: b.breakdown, updatedAt: now })));
       } catch {}
     }
     setViewingSupplierStock(null);
@@ -1168,11 +982,7 @@ export default function App() {
   const openSupplierOrderModal = (supplier) => {
     const firstBook = inventoryList[0];
     setInvoiceSupplier(supplier);
-    setInvoiceItems([{
-      bookId: firstBook?.id || '',
-      quantity: 10,
-      customPrice: Number(firstBook?.prices?.supplier || 0)
-    }]);
+    setInvoiceItems([{ bookId: firstBook?.id || '', quantity: 10, customPrice: Number(firstBook?.prices?.supplier || 0) }]);
     setDeductFromWarehouse(true);
     setInvoiceNotes('');
     setIsSupplierInvoiceModalOpen(true);
@@ -1180,145 +990,95 @@ export default function App() {
 
   const processSupplierOrder = async (mode) => {
     if (!invoiceSupplier) return;
-    const validItems = invoiceItems
-      .filter(i => i.bookId && Number(i.quantity) > 0)
-      .map(i => {
-        const book = inventoryList.find(b => b.id === i.bookId);
-        const price = i.customPrice !== undefined && i.customPrice !== ''
-          ? Math.max(0, Number(i.customPrice))
-          : Number(book?.prices?.supplier || 0);
-        const qty = Number(i.quantity);
-        return {
-          bookId: i.bookId,
-          title: book?.title || 'ספר',
-          quantity: qty,
-          price,
-          lineTotal: price * qty
-        };
-      });
-
-    if (validItems.length === 0) {
+    const validRows = invoiceItems.filter(r => r.bookId && Number(r.quantity) > 0);
+    if (validRows.length === 0) {
       showToast('אנא בחר לפחות ספר אחד וכמות תקינה.', 'warning');
       return;
     }
 
-    const totalOrderPrice = validItems.reduce((s, i) => s + i.lineTotal, 0);
+    const supName = invoiceSupplier.name.trim();
+    const now = Date.now();
+    let totalAmount = 0;
+    const detailLines = [];
+    const printItems = [];
 
-    // פירוק חכם של סטים לכרכים בודדים בעת הורדה מהמחסן (אם מופעל)
-    const { nextInventory: afterWarehouseDeduct, updatedBooks: decomposedBooks } = deductFromWarehouse
-      ? applySaleInventoryDeduction(inventoryList, validItems.map(v => ({ bookId: v.bookId, qty: v.quantity })))
-      : { nextInventory: inventoryList, updatedBooks: [] };
+    let workingInv = [...inventoryList];
+    if (deductFromWarehouse) {
+      const { nextInventory } = applySaleInventoryDeduction(workingInv, validRows.map(r => ({ bookId: r.bookId, qty: Number(r.quantity) })));
+      workingInv = nextInventory;
+    }
 
-    const updatedMap = new Map(decomposedBooks.map(b => [b.id, b]));
-    const finalInventory = afterWarehouseDeduct.map(book => {
-      const orderItem = validItems.find(v => v.bookId === book.id);
-      if (!orderItem) return book;
-      const currentBreakdown = [...(book.breakdown || [])];
-      const existingIdx = currentBreakdown.findIndex(b => b.location === invoiceSupplier.name);
-      if (existingIdx !== -1) {
-        currentBreakdown[existingIdx] = {
-          ...currentBreakdown[existingIdx],
-          amount: Number(currentBreakdown[existingIdx].amount || 0) + orderItem.quantity
-        };
-      } else {
-        currentBreakdown.push({ location: invoiceSupplier.name, amount: orderItem.quantity });
+    validRows.forEach((row, idx) => {
+      const book = workingInv.find(b => b.id === row.bookId);
+      if (!book) return;
+      const qty = Math.max(1, Number(row.quantity));
+      const unitPrice = row.customPrice !== undefined && row.customPrice !== '' ? Math.max(0, Number(row.customPrice)) : Number(book.prices?.supplier || 0);
+      const lineTotal = qty * unitPrice;
+      totalAmount += lineTotal;
+      detailLines.push(`${idx + 1}. ${book.title} — ${qty} עותקים × ₪${unitPrice} = ₪${lineTotal.toLocaleString()}`);
+      printItems.push({ name: book.title, quantity: qty, price: unitPrice, lineTotal });
+
+      if (deductFromWarehouse) {
+        const bd = [...(book.breakdown || [])];
+        const bIdx = bd.findIndex(x => (x.location || '').trim() === supName);
+        if (bIdx >= 0) bd[bIdx] = { ...bd[bIdx], amount: Number(bd[bIdx].amount || 0) + qty };
+        else bd.push({ location: supName, amount: qty });
+        book.breakdown = bd;
+        book.updatedAt = now;
       }
-      const updated = { ...book, breakdown: currentBreakdown, updatedAt: Date.now() };
-      updatedMap.set(book.id, updated);
-      return updated;
     });
 
-    setInventoryList(finalInventory);
-    const updatedBooks = Array.from(updatedMap.values());
-
-    if (db && dbConnected && updatedBooks.length > 0) {
+    setInventoryList(workingInv);
+    if (db && dbConnected && deductFromWarehouse) {
       try {
-        await Promise.all(updatedBooks.map(b =>
-          updateDoc(getDocRef('inventory', b.id), {
-            publisherStock: b.publisherStock,
-            breakdown: b.breakdown,
-            updatedAt: b.updatedAt
-          })
-        ));
-      } catch (err) {
-        console.error('Error syncing supplier stock:', err);
-      }
+        await Promise.all(workingInv.filter(b => b.updatedAt === now).map(b => updateDoc(getDocRef('inventory', b.id), { publisherStock: b.publisherStock, breakdown: b.breakdown, updatedAt: now })));
+      } catch {}
     }
-
-    const itemsText = validItems
-      .map((item, idx) => `${idx + 1}. ${item.title} — ${item.quantity} עותקים × ₪${item.price} = ₪${item.lineTotal.toLocaleString()}`)
-      .join('\n') + (invoiceNotes.trim() ? `\nהערות: ${invoiceNotes.trim()}` : '');
-
-    const actionLabel =
-      mode === 'email' ? 'הפקת הזמנה ושליחה במייל' :
-      mode === 'whatsapp' ? 'הפקת הזמנה ושליחה בוואטסאפ' :
-      mode === 'print' ? 'הפקת תעודת משלוח' :
-      'רישום הזמנה ועדכון מלאי';
 
     const logObj = {
-      supplierName: invoiceSupplier.name,
-      action: actionLabel,
+      supplierName: supName,
       type: 'order',
-      user: currentUserName,
-      date: new Date().toLocaleString('he-IL'),
-      timestamp: Date.now(),
-      totalAmount: totalOrderPrice,
+      action: 'הזמנה / אספקה לספק',
+      details: detailLines.join('\n') + (invoiceNotes.trim() ? `\nהערות: ${invoiceNotes.trim()}` : ''),
+      totalAmount,
       paymentStatus: 'unpaid',
       paidAmount: 0,
-      details: itemsText
+      user: currentUserName,
+      date: new Date().toLocaleDateString('he-IL'),
+      timestamp: now
     };
-
     if (db && dbConnected) {
-      try { await addDoc(getCollRef('supplier_logs'), logObj); } catch { setSupplierLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]); }
+      try { await addDoc(getCollRef('supplier_logs'), logObj); } catch { setSupplierLogs(prev => [{ ...logObj, id: now.toString() }, ...prev]); }
     } else {
-      setSupplierLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]);
+      setSupplierLogs(prev => [{ ...logObj, id: now.toString() }, ...prev]);
     }
 
-    const dateStr = new Date().toLocaleDateString('he-IL');
-    if (mode === 'email') {
-      const subject = `הזמנת ספרים — הוצאת ישיבת ירוחם (${dateStr})`;
-      const body =
-        `שלום רב ${invoiceSupplier.contact || invoiceSupplier.name},\n\n` +
-        `להלן פירוט הזמנת הספרים מהוצאת ספרי ישיבת ירוחם בתאריך ${dateStr}:\n\n` +
-        `${itemsText}\n\n` +
-        `----------------------------------------\n` +
-        `סה"כ לתשלום: ₪${totalOrderPrice.toLocaleString()}\n` +
-        `----------------------------------------\n\n` +
-        `נשמח לאישור קבלת ההזמנה.\nבברכה,\nהוצאת ספרי ישיבת ירוחם`;
-      window.location.href = `mailto:${invoiceSupplier.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    } else if (mode === 'whatsapp') {
-      const waPhone = formatWhatsAppPhone(invoiceSupplier.phone);
-      const waText =
-        `📚 *הזמנת ספרים — הוצאת ישיבת ירוחם*\n` +
-        `תאריך: ${dateStr}\nלכבוד: ${invoiceSupplier.name}\n\n` +
-        `${itemsText}\n\n` +
-        `*סה"כ לתשלום: ₪${totalOrderPrice.toLocaleString()}*`;
-      if (waPhone) {
-        window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(waText)}`, '_blank', 'noopener,noreferrer');
-      } else {
-        showToast('המלאי עודכן, אך לספק אין מספר טלפון תקין לוואטסאפ.', 'warning');
-      }
+    setIsSupplierInvoiceModalOpen(false);
+    const summaryMsg = `📚 *הזמנה / תעודת משלוח — הוצאת ספרי ישיבת ירוחם*\nלכבוד: ${supName}\n\n${detailLines.join('\n')}\n\n*סה"כ: ₪${totalAmount.toLocaleString()}*`;
+
+    if (mode === 'whatsapp') {
+      const phone = formatWhatsAppPhone(invoiceSupplier.phone);
+      window.open(phone ? `https://wa.me/${phone}?text=${encodeURIComponent(summaryMsg)}` : `https://wa.me/?text=${encodeURIComponent(summaryMsg)}`, '_blank');
+    } else if (mode === 'email') {
+      window.open(`mailto:${invoiceSupplier.email || ''}?subject=${encodeURIComponent(`הזמנת ספרים — ${supName}`)}&body=${encodeURIComponent(summaryMsg)}`, '_blank');
     } else if (mode === 'print') {
       setPrintDoc({
         type: 'supplier_delivery',
         docTitle: 'תעודת משלוח / הזמנה לספק',
-        orderId: `SUP-${Date.now().toString().slice(-5)}`,
-        date: dateStr,
-        recipient: `${invoiceSupplier.name}${invoiceSupplier.address ? ' — ' + invoiceSupplier.address : ''}`,
-        totalAmount: totalOrderPrice,
+        orderId: String(now).slice(-5),
+        date: new Date().toLocaleDateString('he-IL'),
+        recipient: supName,
+        items: printItems,
         notes: invoiceNotes.trim(),
-        items: validItems.map(i => ({ name: i.title, quantity: i.quantity, price: i.price, lineTotal: i.lineTotal }))
+        totalAmount
       });
     }
-
-    setIsSupplierInvoiceModalOpen(false);
-    showToast(`ההזמנה נשמרה ומלאי "${invoiceSupplier.name}" עודכן אוטומטית!`, 'success');
+    showToast(`ההזמנה עבור "${supName}" נשמרה והמלאי עודכן!`, 'success');
   };
 
-  // --- קונסיגנציה: דיווח מכירה / החזרה ---
   const openConsignmentModal = (supplier) => {
-    const items = getSupplierInventoryItems(supplier.name);
-    const first = items[0];
+    const held = getSupplierInventoryItems(supplier.name);
+    const first = held[0];
     setConsignmentSupplier(supplier);
     setConsignmentForm({
       type: 'sale',
@@ -1333,301 +1093,327 @@ export default function App() {
   const handleSaveConsignment = async (e) => {
     e.preventDefault();
     if (!consignmentSupplier || !consignmentForm.bookId) return;
+    const supName = consignmentSupplier.name.trim();
     const book = inventoryList.find(b => b.id === consignmentForm.bookId);
     if (!book) return;
+
     const qty = Math.max(1, Number(consignmentForm.quantity || 1));
-    const isReturn = consignmentForm.type === 'return';
-    const totalAmount = isReturn ? 0 : qty * Number(consignmentForm.unitPrice || 0);
+    const isSale = consignmentForm.type === 'sale';
+    const unitPrice = isSale ? Math.max(0, Number(consignmentForm.unitPrice || 0)) : 0;
+    const totalAmount = qty * unitPrice;
+    const now = Date.now();
 
-    const updatedBreakdown = (book.breakdown || [])
-      .map(row => row.location === consignmentSupplier.name
-        ? { ...row, amount: Math.max(0, Number(row.amount || 0) - qty) }
-        : row
-      )
-      .filter(row => Number(row.amount) > 0);
+    const nextBreakdown = (book.breakdown || [])
+      .map(r => (r.location || '').trim() === supName ? { ...r, amount: Math.max(0, Number(r.amount || 0) - qty) } : r)
+      .filter(r => Number(r.amount) > 0);
+    const nextWarehouse = isSale ? Number(book.publisherStock || 0) : Number(book.publisherStock || 0) + qty;
 
-    const newPublisherStock = isReturn
-      ? Number(book.publisherStock || 0) + qty
-      : Number(book.publisherStock || 0);
-
-    setInventoryList(prev => prev.map(b =>
-      b.id === book.id ? { ...b, publisherStock: newPublisherStock, breakdown: updatedBreakdown, updatedAt: Date.now() } : b
-    ));
+    setInventoryList(prev => prev.map(b => b.id === book.id ? { ...b, publisherStock: nextWarehouse, breakdown: nextBreakdown, updatedAt: now } : b));
     if (db && dbConnected && book.id) {
-      try {
-        await updateDoc(getDocRef('inventory', book.id), {
-          publisherStock: newPublisherStock,
-          breakdown: updatedBreakdown,
-          updatedAt: Date.now()
-        });
-      } catch {}
+      try { await updateDoc(getDocRef('inventory', book.id), { publisherStock: nextWarehouse, breakdown: nextBreakdown, updatedAt: now }); } catch {}
     }
-
-    const details = isReturn
-      ? `הוחזרו ${qty} עותקים מהספר "${book.title}" למחסן הראשי.${consignmentForm.notes ? '\nהערות: ' + consignmentForm.notes : ''}`
-      : `נמכרו ${qty} עותקים מהספר "${book.title}" × ₪${consignmentForm.unitPrice} = ₪${totalAmount.toLocaleString()}.${consignmentForm.notes ? '\nהערות: ' + consignmentForm.notes : ''}`;
 
     const logObj = {
-      supplierName: consignmentSupplier.name,
-      action: isReturn ? 'החזרת ספרים למחסן' : 'דיווח מכירת קונסיגנציה',
-      type: consignmentForm.type,
-      user: currentUserName,
-      date: new Date().toLocaleString('he-IL'),
-      timestamp: Date.now(),
+      supplierName: supName,
+      type: isSale ? 'sale' : 'return',
+      action: isSale ? 'דיווח מכירת קונסיגנציה' : 'החזרת ספרים למחסן הראשי',
+      details: `1. ${book.title} — ${qty} עותקים` + (isSale ? ` × ₪${unitPrice} = ₪${totalAmount.toLocaleString()}` : ' (הוחזרו למחסן)') + (consignmentForm.notes ? `\nהערות: ${consignmentForm.notes}` : ''),
       totalAmount,
-      paymentStatus: isReturn ? 'paid' : 'unpaid',
+      paymentStatus: isSale ? 'unpaid' : 'paid',
       paidAmount: 0,
-      details
+      user: currentUserName,
+      date: new Date().toLocaleDateString('he-IL'),
+      timestamp: now
     };
-
     if (db && dbConnected) {
-      try { await addDoc(getCollRef('supplier_logs'), logObj); } catch { setSupplierLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]); }
+      try { await addDoc(getCollRef('supplier_logs'), logObj); } catch { setSupplierLogs(prev => [{ ...logObj, id: now.toString() }, ...prev]); }
     } else {
-      setSupplierLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]);
+      setSupplierLogs(prev => [{ ...logObj, id: now.toString() }, ...prev]);
     }
     setIsConsignmentModalOpen(false);
-    showToast(isReturn ? `${qty} עותקים הוחזרו למחסן הראשי!` : `נרשמה מכירה ע"ס ₪${totalAmount.toLocaleString()}!`, 'success');
+    showToast(isSale ? 'מכירת קונסיגנציה דווחה בהצלחה!' : 'הספרים הוחזרו למחסן הראשי!', 'success');
   };
 
-  const handleUpdateLogPayment = async (log, status, customPaidAmount = null) => {
+  const handleUpdateLogPayment = async (log, status, partialVal) => {
     const total = Number(log.totalAmount || 0);
-    let paidAmount = 0;
-    if (status === 'paid') paidAmount = total;
-    else if (status === 'partial') {
-      const parsed = Number(customPaidAmount);
-      if (isNaN(parsed) || parsed < 0 || parsed > total) {
-        showToast(`אנא הזן סכום תקין בין 0 ל-₪${total.toLocaleString()}`, 'warning');
-        return;
-      }
-      paidAmount = parsed;
-    }
-
+    const paidAmount = status === 'paid' ? total : status === 'partial' ? Math.min(total, Math.max(0, Number(partialVal || 0))) : 0;
     setSupplierLogs(prev => prev.map(l => l.id === log.id ? { ...l, paymentStatus: status, paidAmount } : l));
     if (db && dbConnected && log.id) {
       try { await updateDoc(getDocRef('supplier_logs', log.id), { paymentStatus: status, paidAmount }); } catch {}
     }
-    showToast(status === 'paid' ? 'החיוב סומן כשולם!' : status === 'partial' ? `עודכן תשלום חלקי ע"ס ₪${paidAmount.toLocaleString()}` : 'סטטוס עודכן לטרם שולם', 'success');
+    showToast('סטטוס התשלום עודכן!', 'success');
   };
 
   const handleSendDebtWhatsAppReminder = (supplier) => {
     const debt = getSupplierOpenDebt(supplier.name);
-    const waPhone = formatWhatsAppPhone(supplier.phone);
-    if (!waPhone) {
-      showToast('לספק זה לא מוגדר מספר טלפון תקין לוואטסאפ.', 'error');
-      return;
-    }
-    const msg = `שלום ${supplier.contact || supplier.name},\nמקווים ששלומכם טוב!\nפונים אליכם בעדינות מהוצאת ספרי ישיבת ירוחם לגבי יתרת תשלום פתוחה על הזמנות ספרים ע"ס ₪${debt.toLocaleString()}.\nנשמח לעדכון מתי צפויה העברה או אם נדרש מאיתנו מסמך נוסף.\nתודה רבה וכל טוב!`;
-    window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
+    const phone = formatWhatsAppPhone(supplier.phone);
+    const msg = `שלום ${supplier.contact || supplier.name},\nתזכורת נעימה מהוצאת ספרי ישיבת ירוחם לגבי יתרת חשבון פתוחה ע"ס ₪${debt.toLocaleString()}.\nנשמח לעדכון לאחר ההעברה. תודה רבה!`;
+    window.open(phone ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
   // --- פענוח חכם של הודעת הזמנה מספק ---
+  const levenshteinDist = (a = '', b = '') => {
+    const m = a.length, n = b.length;
+    if (!m) return n;
+    if (!n) return m;
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        dp[i][j] = a[i - 1] === b[j - 1]
+          ? dp[i - 1][j - 1]
+          : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      }
+    }
+    return dp[m][n];
+  };
+
+  const matchBookByFuzzyText = (fragment) => {
+    const clean = normalizeBookTitle(fragment).replace(/^(עותקים|ספרים|מ|של|את|ו)\s+/g, '').trim();
+    if (!clean || clean.length < 2) return null;
+
+    const catMatch = findMatchingCatalogBook(clean);
+    if (catMatch) {
+      const inInv = inventoryList.find(b => b.id === catMatch.id || normalizeBookTitle(b.title) === normalizeBookTitle(catMatch.title));
+      if (inInv) return inInv;
+    }
+
+    const isSetHint = clean.includes('סט');
+    const tokens = clean.split(' ').filter(w => w.length >= 2);
+    let bestBook = null;
+    let bestScore = 0;
+
+    for (const book of inventoryList) {
+      const bNorm = normalizeBookTitle(book.title);
+      if (bNorm === clean) return book;
+      let score = 0;
+      if (bNorm.includes(clean)) score += 60 + clean.length;
+      for (const tok of tokens) {
+        const strippedTok = tok.replace(/^[והבלמ]/, '');
+        if (bNorm.includes(tok) || (strippedTok.length >= 3 && bNorm.includes(strippedTok))) {
+          score += 25;
+        } else {
+          for (const bWord of bNorm.split(' ')) {
+            if (bWord.length >= 4 && levenshteinDist(tok, bWord) <= 1) score += 18;
+          }
+        }
+      }
+      if (isSetHint && bNorm.includes('סט')) score += 25;
+      if (!isSetHint && bNorm.includes('סט')) score -= 15;
+      if (score > bestScore) {
+        bestScore = score;
+        bestBook = book;
+      }
+    }
+    return bestScore >= 22 ? bestBook : null;
+  };
+
   const handleParseSupplierMessageText = (text) => {
     setRawOrderMessage(text);
     if (!text.trim()) {
       setParsedItems([]);
       return;
     }
-    const foundSup = suppliersList.find(s => s.name && text.includes(s.name));
-    if (foundSup) setParsedSupplierName(foundSup.name);
+    const foundSupplier = suppliersList.find(s => s.name && text.includes(s.name));
+    if (foundSupplier) setParsedSupplierName(foundSupplier.name);
 
-    const cleanWords = (s) => normalizeBookTitle(s)
-      .split(' ')
-      .map(w => w.replace(/^[והלבכמש]/, ''))
-      .filter(w => w.length >= 2 && !['ספר', 'ספרי', 'חוברת', 'חוברות', 'סט', 'עותקים', 'יחידות', 'שלום', 'נשמח', 'להזמין'].includes(w));
+    const segments = text
+      .split(/[\n,،;]+|\s+ו(?=\d)|\s*\+\s*/)
+      .map(s => s.trim())
+      .filter(Boolean);
 
-    const levenshtein = (a, b) => {
-      if (Math.abs(a.length - b.length) > 2) return 99;
-      const dp = Array.from({ length: a.length + 1 }, (_, i) => [i]);
-      for (let j = 1; j <= b.length; j++) dp[0][j] = j;
-      for (let i = 1; i <= a.length; i++) {
-        for (let j = 1; j <= b.length; j++) {
-          dp[i][j] = a[i - 1] === b[j - 1]
-            ? dp[i - 1][j - 1]
-            : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
-        }
-      }
-      return dp[a.length][b.length];
-    };
-
-    const scoreBookMatch = (segment, book) => {
-      const normSeg = normalizeBookTitle(segment);
-      const normTitle = normalizeBookTitle(book.title);
-      if (!normSeg || !normTitle) return 0;
-
-      const segIsSet = normSeg.includes('סט');
-      const bookIsSet = normTitle.includes('סט') || Boolean(book.isSet);
-      if (segIsSet !== bookIsSet) return 0;
-
-      if (normSeg.includes(normTitle) || normTitle.includes(normSeg)) return 100;
-
-      const segWords = cleanWords(segment);
-      const titleWords = cleanWords(book.title);
-      if (segWords.length === 0 || titleWords.length === 0) return 0;
-
-      let matched = 0;
-      for (const sw of segWords) {
-        if (titleWords.some(tw => tw === sw || tw.includes(sw) || sw.includes(tw) || levenshtein(sw, tw) <= 1)) {
-          matched++;
-        }
-      }
-      if (matched === 0) return 0;
-      return Math.round((matched / Math.max(segWords.length, titleWords.length)) * 80) + matched * 5;
-    };
-
-    const segments = text.split(/[\n,;+]+|\s+ו(?=\d)/).map(s => s.trim()).filter(Boolean);
-    const detected = [];
-
+    const results = [];
     for (const seg of segments) {
-      const qtyMatch = seg.match(/(\d+)/);
-      const qty = qtyMatch ? Math.max(1, Number(qtyMatch[1])) : 1;
-      const textPart = seg.replace(/\d+/g, '').replace(/[×x*:-]/g, ' ').trim();
-      if (textPart.length < 2) continue;
-
-      let bestBook = null;
-      let bestScore = 25;
-      for (const b of inventoryList) {
-        const sc = scoreBookMatch(textPart, b);
-        if (sc > bestScore) {
-          bestScore = sc;
-          bestBook = b;
-        }
+      const mFront = seg.match(/(\d+)\s*(?:עותקים\s*(?:מ|של)?\s*)?(.+)/);
+      const mBack = seg.match(/(.+?)\s*[×xX*:-]?\s*(\d+)\s*(?:עותקים|יח'?|יחידות)?$/);
+      let qty = 0;
+      let titlePart = '';
+      if (mFront) {
+        qty = Number(mFront[1]);
+        titlePart = mFront[2];
+      } else if (mBack) {
+        titlePart = mBack[1];
+        qty = Number(mBack[2]);
       }
-
-      if (bestBook) {
-        const existing = detected.find(d => d.bookId === bestBook.id);
-        if (existing) {
-          existing.quantity += qty;
-        } else {
-          detected.push({
-            bookId: bestBook.id,
-            title: bestBook.title,
+      if (qty > 0 && titlePart) {
+        const matched = matchBookByFuzzyText(titlePart);
+        if (matched) {
+          const existing = results.find(r => r.bookId === matched.id);
+          if (existing) existing.quantity += qty;
+          else results.push({
+            bookId: matched.id,
+            title: matched.title,
             quantity: qty,
-            unitPrice: Number(bestBook.prices?.supplier || 0)
+            unitPrice: Number(getEffectiveBookPrices(matched).supplier || getEffectiveBookPrices(matched).general || 0)
           });
         }
       }
     }
-    setParsedItems(detected);
+    setParsedItems(results);
   };
 
   const handleConfirmParsedOrderAndReceipt = async () => {
-    const supName = parsedSupplierName.trim();
-    if (!supName) {
-      showToast('אנא הזן או בחר שם ספק / חנות.', 'warning');
+    if (parsedItems.length === 0) {
+      showToast('לא זוהו ספרים בהזמנה.', 'warning');
       return;
     }
-    const validItems = parsedItems.filter(i => i.bookId && Number(i.quantity) > 0);
-    if (validItems.length === 0) {
-      showToast('לא נבחרו ספרים להזמנה.', 'warning');
-      return;
+    const supName = (parsedSupplierName || 'לקוח / ספק כללי').trim();
+    const now = Date.now();
+    let totalAmount = 0;
+    const detailLines = [];
+    const printItems = [];
+
+    let workingInv = [...inventoryList];
+    if (parsedDeductWarehouse) {
+      const { nextInventory } = applySaleInventoryDeduction(workingInv, parsedItems.map(r => ({ bookId: r.bookId, qty: Number(r.quantity) })));
+      workingInv = nextInventory;
     }
 
-    const totalOrderPrice = validItems.reduce((s, i) => s + Number(i.quantity) * Number(i.unitPrice || 0), 0);
+    parsedItems.forEach((row, idx) => {
+      const book = workingInv.find(b => b.id === row.bookId);
+      const qty = Math.max(1, Number(row.quantity));
+      const unitPrice = Math.max(0, Number(row.unitPrice));
+      const lineTotal = qty * unitPrice;
+      totalAmount += lineTotal;
+      detailLines.push(`${idx + 1}. ${book?.title || row.title} — ${qty} עותקים × ₪${unitPrice} = ₪${lineTotal.toLocaleString()}`);
+      printItems.push({ name: book?.title || row.title, quantity: qty, price: unitPrice, lineTotal });
 
-    const { nextInventory: afterWarehouseDeduct, updatedBooks: decomposedBooks } = parsedDeductWarehouse
-      ? applySaleInventoryDeduction(inventoryList, validItems.map(v => ({ bookId: v.bookId, qty: v.quantity })))
-      : { nextInventory: inventoryList, updatedBooks: [] };
-
-    const updatedMap = new Map(decomposedBooks.map(b => [b.id, b]));
-    const finalInventory = afterWarehouseDeduct.map(book => {
-      const orderItem = validItems.find(v => v.bookId === book.id);
-      if (!orderItem) return book;
-      const currentBreakdown = [...(book.breakdown || [])];
-      const existingIdx = currentBreakdown.findIndex(b => b.location === supName);
-      if (existingIdx !== -1) {
-        currentBreakdown[existingIdx] = {
-          ...currentBreakdown[existingIdx],
-          amount: Number(currentBreakdown[existingIdx].amount || 0) + Number(orderItem.quantity)
-        };
-      } else {
-        currentBreakdown.push({ location: supName, amount: Number(orderItem.quantity) });
+      if (parsedDeductWarehouse && book) {
+        const bd = [...(book.breakdown || [])];
+        const bIdx = bd.findIndex(x => (x.location || '').trim() === supName);
+        if (bIdx >= 0) bd[bIdx] = { ...bd[bIdx], amount: Number(bd[bIdx].amount || 0) + qty };
+        else bd.push({ location: supName, amount: qty });
+        book.breakdown = bd;
+        book.updatedAt = now;
       }
-      const updated = { ...book, breakdown: currentBreakdown, updatedAt: Date.now() };
-      updatedMap.set(book.id, updated);
-      return updated;
     });
 
-    setInventoryList(finalInventory);
-    const updatedBooks = Array.from(updatedMap.values());
-    if (db && dbConnected && updatedBooks.length > 0) {
+    setInventoryList(workingInv);
+    if (db && dbConnected && parsedDeductWarehouse) {
       try {
-        await Promise.all(updatedBooks.map(b =>
-          updateDoc(getDocRef('inventory', b.id), { publisherStock: b.publisherStock, breakdown: b.breakdown, updatedAt: b.updatedAt })
-        ));
+        await Promise.all(workingInv.filter(b => b.updatedAt === now).map(b => updateDoc(getDocRef('inventory', b.id), { publisherStock: b.publisherStock, breakdown: b.breakdown, updatedAt: now })));
       } catch {}
     }
 
-    const itemsText = validItems
-      .map((item, idx) => `${idx + 1}. ${item.title} — ${item.quantity} עותקים × ₪${item.unitPrice} = ₪${(Number(item.quantity) * Number(item.unitPrice)).toLocaleString()}`)
-      .join('\n');
-
     const logObj = {
       supplierName: supName,
-      action: 'קליטת הזמנה והפקת קבלה מהודעה',
       type: 'order',
-      user: currentUserName,
-      date: new Date().toLocaleString('he-IL'),
-      timestamp: Date.now(),
-      totalAmount: totalOrderPrice,
+      action: parsedMarkAsPaid ? 'הזמנה וקבלה אוטומטית (שולם)' : 'הזמנה אוטומטית מהודעת ספק',
+      details: detailLines.join('\n'),
+      totalAmount,
       paymentStatus: parsedMarkAsPaid ? 'paid' : 'unpaid',
-      paidAmount: parsedMarkAsPaid ? totalOrderPrice : 0,
-      details: itemsText
+      paidAmount: parsedMarkAsPaid ? totalAmount : 0,
+      user: currentUserName,
+      date: new Date().toLocaleDateString('he-IL'),
+      timestamp: now
     };
-
     if (db && dbConnected) {
-      try { await addDoc(getCollRef('supplier_logs'), logObj); } catch { setSupplierLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]); }
+      try { await addDoc(getCollRef('supplier_logs'), logObj); } catch { setSupplierLogs(prev => [{ ...logObj, id: now.toString() }, ...prev]); }
     } else {
-      setSupplierLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]);
+      setSupplierLogs(prev => [{ ...logObj, id: now.toString() }, ...prev]);
     }
 
     setIsParseOrderModalOpen(false);
     setPrintDoc({
       type: 'supplier_delivery',
-      docTitle: parsedMarkAsPaid ? 'קבלה ותעודת משלוח לספק' : 'תעודת משלוח / הזמנה לספק',
-      orderId: `RCP-${Date.now().toString().slice(-5)}`,
+      docTitle: parsedMarkAsPaid ? 'קבלה / אישור הזמנה' : 'תעודת משלוח / הזמנה',
+      orderId: String(now).slice(-5),
       date: new Date().toLocaleDateString('he-IL'),
       recipient: supName,
-      totalAmount: totalOrderPrice,
-      notes: parsedMarkAsPaid ? 'סטטוס תשלום: שולם במלואו' : 'סטטוס תשלום: לתשלום',
-      items: validItems.map(i => ({
-        name: i.title,
-        quantity: Number(i.quantity),
-        price: Number(i.unitPrice),
-        lineTotal: Number(i.quantity) * Number(i.unitPrice)
-      }))
+      items: printItems,
+      notes: parsedMarkAsPaid ? 'שולם במלואו' : 'טרם שולם',
+      totalAmount
     });
-    showToast('ההזמנה נקלטה, המלאי עודכן והופקה קבלה!', 'success');
+    showToast('ההזמנה והקבלה הופקו והמלאי עודכן!', 'success');
   };
 
-  // ==========================================
-  // פעולות הזמנות חנות (אתר)
-  // ==========================================
-  const handleMarkOrderShipped = (order) => {
-    setConfirmDialog({
-      title: 'אישור שליחת הזמנה',
-      message: `האם הזמנה #${order.orderId} עבור ${order.customerName} נארזה ומוכנה להעברה ל"הזמנות שנשלחו"?`,
-      confirmText: 'אשר וסמן כנשלח',
-      confirmStyle: 'bg-emerald-600 hover:bg-emerald-700',
-      icon: <CheckCircle className="w-6 h-6" />,
-      iconStyle: 'bg-emerald-100 text-emerald-600',
-      onConfirm: async () => {
-        setOrdersList(prev => prev.map(o => o.id === order.id ? { ...o, status: 'shipped', shippedAt: Date.now() } : o));
-        if (db && dbConnected && order.id) {
-          try { await updateDoc(getDocRef('orders', order.id), { status: 'shipped', shippedAt: Date.now() }); } catch {}
-        }
-        showToast(`הזמנה #${order.orderId} הועברה להזמנות שנשלחו!`, 'success');
+  // --- התאמות דאשבורד וניקוי חובות יתומים ---
+  const handleSaveDashboardAdjustments = async (e) => {
+    e.preventDefault();
+    if (db && dbConnected) {
+      try { await setDoc(getDocRef('settings', 'dashboard_adjustments'), dashboardAdjustments, { merge: true }); } catch {}
+    }
+    setIsDashboardEditOpen(false);
+    showToast('נתוני ההתאמה של הדאשבורד נשמרו!', 'success');
+  };
+
+  const handlePurgeOrphanSupplierDebts = async () => {
+    const activeNames = new Set(suppliersList.map(s => (s.name || '').trim()));
+    const orphans = supplierLogs.filter(l => !activeNames.has((l.supplierName || '').trim()));
+    if (orphans.length === 0) {
+      showToast('לא נמצאו חובות של ספקים שנמחקו.', 'info');
+      return;
+    }
+    setSupplierLogs(prev => prev.filter(l => activeNames.has((l.supplierName || '').trim())));
+    if (db && dbConnected) {
+      try {
+        await Promise.all(orphans.filter(l => l.id).map(l => deleteDoc(getDocRef('supplier_logs', l.id))));
+      } catch {}
+    }
+    showToast(`נוקו ${orphans.length} רשומות חוב של ספקים שנמחקו!`, 'success');
+  };
+
+  // --- הזמנות חנות ו-Webhook ---
+  const getWebhookUrl = () => `${window.location.origin}/api/webhook`;
+
+  const handlePingWebhook = async () => {
+    setWebhookCheckState({ loading: true, status: null, message: 'בודק חיבור לשרת...' });
+    try {
+      const res = await fetch(getWebhookUrl());
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setWebhookCheckState({ loading: false, status: 'ok', message: 'השרת מחובר ופעיל! מוכן לקבל הזמנות מ-WooCommerce.' });
+      } else {
+        setWebhookCheckState({ loading: false, status: 'error', message: 'השרת החזיר שגיאה בבדיקה.' });
       }
-    });
+    } catch {
+      setWebhookCheckState({ loading: false, status: 'error', message: 'לא ניתן להגיע לכתובת השרת כרגע.' });
+    }
+  };
+
+  const handleSendTestOrder = async () => {
+    setSendingTestOrder(true);
+    const testId = 'TEST-' + String(Date.now()).slice(-4);
+    const orderObj = {
+      orderId: testId,
+      customerName: 'הזמנת בדיקה — צוות הישיבה',
+      phone: '050-0000000',
+      email: '',
+      address: 'ישיבת ההסדר ירוחם',
+      shippingMethod: 'איסוף עצמי',
+      customerNote: 'הזמנת בדיקה פנימית (לא מפחיתה מלאי)',
+      items: [{ name: inventoryList[0]?.title || 'אותך אבקש', quantity: 1 }],
+      total: Number(inventoryList[0]?.prices?.general || 59),
+      date: new Date().toLocaleDateString('he-IL'),
+      time: new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
+      timestamp: Date.now(),
+      status: 'pending',
+      isTest: true
+    };
+    if (db && dbConnected) {
+      try { await addDoc(getCollRef('orders'), orderObj); } catch { setOrdersList(prev => [{ ...orderObj, id: testId }, ...prev]); }
+    } else {
+      setOrdersList(prev => [{ ...orderObj, id: testId }, ...prev]);
+    }
+    setSendingTestOrder(false);
+    showToast(`הזמנת בדיקה #${testId} נוצרה!`, 'success');
+  };
+
+  const handleMarkOrderShipped = async (order) => {
+    const now = Date.now();
+    setOrdersList(prev => prev.map(o => o.id === order.id ? { ...o, status: 'shipped', shippedAt: now } : o));
+    if (db && dbConnected && order.id) {
+      try { await updateDoc(getDocRef('orders', order.id), { status: 'shipped', shippedAt: now }); } catch {}
+    }
+    showToast(`הזמנה #${order.orderId} סומנה כנארזה ונשלחה!`, 'success');
   };
 
   const handleDeleteOrder = (order) => {
     setConfirmDialog({
       title: 'מחיקת הזמנה',
-      message: `האם למחוק את הזמנה #${String(order.orderId || '').replace(/^#/, '')} (${order.customerName})?`,
+      message: `האם למחוק את הזמנה #${order.orderId} (${order.customerName})?`,
       confirmText: 'מחק הזמנה',
-      confirmStyle: 'bg-red-600 hover:bg-red-700',
-      icon: <Trash2 className="w-6 h-6" />,
-      iconStyle: 'bg-red-100 text-red-600',
       onConfirm: async () => {
         setOrdersList(prev => prev.filter(o => o.id !== order.id));
         if (db && dbConnected && order.id) {
@@ -1638,92 +1424,78 @@ export default function App() {
     });
   };
 
-  const getWebhookUrl = () => {
-    if (typeof window !== 'undefined') {
-      const host = window.location.hostname || '';
-      const isPreviewOrLocal =
-        !host ||
-        host.includes('localhost') ||
-        host.includes('127.0.0.1') ||
-        host.includes('googleusercontent') ||
-        host.includes('webcontainer');
-      if (!isPreviewOrLocal && window.location.protocol.startsWith('http')) {
-        return `${window.location.origin}/api/webhook`;
-      }
+  // --- סורק ברקוד / דאנאק ---
+  const handleBarcodeDetected = (code) => {
+    const clean = String(code || '').trim();
+    if (!clean) return;
+    const found = inventoryList.find(b => (b.isbn || '').trim() === clean || (b.title || '').includes(clean));
+    if (!found) {
+      showToast(`לא נמצא ספר התואם לקוד "${clean}".`, 'warning');
+      return;
     }
-    return 'https://yhydashboard.vercel.app/api/webhook';
+    if (scannerTarget === 'pos') {
+      handleAddToPosCart(found);
+      showToast(`"${found.title}" נוסף לסל בקופה!`, 'success');
+    } else if (scannerTarget === 'inventory') {
+      setSearchQuery(found.title);
+      showToast(`נמצא הספר: "${found.title}"`, 'success');
+    }
+    setScannerTarget(null);
   };
 
-  const handlePingWebhook = async () => {
-    const url = getWebhookUrl();
-    setWebhookCheckState({ loading: true, status: null, message: `בודק זמינות שרת (${url})...` });
-    try {
-      const res = await fetch(url, { method: 'GET' });
-      const text = await res.text();
-      if (res.ok) {
-        setWebhookCheckState({ loading: false, status: 'ok', message: `החיבור תקין! השרת (${url}) פעיל ומוכן לקבל הזמנות מהאתר.` });
-        showToast('שרת ה-Webhook פעיל ותקין!', 'success');
-      } else {
-        setWebhookCheckState({ loading: false, status: 'error', message: `השרת החזיר שגיאה ${res.status} בכתובת ${url}. ${res.status === 404 ? 'הקובץ api/webhook.js לא נמצא ב-Vercel.' : text.slice(0, 120)}` });
-        showToast(`שגיאת שרת (${res.status}) בבדיקת ה-Webhook`, 'error');
-      }
-    } catch (err) {
-      setWebhookCheckState({ loading: false, status: 'error', message: `שגיאת תקשורת מול ${url}: ${err?.message || 'השרת לא הגיב (בדוק שהאפליקציה ו-api/webhook.js עלו ל-Vercel).'}` });
-      showToast('לא ניתן להתחבר לשרת ה-Webhook.', 'error');
-    }
-  };
+  useEffect(() => {
+    if (!scannerTarget) return;
+    let stream = null;
+    let rafId = null;
+    let cancelled = false;
 
-  const handleSendTestOrder = async () => {
-    const url = getWebhookUrl();
-    setSendingTestOrder(true);
-    setWebhookCheckState({ loading: true, status: null, message: `שולח הזמנת ניסיון אמיתית אל ${url}...` });
-    const testId = `TEST-${Date.now().toString().slice(-4)}`;
-    const sampleBookTitle = inventoryList[0]?.title || 'אותך אבקש - שערים לימי התשובה';
-    const samplePayload = {
-      id: testId,
-      number: testId,
-      status: 'processing',
-      is_test: true,
-      total: '59',
-      customer_note: 'הזמנת בדיקה אמיתית שעברה דרך שרת ה-Webhook (ללא הורדת מלאי)',
-      billing: { first_name: 'הזמנת', last_name: 'בדיקה (אתר)', phone: '050-0000000', email: 'test@yhyh.co.il', address_1: 'ישיבת ירוחם', city: 'ירוחם' },
-      shipping_lines: [{ method_title: 'איסוף עצמי / בדיקה' }],
-      line_items: [{ name: sampleBookTitle, quantity: 1 }]
+    const startCamera = async () => {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          setScannerError('הדפדפן אינו תומך בגישה למצלמה — ניתן להקליד דאנאק ידנית למטה.');
+          return;
+        }
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        if (cancelled) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+        if ('BarcodeDetector' in window) {
+          const detector = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128', 'qr_code'] });
+          const scanLoop = async () => {
+            if (cancelled || !videoRef.current) return;
+            try {
+              const barcodes = await detector.detect(videoRef.current);
+              if (barcodes.length > 0 && barcodes[0].rawValue) {
+                handleBarcodeDetected(barcodes[0].rawValue);
+                return;
+              }
+            } catch {}
+            rafId = requestAnimationFrame(scanLoop);
+          };
+          rafId = requestAnimationFrame(scanLoop);
+        } else {
+          setScannerError('זיהוי אוטומטי במצלמה אינו נתמך בדפדפן זה — הקלד את מספר הדאנאק למטה.');
+        }
+      } catch {
+        setScannerError('לא ניתנה הרשאת מצלמה — הקלד את מספר הדאנאק למטה.');
+      }
     };
 
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(samplePayload)
-      });
-      const responseText = await res.text();
-      if (res.ok) {
-        setWebhookCheckState({ loading: false, status: 'ok', message: `הזמנת הבדיקה #${testId} עברה בהצלחה דרך שרת ה-Webhook ונשמרה!` });
-        showToast(`הזמנת הבדיקה #${testId} נשלחה בהצלחה דרך ה-Webhook!`, 'success');
-        setActiveTab('orders');
-      } else {
-        setWebhookCheckState({
-          loading: false,
-          status: 'error',
-          message: `שליחת הזמנת הניסיון נכשלה (שגיאה ${res.status}) בכתובת ${url}. ${res.status === 404 ? 'ודא שהקובץ api/webhook.js קיים בתיקיית api ב-GitHub/Vercel.' : responseText.slice(0, 140)}`
-        });
-        showToast(`שגיאה ${res.status} בשליחת הזמנת ניסיון לשרת.`, 'error');
-      }
-    } catch (err) {
-      setWebhookCheckState({
-        loading: false,
-        status: 'error',
-        message: `לא ניתן להגיע לשרת ה-Webhook (${url}): ${err?.message || 'שגיאת רשת / CORS'}.`
-      });
-      showToast('הבקשה לשרת ה-Webhook נכשלה — ראה פירוט בתיבת הסטטוס.', 'error');
-    } finally {
-      setSendingTestOrder(false);
-    }
-  };
+    startCamera();
+    return () => {
+      cancelled = true;
+      if (rafId) cancelAnimationFrame(rafId);
+      if (stream) stream.getTracks().forEach(t => t.stop());
+    };
+  }, [scannerTarget]);
 
   // ==========================================
-  // פעולות קופה מהירה (POS)
+  // פעולות קופה מהירה (POS) — כולל עריכת מחיר לכל פריט בסל
   // ==========================================
   const getPosBookPrice = (book, mode = posPriceMode) => {
     const eff = getEffectiveBookPrices(book);
@@ -1732,11 +1504,19 @@ export default function App() {
     return eff.general;
   };
 
+  const getPosCartItemPrice = (item, mode = posPriceMode) => {
+    if (item.customPrice !== undefined && item.customPrice !== '' && item.customPrice !== null) {
+      return Math.max(0, Number(item.customPrice));
+    }
+    const book = inventoryList.find(b => b.id === item.bookId);
+    return book ? getPosBookPrice(book, mode) : 0;
+  };
+
   const handleAddToPosCart = (book) => {
     setPosCart(prev => {
       const existing = prev.find(i => i.bookId === book.id);
       if (existing) return prev.map(i => i.bookId === book.id ? { ...i, qty: i.qty + 1 } : i);
-      return [...prev, { bookId: book.id, title: book.title, qty: 1 }];
+      return [...prev, { bookId: book.id, title: book.title, qty: 1, customPrice: undefined }];
     });
   };
 
@@ -1744,12 +1524,19 @@ export default function App() {
     setPosCart(prev => prev.map(i => i.bookId === bookId ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0));
   };
 
+  const handleUpdatePosCartPrice = (bookId, rawVal) => {
+    setPosCart(prev => prev.map(i =>
+      i.bookId === bookId
+        ? { ...i, customPrice: rawVal === '' ? undefined : Math.max(0, Number(rawVal)) }
+        : i
+    ));
+  };
+
   const handleCompletePosSale = async () => {
     if (posCart.length === 0) return;
     let totalAmount = 0;
     const saleItems = posCart.map(item => {
-      const book = inventoryList.find(b => b.id === item.bookId);
-      const unitPrice = book ? getPosBookPrice(book, posPriceMode) : 0;
+      const unitPrice = getPosCartItemPrice(item, posPriceMode);
       const lineTotal = unitPrice * item.qty;
       totalAmount += lineTotal;
       return { bookId: item.bookId, title: item.title, qty: item.qty, unitPrice, lineTotal };
@@ -2287,10 +2074,17 @@ export default function App() {
   // --- אנליטיקת רבי-מכר, רווחיות ודוח סיכום יומי ---
   const salesAnalytics = useMemo(() => {
     const bookStats = new Map();
+    const getUnitProductionCost = (bookObj, title = '') => {
+      const direct = Number(bookObj?.productionCost || 0);
+      if (direct > 0) return direct;
+      const catMatch = findMatchingCatalogBook(bookObj?.title || title);
+      return Number(catMatch?.productionCost || 0);
+    };
+
     const ensureStat = (title, bookObj = null) => {
-      const key = bookObj?.id || title;
+      const matched = bookObj || inventoryList.find(b => normalizeBookTitle(b.title) === normalizeBookTitle(title)) || findMatchingCatalogBook(title);
+      const key = matched?.id || normalizeBookTitle(title) || title;
       if (!bookStats.has(key)) {
-        const matched = bookObj || inventoryList.find(b => normalizeBookTitle(b.title) === normalizeBookTitle(title));
         bookStats.set(key, {
           id: key,
           title: matched?.title || title,
@@ -2298,14 +2092,14 @@ export default function App() {
           units: 0,
           revenue: 0,
           cost: 0,
-          unitCost: Number(matched?.productionCost || 0),
+          unitCost: getUnitProductionCost(matched, title),
           royaltyPct: Number(matched?.royaltyPct || 0)
         });
       }
       return bookStats.get(key);
     };
 
-    // מכירות דוכן (POS)
+    // 1. מכירות דוכן (POS)
     posSales.forEach(sale => {
       (sale.items || []).forEach(it => {
         const b = inventoryList.find(x => x.id === it.bookId);
@@ -2318,7 +2112,7 @@ export default function App() {
       });
     });
 
-    // הזמנות מהחנות (אתר — ללא הזמנות בדיקה)
+    // 2. הזמנות מהחנות (אתר — ללא הזמנות בדיקה)
     ordersList.filter(o => !o.isTest).forEach(ord => {
       (ord.items || []).forEach(it => {
         const b = inventoryList.find(x => normalizeBookTitle(x.title) === normalizeBookTitle(it.name));
@@ -2331,10 +2125,31 @@ export default function App() {
       });
     });
 
+    // 3. הזמנות ומכירות מול ספקים וחנויות (חילוץ שורות הספרים והכמויות מההיסטוריה)
+    supplierLogs.filter(l => l.type !== 'return').forEach(log => {
+      const lines = String(log.details || '').split('\n');
+      lines.forEach(line => {
+        // תבנית: "1. שם הספר — 10 עותקים × ₪30 = ₪300"
+        const m = line.match(/^\d+\.\s*(.+?)\s*[—–-]\s*(\d+)\s*עותקים\s*[×x]\s*₪([\d.,]+)/);
+        if (m) {
+          const rawTitle = m[1].trim();
+          const qty = Math.max(0, Number(m[2] || 0));
+          const unitPrice = Number(String(m[3]).replace(/,/g, '')) || 0;
+          if (qty > 0) {
+            const b = inventoryList.find(x => normalizeBookTitle(x.title) === normalizeBookTitle(rawTitle));
+            const st = ensureStat(rawTitle, b);
+            st.units += qty;
+            st.revenue += qty * unitPrice;
+            st.cost += qty * st.unitCost;
+          }
+        }
+      });
+    });
+
     const allRanked = Array.from(bookStats.values()).sort((a, b) => b.units - a.units || b.revenue - a.revenue);
-    const totalTrackedCost = allRanked.reduce((s, r) => s + r.cost, 0);
+    const totalBooksProductionCost = allRanked.reduce((s, r) => s + r.cost, 0);
+    const totalMarketingSpent = campaignsList.reduce((s, c) => s + Number(c.spent || 0), 0);
     const totalGrossRevenue = liveStoreRevenue + liveSupplierRevenue + livePosRevenue;
-    const netProfitEstimate = totalGrossRevenue - totalTrackedCost;
 
     // חישוב תמלוגים למחברים
     const royaltyRows = allRanked
@@ -2345,15 +2160,20 @@ export default function App() {
       }));
     const totalRoyaltiesDue = royaltyRows.reduce((s, r) => s + r.royaltyDue, 0);
 
+    const totalAllExpenses = totalBooksProductionCost + totalMarketingSpent + totalRoyaltiesDue;
+    const netProfitEstimate = totalGrossRevenue - totalAllExpenses;
+
     return {
       topBooks: allRanked.slice(0, 5),
-      totalTrackedCost,
+      totalBooksProductionCost,
+      totalMarketingSpent,
+      totalAllExpenses,
       totalGrossRevenue,
       netProfitEstimate,
       royaltyRows,
       totalRoyaltiesDue
     };
-  }, [posSales, ordersList, inventoryList, liveStoreRevenue, liveSupplierRevenue, livePosRevenue]);
+  }, [posSales, ordersList, supplierLogs, campaignsList, inventoryList, liveStoreRevenue, liveSupplierRevenue, livePosRevenue]);
 
   const dailySummaryData = useMemo(() => {
     const todayStr = new Date().toLocaleDateString('he-IL');
@@ -2414,6 +2234,10 @@ export default function App() {
 
   // סגנונות מערכת מתקדמים, אנימציות ומעברים חלקים
   const themeStyles = `
+    @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&display=swap');
+    .erp-shell, .erp-shell * {
+      font-family: 'Heebo', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
     @keyframes pageEnter {
       0% { opacity: 0; transform: translateY(14px) scale(0.992); filter: blur(4px); }
       100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
@@ -2935,7 +2759,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => {
-                setCalcItems([{ bookId: inventoryList[0]?.id || '', quantity: 10 }]);
+                setCalcItems([{ bookId: inventoryList[0]?.id || '', quantity: 10, customPrice: '' }]);
                 setCalcDiscountPct(0);
                 setIsPurchaseCalcOpen(true);
               }}
@@ -3010,7 +2834,7 @@ export default function App() {
                   <button onClick={() => setIsRoyaltiesModalOpen(true)} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
                     <Percent className="w-4 h-4 text-purple-300" /> תמלוגי מחברים
                   </button>
-                  <button onClick={() => { setCalcItems([{ bookId: inventoryList[0]?.id || '', quantity: 10 }]); setCalcDiscountPct(0); setIsPurchaseCalcOpen(true); }} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
+                  <button onClick={() => { setCalcItems([{ bookId: inventoryList[0]?.id || '', quantity: 10, customPrice: '' }]); setCalcDiscountPct(0); setIsPurchaseCalcOpen(true); }} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
                     <Calculator className="w-4 h-4 text-amber-300" /> מחשבון ספרים
                   </button>
                   {userRole === 'admin' && (
@@ -3072,9 +2896,14 @@ export default function App() {
                     ₪{Math.round(salesAnalytics.netProfitEstimate).toLocaleString()}
                   </p>
                   <div className="space-y-1.5 text-xs text-slate-600 pt-2 border-t border-slate-100">
-                    <div className="flex justify-between"><span>סה"כ הכנסות:</span><strong className="text-slate-900">₪{Math.round(salesAnalytics.totalGrossRevenue).toLocaleString()}</strong></div>
-                    <div className="flex justify-between"><span>עלות הפקת ספרים שנמכרו:</span><strong className="text-rose-600">-₪{Math.round(salesAnalytics.totalTrackedCost).toLocaleString()}</strong></div>
-                    <div className="flex justify-between"><span>תמלוגים צבורים למחברים:</span><strong className="text-purple-700">₪{salesAnalytics.totalRoyaltiesDue.toLocaleString()}</strong></div>
+                    <div className="flex justify-between"><span>סה"כ הכנסות (אתר/ספקים/דוכן):</span><strong className="text-slate-900">₪{Math.round(salesAnalytics.totalGrossRevenue).toLocaleString()}</strong></div>
+                    <div className="flex justify-between"><span>עלות הפקת ספרים שנמכרו:</span><strong className="text-rose-600">-₪{Math.round(salesAnalytics.totalBooksProductionCost).toLocaleString()}</strong></div>
+                    {salesAnalytics.totalMarketingSpent > 0 && (
+                      <div className="flex justify-between"><span>הוצאות שיווק וקמפיינים:</span><strong className="text-rose-600">-₪{Math.round(salesAnalytics.totalMarketingSpent).toLocaleString()}</strong></div>
+                    )}
+                    {salesAnalytics.totalRoyaltiesDue > 0 && (
+                      <div className="flex justify-between"><span>תמלוגים צבורים למחברים:</span><strong className="text-purple-700">-₪{salesAnalytics.totalRoyaltiesDue.toLocaleString()}</strong></div>
+                    )}
                   </div>
                 </div>
                 <button
@@ -3282,20 +3111,46 @@ export default function App() {
                     <p className="text-slate-400 text-sm">לחץ על הספרים מימין להוספה לסל</p>
                   </div>
                 ) : (
-                  <div className="space-y-2.5 max-h-64 overflow-y-auto pl-1">
+                  <div className="space-y-2.5 max-h-72 overflow-y-auto pl-1">
                     {posCart.map(item => {
                       const book = inventoryList.find(b => b.id === item.bookId);
-                      const unitPrice = book ? getPosBookPrice(book, posPriceMode) : 0;
+                      const defaultPrice = book ? getPosBookPrice(book, posPriceMode) : 0;
+                      const unitPrice = getPosCartItemPrice(item, posPriceMode);
+                      const isCustomPrice = item.customPrice !== undefined && item.customPrice !== '';
                       return (
-                        <div key={item.bookId} className="flex items-center justify-between gap-2 bg-slate-50/90 p-3 rounded-xl ring-1 ring-slate-200/60">
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-xs text-slate-800 truncate">{item.title}</p>
-                            <p className="text-[11px] text-slate-500 mt-0.5">₪{unitPrice} ליח' · <strong className="text-slate-700">₪{(unitPrice * item.qty).toLocaleString()}</strong></p>
+                        <div key={item.bookId} className="flex flex-col gap-2 bg-slate-50/90 p-3 rounded-xl ring-1 ring-slate-200/60">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="font-bold text-xs text-slate-800 truncate flex-1">{item.title}</p>
+                            <span className="font-extrabold text-xs text-emerald-700 shrink-0">₪{(unitPrice * item.qty).toLocaleString()}</span>
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            <button onClick={() => handleUpdatePosCartQty(item.bookId, -1)} className="w-7 h-7 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center transition-colors"><Minus className="w-3.5 h-3.5" /></button>
-                            <span className="font-extrabold text-sm w-6 text-center">{item.qty}</span>
-                            <button onClick={() => handleUpdatePosCartQty(item.bookId, 1)} className="w-7 h-7 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center transition-colors"><Plus className="w-3.5 h-3.5" /></button>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1" title="מחיר ליחידה למכירה זו בלבד (לא משנה מחירון קבוע)">
+                              <span className="text-[11px] text-slate-500">מחיר ליח' ₪:</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.5"
+                                value={isCustomPrice ? item.customPrice : defaultPrice}
+                                onChange={e => handleUpdatePosCartPrice(item.bookId, e.target.value)}
+                                className={`w-16 px-1.5 py-1 border rounded-lg text-xs text-center font-bold bg-white outline-none ${isCustomPrice ? 'border-amber-400 text-amber-800 ring-1 ring-amber-200' : 'border-slate-200 text-slate-800'}`}
+                                dir="ltr"
+                              />
+                              {isCustomPrice && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdatePosCartPrice(item.bookId, '')}
+                                  className="text-[10px] text-slate-400 hover:text-indigo-600 underline"
+                                  title="החזר למחיר מחירון"
+                                >
+                                  איפוס
+                                </button>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <button onClick={() => handleUpdatePosCartQty(item.bookId, -1)} className="w-7 h-7 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center transition-colors"><Minus className="w-3.5 h-3.5" /></button>
+                              <span className="font-extrabold text-sm w-6 text-center">{item.qty}</span>
+                              <button onClick={() => handleUpdatePosCartQty(item.bookId, 1)} className="w-7 h-7 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center transition-colors"><Plus className="w-3.5 h-3.5" /></button>
+                            </div>
                           </div>
                         </div>
                       );
@@ -3313,7 +3168,7 @@ export default function App() {
                   <div className="bg-gradient-to-l from-emerald-50 to-teal-50/70 border border-emerald-200/80 p-4 rounded-2xl flex justify-between items-center">
                     <span className="font-bold text-emerald-900 text-sm">סה"כ לתשלום:</span>
                     <span className="text-2xl font-extrabold text-emerald-700">
-                      ₪{posCart.reduce((s, item) => { const b = inventoryList.find(x => x.id === item.bookId); return s + (b ? getPosBookPrice(b, posPriceMode) * item.qty : 0); }, 0).toLocaleString()}
+                      ₪{posCart.reduce((s, item) => s + getPosCartItemPrice(item, posPriceMode) * item.qty, 0).toLocaleString()}
                     </span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -3321,10 +3176,9 @@ export default function App() {
                       type="button"
                       disabled={posCart.length === 0}
                       onClick={() => {
-                        const total = posCart.reduce((s, item) => { const b = inventoryList.find(x => x.id === item.bookId); return s + (b ? getPosBookPrice(b, posPriceMode) * item.qty : 0); }, 0);
+                        const total = posCart.reduce((s, item) => s + getPosCartItemPrice(item, posPriceMode) * item.qty, 0);
                         const itemsSummary = posCart.map(item => {
-                          const b = inventoryList.find(x => x.id === item.bookId);
-                          const p = b ? getPosBookPrice(b, posPriceMode) : 0;
+                          const p = getPosCartItemPrice(item, posPriceMode);
                           return `${item.title} (×${item.qty}) — ₪${(p * item.qty).toLocaleString()}`;
                         });
                         setPaymentModalData({ title: 'תשלום בדוכן הספרים', total, items: itemsSummary, buyer: posBuyerNote.trim() });
@@ -3751,7 +3605,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => {
-                    setCalcItems([{ bookId: inventoryList[0]?.id || '', quantity: 10 }]);
+                    setCalcItems([{ bookId: inventoryList[0]?.id || '', quantity: 10, customPrice: '' }]);
                     setCalcDiscountPct(0);
                     setIsPurchaseCalcOpen(true);
                   }}
@@ -4664,27 +4518,30 @@ export default function App() {
                   </div>
                 </div>
                 <div className="bg-rose-50/80 border border-rose-200 p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-rose-800">נשאר חוב מספקים שכבר מחקת?</span>
+                  <div>
+                    <p className="text-xs font-extrabold text-rose-800">ניקוי חובות של ספקים שכבר נמחקו</p>
+                    <p className="text-[11px] text-rose-600">מוחק רשומות חוב ישנות שנותרו מספקים שהוסרו מהרשימה</p>
+                  </div>
                   <button
                     type="button"
                     onClick={handlePurgeOrphanSupplierDebts}
-                    className="bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold shrink-0"
+                    className="bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 shadow-xs"
                   >
-                    נקה חובות של ספקים שנמחקו
+                    נקה חובות יתומים
                   </button>
                 </div>
               </div>
-              <div className="p-4 border-t bg-slate-50/80 flex justify-between items-center shrink-0">
+              <div className="p-4 border-t bg-slate-50/80 flex justify-between items-center gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setDashboardAdjustments(defaultDashboardAdjustments)}
-                  className="text-xs font-bold text-rose-600 hover:underline"
+                  className="text-xs font-bold text-slate-500 hover:text-rose-600 px-3 py-2"
                 >
                   אפס את כל ההתאמות ל-0
                 </button>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setIsDashboardEditOpen(false)} className="px-4 py-2 text-sm text-slate-600">ביטול</button>
-                  <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl font-bold text-sm shadow-xs">שמור נתונים</button>
+                  <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-xs">שמור התאמות</button>
                 </div>
               </div>
             </form>
@@ -4692,7 +4549,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Quick Purchase Calculator Modal (ללא הוצאת הזמנה) */}
+      {/* Quick Purchase Calculator Modal (ללא הוצאת הזמנה — כולל עריכת מחיר לכל ספר) */}
       {isPurchaseCalcOpen && (() => {
         const getTierPrice = (book) => {
           if (!book) return 0;
@@ -4702,9 +4559,15 @@ export default function App() {
           if (calcPriceTier === 'yeshivaGuest') return eff.yeshivaGuest;
           return eff.general;
         };
-        const subtotal = calcItems.reduce((sum, row) => {
+        const getCalcRowUnitPrice = (row) => {
+          if (row.customPrice !== undefined && row.customPrice !== '' && row.customPrice !== null) {
+            return Math.max(0, Number(row.customPrice));
+          }
           const b = inventoryList.find(x => x.id === row.bookId);
-          return sum + getTierPrice(b) * Math.max(0, Number(row.quantity || 0));
+          return getTierPrice(b);
+        };
+        const subtotal = calcItems.reduce((sum, row) => {
+          return sum + getCalcRowUnitPrice(row) * Math.max(0, Number(row.quantity || 0));
         }, 0);
         const discountAmount = Math.round(subtotal * (Math.max(0, Math.min(100, Number(calcDiscountPct || 0))) / 100));
         const finalTotal = Math.max(0, subtotal - discountAmount);
@@ -4716,7 +4579,7 @@ export default function App() {
               <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
                 <div>
                   <h3 className="font-extrabold text-lg text-slate-900 flex items-center gap-2"><Calculator className="w-5 h-5 text-amber-600" /> מחשבון קניית ספרים (הצעת מחיר מהירה)</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">חישוב סל ספרים והנחות מבלי להוציא הזמנה או לשנות מלאי</p>
+                  <p className="text-xs text-slate-500 mt-0.5">ניתן לערוך מחיר ליחידה לכל ספר להצעה זו מבלי לשנות את המחירון הקבוע</p>
                 </div>
                 <button onClick={() => setIsPurchaseCalcOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
               </div>
@@ -4732,7 +4595,10 @@ export default function App() {
                       <button
                         key={t.id}
                         type="button"
-                        onClick={() => setCalcPriceTier(t.id)}
+                        onClick={() => {
+                          setCalcPriceTier(t.id);
+                          setCalcItems(prev => prev.map(r => ({ ...r, customPrice: '' })));
+                        }}
                         className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${calcPriceTier === t.id ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'}`}
                       >
                         {t.label}
@@ -4756,14 +4622,16 @@ export default function App() {
                 <div className="space-y-2">
                   {calcItems.map((row, idx) => {
                     const book = inventoryList.find(b => b.id === row.bookId);
-                    const price = getTierPrice(book);
+                    const defaultPrice = getTierPrice(book);
+                    const unitPrice = getCalcRowUnitPrice(row);
+                    const isCustom = row.customPrice !== undefined && row.customPrice !== '';
                     return (
-                      <div key={idx} className="flex items-center gap-2 bg-slate-50/90 p-2.5 rounded-xl ring-1 ring-slate-200/70">
+                      <div key={idx} className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-slate-50/90 p-2.5 rounded-xl ring-1 ring-slate-200/70">
                         <select
                           value={row.bookId}
                           onChange={e => {
                             const next = [...calcItems];
-                            next[idx] = { ...next[idx], bookId: e.target.value };
+                            next[idx] = { ...next[idx], bookId: e.target.value, customPrice: '' };
                             setCalcItems(next);
                           }}
                           className="flex-1 p-2 border border-slate-200 rounded-xl text-sm bg-white"
@@ -4782,17 +4650,34 @@ export default function App() {
                             next[idx] = { ...next[idx], quantity: e.target.value };
                             setCalcItems(next);
                           }}
-                          className="w-20 p-2 border border-slate-200 rounded-xl text-sm text-center font-bold bg-white"
+                          className="w-16 p-2 border border-slate-200 rounded-xl text-sm text-center font-bold bg-white"
+                          title="כמות"
                           dir="ltr"
                         />
-                        <span className="text-xs font-extrabold text-indigo-700 w-24 text-center">₪{(price * Number(row.quantity || 0)).toLocaleString()}</span>
+                        <div className="flex items-center gap-1" title="מחיר ליחידה להצעה זו בלבד">
+                          <span className="text-xs text-slate-400">₪</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            value={isCustom ? row.customPrice : defaultPrice}
+                            onChange={e => {
+                              const next = [...calcItems];
+                              next[idx] = { ...next[idx], customPrice: e.target.value === '' ? '' : Math.max(0, Number(e.target.value)) };
+                              setCalcItems(next);
+                            }}
+                            className={`w-20 p-2 border rounded-xl text-sm text-center font-bold bg-white ${isCustom ? 'border-amber-400 text-amber-800' : 'border-indigo-200 text-indigo-700'}`}
+                            dir="ltr"
+                          />
+                        </div>
+                        <span className="text-xs font-extrabold text-emerald-700 w-20 text-center">₪{(unitPrice * Number(row.quantity || 0)).toLocaleString()}</span>
                         {calcItems.length > 1 && (
                           <button type="button" onClick={() => setCalcItems(calcItems.filter((_, i) => i !== idx))} className="text-slate-400 hover:text-rose-500 p-1"><X className="w-4 h-4" /></button>
                         )}
                       </div>
                     );
                   })}
-                  <button type="button" onClick={() => setCalcItems([...calcItems, { bookId: '', quantity: 10 }])} className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
+                  <button type="button" onClick={() => setCalcItems([...calcItems, { bookId: '', quantity: 10, customPrice: '' }])} className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
                     <Plus className="w-3.5 h-3.5" /> הוסף ספר נוסף לחישוב
                   </button>
                 </div>
@@ -4817,7 +4702,7 @@ export default function App() {
                         .filter(r => r.bookId && Number(r.quantity) > 0)
                         .map((r, i) => {
                           const b = inventoryList.find(x => x.id === r.bookId);
-                          const p = getTierPrice(b);
+                          const p = getCalcRowUnitPrice(r);
                           return `${i + 1}. ${b?.title} — ${r.quantity} עותקים × ₪${p} = ₪${(p * Number(r.quantity)).toLocaleString()}`;
                         });
                       const txt = `📚 *הצעת מחיר — הוצאת ספרי ישיבת ירוחם*\n\n${lines.join('\n')}\n\n*סה"כ לתשלום: ₪${finalTotal.toLocaleString()}*`;
@@ -4836,7 +4721,7 @@ export default function App() {
                         .filter(r => r.bookId && Number(r.quantity) > 0)
                         .map(r => {
                           const b = inventoryList.find(x => x.id === r.bookId);
-                          const p = getTierPrice(b);
+                          const p = getCalcRowUnitPrice(r);
                           return `${b?.title} (×${r.quantity}) — ₪${(p * Number(r.quantity)).toLocaleString()}`;
                         });
                       setPaymentModalData({ title: 'תשלום עבור הזמנת ספרים', total: finalTotal, items: itemsSummary, buyer: '' });
@@ -6059,38 +5944,80 @@ export default function App() {
 
       {/* Payment Link & QR Code Modal */}
       {paymentModalData && (() => {
+        const activeUrl = selectedPaymentChannel === 'paybox'
+          ? (paymentLinks.paybox || DEFAULT_PAYBOX_LINK)
+          : (paymentLinks.creditBit || DEFAULT_CREDIT_BIT_LINK);
+
         const payText = `📚 *${paymentModalData.title} — הוצאת ספרי ישיבת ירוחם*\n` +
           (paymentModalData.buyer ? `לכבוד: ${paymentModalData.buyer}\n` : '') +
           `\n${paymentModalData.items.map((x, i) => `${i + 1}. ${x}`).join('\n')}\n\n` +
-          `*סה"כ לתשלום: ₪${Number(paymentModalData.total).toLocaleString()}*\n` +
-          `קישור לתשלום: ${paymentLinkBase}`;
-        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(paymentLinkBase)}`;
+          `*סה"כ לתשלום: ₪${Number(paymentModalData.total).toLocaleString()}*\n\n` +
+          `💳 *לתשלום באשראי / ביט:*\n${paymentLinks.creditBit || DEFAULT_CREDIT_BIT_LINK}\n\n` +
+          `📱 *לתשלום בפייבוקס (PayBox):*\n${paymentLinks.paybox || DEFAULT_PAYBOX_LINK}`;
+
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(activeUrl)}`;
 
         return (
           <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[95] flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md overflow-hidden" dir="rtl">
               <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
-                <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><QrCode className="w-5 h-5 text-indigo-600" /> קישור וברקוד QR לתשלום</h3>
+                <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><QrCode className="w-5 h-5 text-indigo-600" /> קישורי תשלום וברקוד QR</h3>
                 <button onClick={() => setPaymentModalData(null)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
               </div>
               <div className="p-5 space-y-4 text-center">
-                <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-2xl">
+                <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-2xl">
                   <span className="text-xs text-emerald-800 font-bold block">סכום לגבייה</span>
                   <span className="text-3xl font-extrabold text-emerald-700">₪{Number(paymentModalData.total).toLocaleString()}</span>
                 </div>
+
+                {/* בחירת אמצעי תשלום להצגת ברקוד QR */}
+                <div className="grid grid-cols-2 gap-1.5 bg-slate-100 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentChannel('creditBit')}
+                    className={`py-2 rounded-lg text-xs font-bold transition-all ${selectedPaymentChannel === 'creditBit' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'}`}
+                  >
+                    💳 סליקת אשראי / ביט
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentChannel('paybox')}
+                    className={`py-2 rounded-lg text-xs font-bold transition-all ${selectedPaymentChannel === 'paybox' ? 'bg-white text-sky-700 shadow-xs' : 'text-slate-600'}`}
+                  >
+                    📱 פייבוקס (PayBox)
+                  </button>
+                </div>
+
                 <div className="bg-white p-3 rounded-2xl ring-1 ring-slate-200 inline-block mx-auto">
-                  <img src={qrUrl} alt="QR לתשלום" className="w-44 h-44 mx-auto rounded-lg" />
+                  <img src={qrUrl} alt="QR לתשלום" className="w-40 h-40 mx-auto rounded-lg" />
+                  <p className="text-[11px] font-bold text-slate-500 mt-1.5">
+                    {selectedPaymentChannel === 'creditBit' ? 'סרוק לתשלום באשראי או בביט' : 'סרוק לתשלום בפייבוקס'}
+                  </p>
                 </div>
-                <div className="text-right space-y-1">
-                  <label className="block text-[11px] font-bold text-slate-500">קישור יעד לתשלום (Bit / PayBox / סליקה):</label>
-                  <input
-                    type="url"
-                    value={paymentLinkBase}
-                    onChange={e => setPaymentLinkBase(e.target.value)}
-                    className="w-full p-2 border border-slate-200 rounded-xl text-xs"
-                    dir="ltr"
-                  />
+
+                <div className="text-right space-y-2 bg-slate-50/90 p-3 rounded-2xl ring-1 ring-slate-200/70">
+                  <div>
+                    <label className="block text-[11px] font-bold text-indigo-700 mb-0.5">קישור סליקת אשראי / ביט:</label>
+                    <input
+                      type="url"
+                      value={paymentLinks.creditBit}
+                      onChange={e => setPaymentLinks(prev => ({ ...prev, creditBit: e.target.value }))}
+                      className="w-full p-2 border border-slate-200 rounded-xl text-xs bg-white"
+                      dir="ltr"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-sky-700 mb-0.5">קישור פייבוקס (PayBox):</label>
+                    <input
+                      type="url"
+                      value={paymentLinks.paybox}
+                      onChange={e => setPaymentLinks(prev => ({ ...prev, paybox: e.target.value }))}
+                      className="w-full p-2 border border-slate-200 rounded-xl text-xs bg-white"
+                      dir="ltr"
+                    />
+                  </div>
                 </div>
+
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <a
                     href={`https://wa.me/?text=${encodeURIComponent(payText)}`}
@@ -6098,13 +6025,13 @@ export default function App() {
                     rel="noopener noreferrer"
                     className="bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
                   >
-                    <Share2 className="w-4 h-4" /> שלח בוואטסאפ
+                    <Share2 className="w-4 h-4" /> שלח קישורים בוואטסאפ
                   </a>
                   <button
                     type="button"
                     onClick={() => {
                       navigator.clipboard?.writeText(payText);
-                      showToast('פרטי התשלום והקישור הועתקו!', 'success');
+                      showToast('פרטי התשלום ושני הקישורים הועתקו!', 'success');
                     }}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
                   >
