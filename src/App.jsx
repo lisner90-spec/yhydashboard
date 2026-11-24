@@ -16,7 +16,8 @@ import {
   ClipboardCheck, PanelRightClose, PanelRightOpen, PackagePlus, Undo2,
   PenTool, Volume2, VolumeX, Store, Unlock,
   Sliders, FileCheck, RotateCcw, ShieldCheck, Zap,
-  Mic, MicOff, Maximize2, Minimize2, Flame, Trophy, EyeOff, Bot
+  Mic, MicOff, Maximize2, Minimize2, Flame, Trophy, EyeOff, Bot,
+  Compass, PartyPopper, Boxes, ChevronDown
 } from 'lucide-react';
 
 // ==========================================
@@ -438,6 +439,23 @@ export default function App() {
   // כרטיס ביקור וקטלוג דיגיטלי חיצוני (QR Public Card)
   const [isPublicCardOpen, setIsPublicCardOpen] = useState(false);
   const [publicCardTier, setPublicCardTier] = useState('general'); // 'general' | 'yeshiva' | 'supplier'
+
+  // --- פיצ'רים חדשים: מפת חנויות ארצית, מצב יריד/שבת בוגרים, מחשבון ארגזים ותפריט כלים ---
+  const [isStoreLocatorOpen, setIsStoreLocatorOpen] = useState(false);
+  const [locatorBookId, setLocatorBookId] = useState('');
+  const [locatorRegion, setLocatorRegion] = useState('ALL');
+  const [activeEventName, setActiveEventName] = useState(() => loadLocal('yhy_erp_active_event', ''));
+  const [isEventModalOpen, setIsEventModalOpen] = useState(false);
+  const [eventInputDraft, setEventInputDraft] = useState('');
+  const [isBoxCalcOpen, setIsBoxCalcOpen] = useState(false);
+  const [boxCalcBooksCount, setBoxCalcBooksCount] = useState(45);
+  const [boxCalcCapacity, setBoxCalcCapacity] = useState(20);
+  const [boxCalcAvgWeightGr, setBoxCalcAvgWeightGr] = useState(650);
+  const [isMoreToolsOpen, setIsMoreToolsOpen] = useState(false);
+
+  useEffect(() => {
+    try { localStorage.setItem('yhy_erp_active_event', JSON.stringify(activeEventName)); } catch {}
+  }, [activeEventName]);
 
   useEffect(() => {
     try { localStorage.setItem('yhy_erp_pos_sound', JSON.stringify(posSoundEnabled)); } catch {}
@@ -1882,6 +1900,7 @@ export default function App() {
       priceMode: posPriceMode === 'yeshiva' ? 'תלמיד ישיבה (ראשון)' : posPriceMode === 'yeshivaGuest' ? 'ישיבה (שני / אורח)' : 'מחיר אתר (צרכן)',
       paymentMethod: posPaymentMethod,
       buyerNote: posBuyerNote.trim(),
+      eventTag: activeEventName.trim() || '',
       user: currentUserName,
       date: new Date().toLocaleString('he-IL'),
       timestamp: Date.now()
@@ -2815,17 +2834,15 @@ export default function App() {
     { id: 'marketing', label: 'שיווק ויח"צ', icon: Megaphone, group: 'הפקה ושיווק' },
     { id: 'notes', label: 'לוח פתקים', icon: StickyNote, group: 'מערכת' },
     { id: 'integrations', label: 'אוטומציה וגיבוי', icon: Settings, group: 'מערכת' },
-    ...(userRole === 'admin' ? [{ id: 'users', label: 'ניהול משתמשים', icon: UserCog, group: 'מערכת' }] : [])
-  ];
-
-  const activeNavItem = navItems.find(i => i.id === activeTab) || navItems[0];
-  const userInitial = (currentUserName || 'מ').trim().charAt(0);
-
-  // סגנונות מערכת מתקדמים, אנימציות ומעברים חלקים
+  // סגנונות מערכת מתקדמים, אנימציות ומעברים חלקים (Editorial Studio Theme)
   const themeStyles = `
-    @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@600;700;800;900&family=Heebo:wght@400;500;600;700;800;900&display=swap');
     .erp-shell, .erp-shell * {
       font-family: 'Heebo', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .font-editorial {
+      font-family: 'Frank Ruhl Libre', Georgia, serif !important;
+      letter-spacing: -0.015em;
     }
     @keyframes pageEnter {
       0% { opacity: 0; transform: translateY(14px) scale(0.992); filter: blur(4px); }
@@ -2876,11 +2893,11 @@ export default function App() {
     .book-3d-card {
       position: relative;
       transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.24s ease, border-color 0.2s ease;
-      box-shadow: -5px 6px 14px rgba(15, 23, 42, 0.08), inset -7px 0 12px -6px rgba(15, 23, 42, 0.2);
+      box-shadow: -5px 6px 14px rgba(45, 38, 24, 0.08), inset -7px 0 12px -6px rgba(45, 38, 24, 0.2);
     }
     .book-3d-card:hover {
       transform: translateY(-5px) scale(1.015);
-      box-shadow: -8px 12px 26px rgba(15, 23, 42, 0.14), inset -9px 0 14px -6px rgba(15, 23, 42, 0.25);
+      box-shadow: -8px 12px 26px rgba(45, 38, 24, 0.14), inset -9px 0 14px -6px rgba(45, 38, 24, 0.25);
     }
     .glass-panel {
       backdrop-filter: blur(16px);
@@ -2893,13 +2910,13 @@ export default function App() {
     }
     .premium-card:hover {
       transform: translateY(-3px);
-      box-shadow: 0 14px 30px -10px rgba(15, 23, 42, 0.12);
+      box-shadow: 0 14px 30px -10px rgba(61, 74, 38, 0.14);
     }
     .premium-card::after {
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.22) 50%, transparent 70%);
+      background: linear-gradient(110deg, transparent 30%, rgba(255, 251, 240, 0.28) 50%, transparent 70%);
       transform: translateX(100%);
       pointer-events: none;
     }
@@ -2921,13 +2938,15 @@ export default function App() {
     }
     .erp-shell {
       font-feature-settings: "tnum" on, "lnum" on;
-      background-image: radial-gradient(at 100% 0%, rgba(99, 102, 241, 0.06) 0px, transparent 42%),
-                        radial-gradient(at 0% 100%, rgba(16, 185, 129, 0.05) 0px, transparent 42%);
+      background-color: #FAF8F5;
+      background-image: radial-gradient(at 100% 0%, rgba(61, 74, 38, 0.06) 0px, transparent 45%),
+                        radial-gradient(at 0% 100%, rgba(180, 83, 9, 0.05) 0px, transparent 45%);
       background-attachment: fixed;
     }
     .erp-shell.erp-dark {
-      background-image: radial-gradient(at 100% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 45%),
-                        radial-gradient(at 0% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 45%);
+      background-color: #0B0E0A;
+      background-image: radial-gradient(at 100% 0%, rgba(101, 112, 44, 0.14) 0px, transparent 45%),
+                        radial-gradient(at 0% 100%, rgba(180, 83, 9, 0.09) 0px, transparent 45%);
     }
     .erp-shell button {
       transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.2s ease, color 0.2s ease, box-shadow 0.22s ease, border-color 0.2s ease;
@@ -3172,7 +3191,7 @@ export default function App() {
   // תצוגה ראשית
   // ==========================================
   return (
-    <div className={`erp-shell min-h-screen flex flex-col lg:flex-row font-sans antialiased transition-colors duration-300 ${darkMode ? 'erp-dark bg-[#070B14] text-slate-100' : 'bg-[#F1F5F9] text-slate-800'}`} dir="rtl">
+    <div className={`erp-shell min-h-screen flex flex-col lg:flex-row font-sans antialiased transition-colors duration-300 ${darkMode ? 'erp-dark bg-[#0B0E0A] text-slate-100' : 'bg-[#FAF8F5] text-[#1C1917]'}`} dir="rtl">
       <style>{themeStyles}</style>
 
       {/* Toast Notification */}
@@ -3191,7 +3210,7 @@ export default function App() {
 
       {/* Sidebar (Desktop) */}
       {!isKioskMode && (
-      <aside className={`hidden lg:flex lg:flex-col ${isSidebarCollapsed ? 'w-20' : 'w-68'} bg-gradient-to-b from-[#0B1120] via-[#0F172A] to-[#0B1120] text-white shrink-0 border-l border-slate-800/80 transition-all duration-200 print:hidden`}>
+      <aside className={`hidden lg:flex lg:flex-col ${isSidebarCollapsed ? 'w-20' : 'w-68'} bg-gradient-to-b from-[#171C11] via-[#1F2616] to-[#14180F] text-white shrink-0 border-l border-[#2E3822] transition-all duration-200 print:hidden`}>
         <div className="p-4 border-b border-slate-800/80 flex items-center justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#65702c] to-[#3b4219] flex items-center justify-center shadow-lg shadow-black/30 ring-1 ring-amber-200/30 shrink-0">
@@ -3199,8 +3218,8 @@ export default function App() {
             </div>
             {!isSidebarCollapsed && (
               <div className="min-w-0">
-                <h1 className="font-extrabold text-[15px] leading-tight tracking-tight truncate">הוצאת ספרי הישיבה</h1>
-                <p className="text-[11px] text-slate-400 mt-0.5 truncate">ישיבת ההסדר ירוחם</p>
+                <h1 className="font-editorial font-extrabold text-[17px] leading-tight tracking-tight truncate text-amber-50">הוצאת ספרי הישיבה</h1>
+                <p className="text-[11px] text-amber-200/70 mt-0.5 truncate">ישיבת ההסדר ירוחם</p>
               </div>
             )}
           </div>
@@ -3404,8 +3423,8 @@ export default function App() {
               );
             })()}
             <div>
-              <h2 className="text-base font-extrabold text-slate-800 leading-tight">{activeNavItem?.label}</h2>
-              <p className="text-[11px] text-slate-400">{new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+              <h2 className="font-editorial text-lg font-extrabold text-stone-900 leading-tight">{activeNavItem?.label}</h2>
+              <p className="text-[11px] text-stone-500">{new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
             </div>
           </div>
 
@@ -3506,24 +3525,76 @@ export default function App() {
             <button
               type="button"
               onClick={() => setIsAiAssistantOpen(true)}
-              className="bg-gradient-to-l from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition-all"
+              className="bg-gradient-to-l from-[#3D4A26] to-[#566636] hover:from-[#4C5C30] hover:to-[#657740] text-amber-50 px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-xs ring-1 ring-amber-200/20 transition-all"
               title="עוזר AI חכם בשפה חופשית ופקודות קוליות"
             >
-              <Bot className="w-3.5 h-3.5" /> עוזר AI
+              <Bot className="w-3.5 h-3.5 text-amber-300" /> עוזר AI
             </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('integrations')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 transition-all ${
-                autoBackupSettings.enabled
-                  ? 'bg-emerald-50/90 text-emerald-700 ring-emerald-200/80 hover:bg-emerald-100'
-                  : 'bg-slate-100 text-slate-500 ring-slate-200 hover:bg-slate-200/70'
-              }`}
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>{autoBackupSettings.enabled ? 'גובה אוטומטית' : 'גיבוי כבוי'}</span>
-            </button>
+            {/* תפריט כלים מאוחד למראה נקי ומרווח */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsMoreToolsOpen(prev => !prev)}
+                className="bg-[#F3EFE6] hover:bg-[#EAE4D7] text-[#3D4A26] px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 ring-1 ring-[#DFD8C8] transition-all"
+              >
+                <span>עוד כלים</span>
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+
+              {isMoreToolsOpen && (
+                <div className="absolute left-0 mt-2 w-60 bg-white rounded-2xl shadow-2xl ring-1 ring-stone-200 z-50 overflow-hidden py-1.5" dir="rtl">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMoreToolsOpen(false);
+                      setCalcItems([{ bookId: inventoryList[0]?.id || '', quantity: 10, customPrice: '' }]);
+                      setCalcDiscountPct(0);
+                      setIsPurchaseCalcOpen(true);
+                    }}
+                    className="w-full text-right px-4 py-2.5 text-xs font-bold text-stone-700 hover:bg-amber-50 flex items-center gap-2.5"
+                  >
+                    <Calculator className="w-4 h-4 text-amber-600" /> מחשבון ספרים והצעות
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setIsMoreToolsOpen(false); setIsStoreLocatorOpen(true); }}
+                    className="w-full text-right px-4 py-2.5 text-xs font-bold text-stone-700 hover:bg-emerald-50 flex items-center gap-2.5"
+                  >
+                    <Compass className="w-4 h-4 text-emerald-600" /> מפת חנויות ארצית (איפה קונים?)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setIsMoreToolsOpen(false); setIsBoxCalcOpen(true); }}
+                    className="w-full text-right px-4 py-2.5 text-xs font-bold text-stone-700 hover:bg-indigo-50 flex items-center gap-2.5"
+                  >
+                    <Boxes className="w-4 h-4 text-indigo-600" /> מחשבון ארגזים ומשקל שילוח
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setIsMoreToolsOpen(false); setIsCustomersModalOpen(true); }}
+                    className="w-full text-right px-4 py-2.5 text-xs font-bold text-stone-700 hover:bg-sky-50 flex items-center gap-2.5"
+                  >
+                    <Users className="w-4 h-4 text-sky-600" /> לקוחות ובוגרים ({customersList.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setIsMoreToolsOpen(false); setIsAuditModalOpen(true); }}
+                    className="w-full text-right px-4 py-2.5 text-xs font-bold text-stone-700 hover:bg-stone-100 flex items-center gap-2.5"
+                  >
+                    <Activity className="w-4 h-4 text-stone-600" /> יומן פעולות וביקורת
+                  </button>
+                  <div className="border-t border-stone-100 my-1" />
+                  <button
+                    type="button"
+                    onClick={() => { setIsMoreToolsOpen(false); setActiveTab('integrations'); }}
+                    className="w-full text-right px-4 py-2.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 flex items-center gap-2.5"
+                  >
+                    <ShieldCheck className="w-4 h-4" /> {autoBackupSettings.enabled ? 'גיבוי אוטומטי פעיל' : 'הגדרות גיבוי'}
+                  </button>
+                </div>
+              )}
+            </div>
 
             {pendingOrders.length > 0 && activeTab !== 'orders' && (
               <button
@@ -3589,39 +3660,36 @@ export default function App() {
         {/* ==================== 1. DASHBOARD ==================== */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-[#0F172A] via-[#1E1B4B] to-[#312E81] p-6 md:p-7 text-white shadow-lg">
-              <div className="pointer-events-none absolute -left-16 -top-16 w-64 h-64 rounded-full bg-indigo-500/20 blur-3xl" />
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-[#1C2414] via-[#2D381E] to-[#3F4E29] p-6 md:p-7 text-white shadow-lg ring-1 ring-amber-200/15">
+              <div className="pointer-events-none absolute -left-16 -top-16 w-64 h-64 rounded-full bg-amber-500/15 blur-3xl" />
               <div className="pointer-events-none absolute -right-10 -bottom-20 w-64 h-64 rounded-full bg-emerald-500/15 blur-3xl" />
               <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-5">
                 <div className="space-y-1.5">
-                  <div className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-3 py-1 rounded-full text-[11px] font-bold text-indigo-200 ring-1 ring-white/15">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-300" /> מרכז הבקרה החי של ההוצאה
+                  <div className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-3 py-1 rounded-full text-[11px] font-bold text-amber-200 ring-1 ring-amber-200/20">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" /> מרכז הבקרה החי — הוצאת ספרי ישיבת ירוחם
                     {hasAnyDashboardAdjustment && <span className="bg-amber-400/25 text-amber-200 px-2 py-0.5 rounded-full mr-1">כולל התאמות ידניות</span>}
                   </div>
-                  <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight">שלום {currentUserName}, תמונת מצב עסקית</h2>
-                  <p className="text-xs md:text-sm text-indigo-100/80">סקירה בזמן אמת של מלאי הספרים, שווי ההדפסה, הכנסות המכירות ויתרות הגבייה</p>
+                  <h2 className="font-editorial text-2xl md:text-3xl font-extrabold tracking-tight text-amber-50">שלום {currentUserName}, תמונת מצב עסקית</h2>
+                  <p className="text-xs md:text-sm text-stone-200/85">סקירה בזמן אמת של מלאי הספרים, שווי ההדפסה, הכנסות המכירות ויתרות הגבייה</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button onClick={() => setIsAiAssistantOpen(true)} className="bg-gradient-to-l from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md transition-all">
                     <Bot className="w-4 h-4" /> שאל את המערכת (AI)
                   </button>
+                  <button onClick={() => setIsStoreLocatorOpen(true)} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
+                    <Compass className="w-4 h-4 text-emerald-300" /> מפת חנויות ארצית
+                  </button>
                   <button onClick={() => setIsWhatIfOpen(true)} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
-                    <Sliders className="w-4 h-4 text-emerald-300" /> סימולטור "מה אם?"
+                    <Sliders className="w-4 h-4 text-amber-300" /> סימולטור "מה אם?"
                   </button>
                   <button onClick={() => setIsPublicCardOpen(true)} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
                     <QrCode className="w-4 h-4 text-sky-300" /> כרטיס ביקור & קטלוג QR
-                  </button>
-                  <button onClick={() => setActiveTab('pos')} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
-                    <CreditCard className="w-4 h-4 text-emerald-300" /> מכירה בדוכן
                   </button>
                   <button onClick={() => setIsDailyReportOpen(true)} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
                     <FileText className="w-4 h-4 text-sky-300" /> סיכום יומי
                   </button>
                   <button onClick={() => setIsRoyaltiesModalOpen(true)} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
                     <Percent className="w-4 h-4 text-purple-300" /> תמלוגי מחברים
-                  </button>
-                  <button onClick={() => { setCalcItems([{ bookId: inventoryList[0]?.id || '', quantity: 10, customPrice: '' }]); setCalcDiscountPct(0); setIsPurchaseCalcOpen(true); }} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
-                    <Calculator className="w-4 h-4 text-amber-300" /> מחשבון ספרים
                   </button>
                   {userRole === 'admin' && (
                     <button onClick={() => setIsDashboardEditOpen(true)} className="bg-white/15 hover:bg-white/25 text-amber-200 px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 ring-1 ring-amber-300/30 transition-all">
@@ -4042,15 +4110,31 @@ export default function App() {
         {/* ==================== 2. POS (QUICK STALL SALES) ==================== */}
         {activeTab === 'pos' && (
           <div className="space-y-6">
-            <div className="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-4 bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70">
+            <div className="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-4 bg-white p-5 rounded-2xl shadow-xs ring-1 ring-stone-200/80">
               <div className="min-w-0">
-                <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
-                  <span className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0"><CreditCard className="w-5 h-5" /></span>
+                <h2 className="font-editorial text-xl font-extrabold text-stone-900 flex items-center gap-2.5">
+                  <span className="w-9 h-9 rounded-xl bg-[#F3EFE6] text-[#3D4A26] flex items-center justify-center shrink-0"><CreditCard className="w-5 h-5" /></span>
                   קופה מהירה למכירות בישיבה / דוכן
                 </h2>
-                <p className="text-slate-500 text-xs mt-1">בחר ספרים להוספה לסל — המלאי יופחת אוטומטית מהמחסן הראשי</p>
+                <p className="text-stone-500 text-xs mt-1">
+                  {activeEventName
+                    ? <span className="text-amber-700 font-extrabold">🎉 מצב אירוע פעיל: "{activeEventName}" — כל המכירות משויכות לאירוע זה</span>
+                    : 'בחר ספרים להוספה לסל — המלאי יופחת אוטומטית מהמחסן הראשי'}
+                </p>
               </div>
               <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { setEventInputDraft(activeEventName); setIsEventModalOpen(true); }}
+                  className={`px-3 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 ring-1 transition-all ${
+                    activeEventName
+                      ? 'bg-amber-500 text-white ring-amber-500 shadow-xs'
+                      : 'bg-amber-50 hover:bg-amber-100 text-amber-900 ring-amber-200'
+                  }`}
+                >
+                  <PartyPopper className="w-3.5 h-3.5" />
+                  <span>{activeEventName ? `אירוע: ${activeEventName}` : 'מצב יריד / שבת בוגרים'}</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => setPosSoundEnabled(prev => !prev)}
@@ -4069,7 +4153,7 @@ export default function App() {
                       setIsKioskMode(true);
                       showToast('המערכת ננעלה למצב דוכן!', 'info');
                     }}
-                    className="bg-slate-900 hover:bg-slate-800 text-amber-300 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                    className="bg-[#1C2414] hover:bg-[#2D381E] text-amber-200 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs"
                     title="נעל את המסך לקופה בלבד עבור תורן בדוכן"
                   >
                     <Store className="w-3.5 h-3.5" /> מצב דוכן
@@ -8299,6 +8383,247 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* מודאל מפת חנויות ארצית ("איפה קונים את ספרי הישיבה?") */}
+      {isStoreLocatorOpen && (() => {
+        const inferRegion = (sup) => {
+          const text = `${sup.name || ''} ${sup.address || ''} ${sup.notes || ''}`;
+          if (/ירושלים|רמות|גבעת שאול|בית וגן|גאולה/.test(text)) return 'ירושלים';
+          if (/גוש עציון|אפרת|אלון שבות|כפר עציון|תקוע|נוקדים/.test(text)) return 'גוש עציון';
+          if (/תל אביב|רמת גן|גבעתיים|פתח תקווה|בני ברק|ראשון|רחובות|מודיעין|כפר סבא|רעננה|נתניה/.test(text)) return 'מרכז והשרון';
+          if (/חיפה|קריות|עפולה|טבריה|צפת|כרמיאל|נהריה|גולן/.test(text)) return 'צפון';
+          if (/ירוחם|באר שבע|דימונה|אשקלון|אשדוד|נתיבות|שדרות/.test(text)) return 'דרום';
+          return 'כללי / ארצי';
+        };
+
+        const enrichedSuppliers = suppliersList.map(sup => {
+          const held = getSupplierInventoryItems(sup.name);
+          const matchingBook = locatorBookId ? held.find(h => h.bookId === locatorBookId) : null;
+          return {
+            ...sup,
+            region: inferRegion(sup),
+            held,
+            totalHeld: held.reduce((s, x) => s + x.amount, 0),
+            matchingQty: matchingBook ? matchingBook.amount : null
+          };
+        }).filter(sup => {
+          if (locatorRegion !== 'ALL' && sup.region !== locatorRegion) return false;
+          if (locatorBookId && !sup.matchingQty) return false;
+          return true;
+        });
+
+        const selectedBookObj = inventoryList.find(b => b.id === locatorBookId);
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-stone-200 w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden" dir="rtl">
+              <div className="p-5 border-b bg-[#FAF8F5] flex justify-between items-center shrink-0">
+                <div>
+                  <h3 className="font-editorial font-extrabold text-lg text-stone-900 flex items-center gap-2"><Compass className="w-5 h-5 text-emerald-700" /> מפת חנויות ארצית — איפה קונים את ספרי הישיבה?</h3>
+                  <p className="text-xs text-stone-500 mt-0.5">איתור מיידי של חנויות וספקים המחזיקים מלאי זמין לפי עיר ואזור</p>
+                </div>
+                <button onClick={() => setIsStoreLocatorOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-stone-200 text-stone-400"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="p-5 overflow-y-auto space-y-4 flex-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-xs font-bold text-stone-600 mb-1">סנן לפי ספר מבוקש:</label>
+                    <select value={locatorBookId} onChange={e => setLocatorBookId(e.target.value)} className="w-full p-2.5 border border-stone-200 rounded-xl text-xs font-bold bg-stone-50">
+                      <option value="">כל ספרי ההוצאה</option>
+                      {[...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => (
+                        <option key={b.id} value={b.id}>{b.title}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-stone-600 mb-1">סנן לפי אזור בארץ:</label>
+                    <select value={locatorRegion} onChange={e => setLocatorRegion(e.target.value)} className="w-full p-2.5 border border-stone-200 rounded-xl text-xs font-bold bg-stone-50">
+                      <option value="ALL">כל הארץ ({suppliersList.length} נקודות)</option>
+                      {['ירושלים', 'גוש עציון', 'מרכז והשרון', 'צפון', 'דרום', 'כללי / ארצי'].map(r => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {enrichedSuppliers.length === 0 ? (
+                  <div className="bg-stone-50 p-8 rounded-2xl text-center text-xs text-stone-500 space-y-1">
+                    <p className="font-bold text-stone-700">לא נמצאו חנויות התואמות לסינון הנוכחי</p>
+                    <p>ניתן תמיד להזמין ישירות דרך אתר הישיבה או מישיבת ירוחם.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {enrichedSuppliers.map(sup => (
+                      <div key={sup.id} className="p-4 bg-[#FAF8F5] rounded-2xl ring-1 ring-stone-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-stone-900 text-sm">{sup.name}</span>
+                            <span className="text-[10px] font-bold bg-[#E9EFE0] text-[#3D4A26] px-2.5 py-0.5 rounded-full">{sup.region}</span>
+                          </div>
+                          <p className="text-xs text-stone-500">{[sup.address, sup.phone].filter(Boolean).join(' · ') || 'נקודת הפצה רשומה'}</p>
+                          <div className="flex flex-wrap gap-1 pt-1">
+                            {sup.held.slice(0, 4).map(h => (
+                              <span key={h.bookId} className={`text-[10px] px-2 py-0.5 rounded-md font-bold ${h.bookId === locatorBookId ? 'bg-emerald-600 text-white' : 'bg-white text-stone-600 ring-1 ring-stone-200'}`}>
+                                {h.title}: {h.amount}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="text-left shrink-0">
+                          <span className="text-xs font-extrabold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl ring-1 ring-emerald-200 block">
+                            {locatorBookId ? `${sup.matchingQty} עותקים במלאי` : `${sup.totalHeld} ספרים זמינים`}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="p-4 border-t bg-[#FAF8F5] flex justify-between items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  disabled={enrichedSuppliers.length === 0}
+                  onClick={() => {
+                    const header = selectedBookObj
+                      ? `📍 *איפה ניתן להשיג את הספר "${selectedBookObj.title}"?*`
+                      : `📍 *נקודות מכירה של ספרי הוצאת ישיבת ירוחם:*`;
+                    const lines = enrichedSuppliers.map((s, i) => `${i + 1}. *${s.name}* (${s.region})${s.address ? ` — ${s.address}` : ''}${s.phone ? ` | טל׳: ${s.phone}` : ''}`);
+                    const msg = `${header}\n\n${lines.join('\n')}\n\nמומלץ לתאם הגעה מול החנות.`;
+                    navigator.clipboard?.writeText(msg);
+                    showToast('רשימת החנויות הועתקה לשליחה לבוגר/לקוח!', 'success');
+                  }}
+                  className="bg-[#3D4A26] hover:bg-[#4D5E30] disabled:opacity-40 text-amber-50 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5"
+                >
+                  <Copy className="w-4 h-4" /> העתק רשימת חנויות לוואטסאפ
+                </button>
+                <button type="button" onClick={() => setIsStoreLocatorOpen(false)} className="px-4 py-2 text-xs font-bold text-stone-600">סגור</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* מודאל מצב יריד / שבת בוגרים (Event Mode) */}
+      {isEventModalOpen && (() => {
+        const currentEventSales = activeEventName
+          ? posSales.filter(s => (s.eventTag || '').trim() === activeEventName.trim())
+          : [];
+        const eventTotalRev = currentEventSales.reduce((s, x) => s + Number(x.totalAmount || 0), 0);
+        const eventBooksCount = currentEventSales.reduce((s, x) => s + (x.items || []).reduce((a, b) => a + Number(b.qty || 0), 0), 0);
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-stone-200 w-full max-w-md overflow-hidden" dir="rtl">
+              <div className="p-5 border-b bg-[#FAF8F5] flex justify-between items-center">
+                <h3 className="font-editorial font-extrabold text-stone-900 flex items-center gap-2"><PartyPopper className="w-5 h-5 text-amber-600" /> מצב יריד / שבת בוגרים</h3>
+                <button onClick={() => setIsEventModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-stone-200 text-stone-400"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="p-5 space-y-4">
+                <p className="text-xs text-stone-600 leading-relaxed">
+                  הגדר שם אירוע (למשל: <strong>"שבת בוגרים תשפ״ז"</strong> או <strong>"יום עיון חנוכה"</strong>) — כל מכירה בקופה תסומן תחת האירוע ותקבל סיכום נפרד בסיום.
+                </p>
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={eventInputDraft}
+                    onChange={e => setEventInputDraft(e.target.value)}
+                    placeholder="שם האירוע / היריד..."
+                    className="w-full p-3 border border-stone-200 rounded-xl text-sm font-bold"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveEventName(eventInputDraft.trim());
+                        setIsEventModalOpen(false);
+                        showToast(eventInputDraft.trim() ? `מצב אירוע "${eventInputDraft.trim()}" הופעל!` : 'מצב אירוע כובה.', 'success');
+                      }}
+                      className="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-2.5 rounded-xl text-xs font-extrabold"
+                    >
+                      הפעל שיוך לאירוע
+                    </button>
+                    {activeEventName && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveEventName('');
+                          setEventInputDraft('');
+                          setIsEventModalOpen(false);
+                          showToast('מצב אירוע נסגר.', 'info');
+                        }}
+                        className="bg-stone-100 hover:bg-stone-200 text-stone-700 px-3.5 py-2.5 rounded-xl text-xs font-bold"
+                      >
+                        סיים אירוע
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {activeEventName && (
+                  <div className="bg-amber-50/80 border border-amber-200 p-4 rounded-2xl space-y-2 text-xs">
+                    <p className="font-extrabold text-amber-900">סיכום חי עבור "{activeEventName}":</p>
+                    <div className="flex justify-between"><span>מספר עסקאות באירוע:</span><strong>{currentEventSales.length}</strong></div>
+                    <div className="flex justify-between"><span>סה"כ ספרים שנמכרו:</span><strong>{eventBooksCount} עותקים</strong></div>
+                    <div className="flex justify-between text-sm font-black text-emerald-800 pt-1 border-t border-amber-200">
+                      <span>סה"כ פדיון האירוע:</span>
+                      <span>₪{eventTotalRev.toLocaleString()}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* מודאל מחשבון שילוח ואריזה חכם (ארגזים ומשקל) */}
+      {isBoxCalcOpen && (() => {
+        const books = Math.max(1, Number(boxCalcBooksCount || 1));
+        const cap = Math.max(1, Number(boxCalcCapacity || 20));
+        const weightGr = Math.max(50, Number(boxCalcAvgWeightGr || 650));
+        const boxesNeeded = Math.ceil(books / cap);
+        const totalWeightKg = ((books * weightGr) / 1000).toFixed(1);
+        const weightPerBoxKg = ((Math.min(books, cap) * weightGr) / 1000).toFixed(1);
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-stone-200 w-full max-w-md overflow-hidden" dir="rtl">
+              <div className="p-5 border-b bg-[#FAF8F5] flex justify-between items-center">
+                <h3 className="font-editorial font-extrabold text-stone-900 flex items-center gap-2"><Boxes className="w-5 h-5 text-indigo-600" /> מחשבון ארגזים ומשקל לשילוח</h3>
+                <button onClick={() => setIsBoxCalcOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-stone-200 text-stone-400"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="p-5 space-y-4">
+                <div className="grid grid-cols-3 gap-2.5 text-xs">
+                  <div>
+                    <label className="block font-bold text-stone-600 mb-1">כמות ספרים</label>
+                    <input type="number" min="1" value={boxCalcBooksCount} onChange={e => setBoxCalcBooksCount(Number(e.target.value))} className="w-full p-2.5 border border-stone-200 rounded-xl font-bold text-center" dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-stone-600 mb-1">ספרים בארגז</label>
+                    <input type="number" min="1" value={boxCalcCapacity} onChange={e => setBoxCalcCapacity(Number(e.target.value))} className="w-full p-2.5 border border-stone-200 rounded-xl font-bold text-center" dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-stone-600 mb-1">משקל ספר (גרם)</label>
+                    <input type="number" min="50" step="50" value={boxCalcAvgWeightGr} onChange={e => setBoxCalcAvgWeightGr(Number(e.target.value))} className="w-full p-2.5 border border-stone-200 rounded-xl font-bold text-center" dir="ltr" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-center">
+                  <div className="bg-indigo-50 p-4 rounded-2xl ring-1 ring-indigo-100">
+                    <span className="text-xs font-bold text-indigo-700 block">כמות ארגזים נדרשת</span>
+                    <span className="text-3xl font-black text-indigo-900">{boxesNeeded}</span>
+                    <span className="text-[11px] text-indigo-600 block mt-0.5">~{weightPerBoxKg} ק"ג לארגז מלא</span>
+                  </div>
+                  <div className="bg-emerald-50 p-4 rounded-2xl ring-1 ring-emerald-200">
+                    <span className="text-xs font-bold text-emerald-700 block">משקל משלוח כולל</span>
+                    <span className="text-3xl font-black text-emerald-800">{totalWeightKg} ק"ג</span>
+                    <span className="text-[11px] text-emerald-700 block mt-0.5">מוכן לתיאום חברת שליחויות</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
