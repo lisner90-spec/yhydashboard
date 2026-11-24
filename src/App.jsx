@@ -614,7 +614,7 @@ export default function App() {
   };
 
   // ==========================================
-  // חישובים ועזרים
+  // חישובים ועזרים למלאי ולספקים
   // ==========================================
   const calculateSuppliersStock = (book) => {
     return (book.breakdown || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -656,45 +656,33 @@ export default function App() {
   };
 
   // ==========================================
-  // שמירת התאמות ידניות לדאשבורד
+  // התאמות ידניות לדאשבורד וניקוי חובות רפאים
   // ==========================================
   const handleSaveDashboardAdjustments = async (e) => {
     e.preventDefault();
-    const cleaned = {
-      extraCopies: Number(dashboardAdjustments.extraCopies || 0),
-      extraWarehouseCopies: Number(dashboardAdjustments.extraWarehouseCopies || 0),
-      extraSuppliersCopies: Number(dashboardAdjustments.extraSuppliersCopies || 0),
-      extraRetailValue: Number(dashboardAdjustments.extraRetailValue || 0),
-      extraProductionValue: Number(dashboardAdjustments.extraProductionValue || 0),
-      extraStoreRevenue: Number(dashboardAdjustments.extraStoreRevenue || 0),
-      extraSupplierRevenue: Number(dashboardAdjustments.extraSupplierRevenue || 0),
-      extraPosRevenue: Number(dashboardAdjustments.extraPosRevenue || 0),
-      extraOpenDebt: Number(dashboardAdjustments.extraOpenDebt || 0),
-      updatedAt: Date.now()
-    };
-    setDashboardAdjustments(cleaned);
     if (db && dbConnected) {
-      try { await setDoc(getDocRef('settings', 'dashboard_adjustments'), cleaned, { merge: true }); } catch {}
+      try {
+        await setDoc(getDocRef('settings', 'dashboard_adjustments'), dashboardAdjustments, { merge: true });
+      } catch {}
     }
     setIsDashboardEditOpen(false);
     showToast('נתוני הדאשבורד הידניים נשמרו בהצלחה!', 'success');
   };
 
-  // ניקוי חובות ורשומות של ספקים שכבר נמחקו מהמערכת
   const handlePurgeOrphanSupplierDebts = async () => {
-    const activeSupplierNames = new Set(suppliersList.map(s => (s.name || '').trim()));
-    const orphanLogs = supplierLogs.filter(l => !activeSupplierNames.has((l.supplierName || '').trim()));
+    const activeNames = new Set(suppliersList.map(s => (s.name || '').trim()));
+    const orphanLogs = supplierLogs.filter(l => !activeNames.has((l.supplierName || '').trim()));
     if (orphanLogs.length === 0) {
-      showToast('אין חובות פתוחים של ספקים שנמחקו.', 'info');
+      showToast('לא נמצאו חובות פתוחים מספקים שנמחקו.', 'info');
       return;
     }
-    setSupplierLogs(prev => prev.filter(l => activeSupplierNames.has((l.supplierName || '').trim())));
+    setSupplierLogs(prev => prev.filter(l => activeNames.has((l.supplierName || '').trim())));
     if (db && dbConnected) {
       try {
         await Promise.all(orphanLogs.filter(l => l.id).map(l => deleteDoc(getDocRef('supplier_logs', l.id))));
       } catch {}
     }
-    showToast(`נוקו ${orphanLogs.length} רשומות חוב של ספקים שנמחקו!`, 'success');
+    showToast(`נוקו ${orphanLogs.length} רשומות חוב של ספקים שכבר נמחקו!`, 'success');
   };
 
   // ==========================================
@@ -874,7 +862,6 @@ export default function App() {
     showToast('קובץ האקסל (CSV) הורד בהצלחה!', 'success');
   };
 
-  // --- חלוקה לתורמים / מתנות ---
   const handleRecordGift = async (e) => {
     e.preventDefault();
     const book = inventoryList.find(b => b.id === giftForm.bookId);
@@ -910,7 +897,7 @@ export default function App() {
   };
 
   // ==========================================
-  // פעולות ספקים, עריכת מלאי ספק, קליטה חכמה וגבייה
+  // פעולות ספקים, עריכת מלאי ספק והפקת הזמנות
   // ==========================================
   const handleSaveSupplier = async (e) => {
     e.preventDefault();
@@ -926,7 +913,15 @@ export default function App() {
     };
 
     if (editingSupplier) {
+      const oldName = editingSupplier.name;
       setSuppliersList(prev => prev.map(s => s.id === editingSupplier.id ? { ...s, ...payload } : s));
+      if (oldName && oldName !== payload.name) {
+        setInventoryList(prev => prev.map(b => ({
+          ...b,
+          breakdown: (b.breakdown || []).map(r => r.location === oldName ? { ...r, location: payload.name } : r)
+        })));
+        setSupplierLogs(prev => prev.map(l => l.supplierName === oldName ? { ...l, supplierName: payload.name } : l));
+      }
       if (db && dbConnected && editingSupplier.id) {
         try { await updateDoc(getDocRef('suppliers', editingSupplier.id), payload); } catch {}
       }
@@ -946,75 +941,68 @@ export default function App() {
 
   const handleDeleteSupplier = (supplier) => {
     setConfirmDialog({
-      title: 'מחיקת ספק וניקוי חובותיו',
-      message: `האם למחוק את הספק "${supplier.name}" כולל כל יתרות החוב וההיסטוריה שלו?`,
-      confirmText: 'מחק ספק וחובותיו',
+      title: 'מחיקת ספק וחובותיו',
+      message: `האם למחוק את הספק "${supplier.name}" כולל כל היסטוריית החובות והמלאי המשויך אליו?`,
+      confirmText: 'מחק ספק לצמיתות',
       confirmStyle: 'bg-red-600 hover:bg-red-700',
       icon: <Trash2 className="w-6 h-6" />,
       iconStyle: 'bg-red-100 text-red-600',
       onConfirm: async () => {
-        const supName = supplier.name;
         setSuppliersList(prev => prev.filter(s => s.id !== supplier.id));
+        const logsToDelete = supplierLogs.filter(l => l.supplierName === supplier.name);
+        setSupplierLogs(prev => prev.filter(l => l.supplierName !== supplier.name));
 
-        // מחיקת כל החובות וההיסטוריה של הספק שנמחק כדי שלא יישאר חוב פתוח
-        const logsToDelete = supplierLogs.filter(l => l.supplierName === supName);
-        setSupplierLogs(prev => prev.filter(l => l.supplierName !== supName));
-
-        // ניקוי מלאי הספרים המשויך לספק שנמחק
-        const updatedBooks = [];
-        setInventoryList(prev => prev.map(b => {
-          if (!(b.breakdown || []).some(r => r.location === supName)) return b;
-          const nextBreakdown = (b.breakdown || []).filter(r => r.location !== supName);
-          const updated = { ...b, breakdown: nextBreakdown, updatedAt: Date.now() };
-          updatedBooks.push(updated);
+        const affectedBooks = [];
+        setInventoryList(prev => prev.map(book => {
+          const hasSup = (book.breakdown || []).some(r => r.location === supplier.name);
+          if (!hasSup) return book;
+          const nextBreakdown = (book.breakdown || []).filter(r => r.location !== supplier.name);
+          const updated = { ...book, breakdown: nextBreakdown, updatedAt: Date.now() };
+          affectedBooks.push(updated);
           return updated;
         }));
 
         if (db && dbConnected) {
           try {
             if (supplier.id) await deleteDoc(getDocRef('suppliers', supplier.id));
-            await Promise.all(logsToDelete.filter(l => l.id).map(l => deleteDoc(getDocRef('supplier_logs', l.id))));
-            await Promise.all(updatedBooks.map(b => updateDoc(getDocRef('inventory', b.id), { breakdown: b.breakdown, updatedAt: b.updatedAt })));
+            await Promise.all([
+              ...logsToDelete.filter(l => l.id).map(l => deleteDoc(getDocRef('supplier_logs', l.id))),
+              ...affectedBooks.filter(b => b.id).map(b => updateDoc(getDocRef('inventory', b.id), { breakdown: b.breakdown, updatedAt: b.updatedAt }))
+            ]);
           } catch {}
         }
-        showToast(`הספק "${supName}" וכל חובותיו נמחקו מהמערכת.`, 'info');
+        showToast(`הספק "${supplier.name}" וכל חובותיו נמחקו!`, 'info');
       }
     });
   };
 
-  // פתיחת חלון עריכת מלאי אצל ספק ספציפי
   const openEditSupplierStockModal = (supplier) => {
     const draft = {};
-    getSupplierInventoryItems(supplier.name).forEach(it => {
-      draft[it.bookId] = it.amount;
+    inventoryList.forEach(book => {
+      const match = (book.breakdown || []).find(r => r.location === supplier.name);
+      if (match && Number(match.amount) > 0) {
+        draft[book.id] = Number(match.amount);
+      }
     });
     setSupplierStockDraft(draft);
-    const firstUnused = inventoryList.find(b => !draft[b.id]);
-    setNewBookForSupplier({ bookId: firstUnused?.id || inventoryList[0]?.id || '', amount: 10 });
+    setNewBookForSupplier({ bookId: inventoryList[0]?.id || '', amount: 10 });
     setViewingSupplierStock(supplier);
   };
 
-  // שמירת שינויי מלאי אצל ספק ספציפי
   const handleSaveSupplierStockChanges = async () => {
     if (!viewingSupplierStock) return;
     const supName = viewingSupplierStock.name;
     const updatedBooks = [];
 
     setInventoryList(prev => prev.map(book => {
-      const hasDraft = Object.prototype.hasOwnProperty.call(supplierStockDraft, book.id);
-      const existingIdx = (book.breakdown || []).findIndex(r => r.location === supName);
-      if (!hasDraft && existingIdx === -1) return book;
+      const desiredAmount = Math.max(0, Number(supplierStockDraft[book.id] || 0));
+      const existingMatch = (book.breakdown || []).find(r => r.location === supName);
+      const oldAmount = existingMatch ? Number(existingMatch.amount || 0) : 0;
+      if (desiredAmount === oldAmount) return book;
 
-      const targetAmount = hasDraft ? Math.max(0, Number(supplierStockDraft[book.id] || 0)) : 0;
-      const nextBreakdown = [...(book.breakdown || [])];
-      if (existingIdx !== -1) {
-        if (targetAmount > 0) {
-          nextBreakdown[existingIdx] = { ...nextBreakdown[existingIdx], amount: targetAmount };
-        } else {
-          nextBreakdown.splice(existingIdx, 1);
-        }
-      } else if (targetAmount > 0) {
-        nextBreakdown.push({ location: supName, amount: targetAmount });
+      let nextBreakdown = (book.breakdown || []).filter(r => r.location !== supName);
+      if (desiredAmount > 0) {
+        nextBreakdown.push({ location: supName, amount: desiredAmount });
       }
       const updated = { ...book, breakdown: nextBreakdown, updatedAt: Date.now() };
       updatedBooks.push(updated);
@@ -1028,25 +1016,6 @@ export default function App() {
         ));
       } catch {}
     }
-
-    const logObj = {
-      supplierName: supName,
-      action: 'עדכון ידני של מלאי הספק',
-      type: 'adjustment',
-      user: currentUserName,
-      date: new Date().toLocaleString('he-IL'),
-      timestamp: Date.now(),
-      totalAmount: 0,
-      paymentStatus: 'paid',
-      paidAmount: 0,
-      details: `עודכנו כמויות המלאי אצל ${supName} ידנית על ידי ${currentUserName}.`
-    };
-    if (db && dbConnected) {
-      try { await addDoc(getCollRef('supplier_logs'), logObj); } catch { setSupplierLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]); }
-    } else {
-      setSupplierLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]);
-    }
-
     setViewingSupplierStock(null);
     showToast(`מלאי הספרים אצל "${supName}" עודכן בהצלחה!`, 'success');
   };
@@ -1198,7 +1167,7 @@ export default function App() {
   };
 
   // ==========================================
-  // פענוח אוטומטי של הודעת הזמנה מספק והפקת הזמנה + קבלה
+  // פענוח אוטומטי חכם של הודעת הזמנה מספק (כולל שמות חלקיים, קיצורים וטעויות הקלדה)
   // ==========================================
   const handleParseSupplierMessageText = (text) => {
     setRawOrderMessage(text);
@@ -1207,52 +1176,127 @@ export default function App() {
       return;
     }
 
-    // זיהוי אוטומטי של ספק מתוך הטקסט (אם מוזכר שם של ספק קיים)
-    const matchedSup = suppliersList.find(s =>
-      s.name && text.toLowerCase().includes(s.name.trim().toLowerCase())
-    );
+    // זיהוי אוטומטי של ספק מתוך הטקסט (גם התאמה חלקית של שם הספק)
+    const lowerText = text.toLowerCase();
+    const matchedSup = suppliersList.find(s => {
+      const sName = (s.name || '').trim().toLowerCase();
+      return sName.length >= 2 && lowerText.includes(sName);
+    });
     if (matchedSup && !parsedSupplierName) {
       setParsedSupplierName(matchedSup.name);
     }
 
-    const foundMap = new Map();
-    const lines = text.split(/\r?\n|,|;/).map(l => l.trim()).filter(Boolean);
+    const STOP_WORDS = new Set(['חוברת', 'ספר', 'ספרים', 'של', 'את', 'על', 'אל', 'עם', 'הרב', 'יוצא', 'מעדן', 'שערים', 'להשקות', 'הגן', 'כעץ', 'שתול', 'ונהר']);
 
-    const matchBookInSegment = (seg) => {
-      const normSeg = normalizeBookTitle(seg).toLowerCase();
-      if (!normSeg) return null;
-      // התאמה ישירה מול ספרים קיימים במלאי
-      let best = inventoryList.find(b => {
-        const nt = normalizeBookTitle(b.title).toLowerCase();
-        return nt && (normSeg.includes(nt) || nt.includes(normSeg));
-      });
-      if (best) return best;
-      // התאמה לפי מילות מפתח מהקטלוג
-      const catMatch = findMatchingCatalogBook(seg);
-      if (catMatch) {
-        best = inventoryList.find(b =>
-          normalizeBookTitle(b.title) === normalizeBookTitle(catMatch.title) ||
-          findMatchingCatalogBook(b.title)?.id === catMatch.id
-        );
+    const cleanHebWord = (w) => {
+      let s = w.replace(/[^א-תa-z0-9]/gi, '').toLowerCase();
+      if (s.length > 3 && (s.startsWith('ו') || s.startsWith('ה') || s.startsWith('ל') || s.startsWith('ב') || s.startsWith('מ'))) {
+        s = s.slice(1);
       }
-      return best || null;
+      return s;
     };
 
-    lines.forEach(line => {
-      const book = matchBookInSegment(line);
-      if (!book) return;
-      // חילוץ כמות (למשל: 10, x10, 10x, 10 עותקים, 10 יח')
-      const numMatches = line.match(/(?:×|x|\*)?\s*(\d{1,4})\s*(?:×|x|\*|עותקים|יחידות|יח'|יח)?/i);
-      const qty = numMatches ? Math.max(1, Number(numMatches[1])) : 1;
-      const defaultPrice = Number(getEffectiveBookPrices(book).supplier || book.prices?.supplier || 0);
+    const getKeywords = (title) =>
+      normalizeBookTitle(title)
+        .split(' ')
+        .map(cleanHebWord)
+        .filter(w => w.length >= 2 && !STOP_WORDS.has(w));
 
-      if (foundMap.has(book.id)) {
-        const prev = foundMap.get(book.id);
-        foundMap.set(book.id, { ...prev, quantity: prev.quantity + qty });
+    // חישוב מרחק עריכה (Levenshtein) לזיהוי שגיאות כתיב קלות
+    const isSimilarWord = (a, b) => {
+      if (a === b) return true;
+      if (a.length >= 4 && b.length >= 4 && (a.includes(b) || b.includes(a))) return true;
+      if (Math.abs(a.length - b.length) > 1 || a.length < 4 || b.length < 4) return false;
+      const dp = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+      for (let j = 1; j <= b.length; j++) dp[0][j] = j;
+      for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+          dp[i][j] = a[i - 1] === b[j - 1]
+            ? dp[i - 1][j - 1]
+            : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+        }
+      }
+      return dp[a.length][b.length] <= 1;
+    };
+
+    // פירוק חכם למקטעים: לפי שורות, פסיקים, וגם פיצול בין מספר ספרים באותה שורה (למשל "10 מניטו ו-5 סוכה")
+    const rawSegments = text
+      .split(/\r?\n|,|;|\+|\//)
+      .flatMap(chunk => chunk.split(/(?=(?:^|\s|ו[-–]?)(?:×|x|\*)?\d{1,4}\s+[א-ת])/i))
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    const scoreBookMatch = (segment, book) => {
+      const normSeg = normalizeBookTitle(segment).toLowerCase();
+      const normTitle = normalizeBookTitle(book.title).toLowerCase();
+      if (!normSeg || !normTitle) return 0;
+
+      // התאמה מדויקת או הכלה מלאה
+      if (normSeg.includes(normTitle)) return 100;
+
+      // התאמה לפי מילות מפתח מהקטלוג
+      const catMatch = findMatchingCatalogBook(segment);
+      if (catMatch && (normalizeBookTitle(catMatch.title) === normalizeBookTitle(book.title) || findMatchingCatalogBook(book.title)?.id === catMatch.id)) {
+        return 90;
+      }
+
+      const segWords = normSeg.split(' ').map(cleanHebWord).filter(w => w.length >= 2);
+      const bookWords = getKeywords(book.title);
+      if (bookWords.length === 0 || segWords.length === 0) return 0;
+
+      // בדיקת הבחנה חשובה בין "סט", "א", "ב" וכו'
+      const titleHasSet = normTitle.includes('סט');
+      const segHasSet = normSeg.includes('סט');
+      if (titleHasSet !== segHasSet && (normSeg.includes('ונהר') || normSeg.includes('תהלכתי') || normSeg.includes('שתול'))) {
+        return 0;
+      }
+
+      let matchedCount = 0;
+      for (const bw of bookWords) {
+        if (segWords.some(sw => isSimilarWord(sw, bw))) {
+          matchedCount++;
+        }
+      }
+
+      if (matchedCount === 0) return 0;
+      const ratio = matchedCount / bookWords.length;
+      // אם לפחות חצי ממילות המפתח הייחודיות של הספר מופיעות (או מילה ייחודית ארוכה)
+      if (ratio >= 0.5 || (matchedCount >= 1 && bookWords.length === 1)) {
+        return Math.round(50 + ratio * 40);
+      }
+      return 0;
+    };
+
+    const foundMap = new Map();
+
+    rawSegments.forEach(seg => {
+      let bestBook = null;
+      let bestScore = 0;
+
+      for (const book of inventoryList) {
+        const sc = scoreBookMatch(seg, book);
+        if (sc > bestScore) {
+          bestScore = sc;
+          bestBook = book;
+        }
+      }
+
+      if (!bestBook || bestScore < 50) return;
+
+      // חילוץ כמות (תומך ב-10, x10, 10x, 10 יח', 10 עותקים, ו-10)
+      const qtyMatch =
+        seg.match(/(?:^|\s|ו[-–]?)(?:×|x|\*)?\s*(\d{1,4})\s*(?:×|x|\*|עותקים|יחידות|יח'|יח)?(?:\s|$)/i) ||
+        seg.match(/(\d{1,4})/);
+      const qty = qtyMatch ? Math.max(1, Number(qtyMatch[1])) : 1;
+      const defaultPrice = Number(getEffectiveBookPrices(bestBook).supplier || bestBook.prices?.supplier || 0);
+
+      if (foundMap.has(bestBook.id)) {
+        const prev = foundMap.get(bestBook.id);
+        foundMap.set(bestBook.id, { ...prev, quantity: prev.quantity + qty });
       } else {
-        foundMap.set(book.id, {
-          bookId: book.id,
-          title: book.title,
+        foundMap.set(bestBook.id, {
+          bookId: bestBook.id,
+          title: bestBook.title,
           quantity: qty,
           unitPrice: defaultPrice
         });
