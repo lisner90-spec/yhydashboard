@@ -12,7 +12,8 @@ import {
   Minus, Wallet, BookMarked, Scale, Award, Eye, Check, Send,
   LogIn, LogOut, Lock, Shield, KeyRound, Sun, Moon, Sparkles,
   QrCode, Camera, BarChart3, Layers, Percent, Share2,
-  Bell, Users, Calendar, Activity, Tag, MapPin
+  Bell, Users, Calendar, Activity, Tag, MapPin,
+  Sliders, FileCheck, RotateCcw, ShieldCheck, Zap
 } from 'lucide-react';
 
 // ==========================================
@@ -3256,18 +3257,40 @@ export default function App() {
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 hover:shadow-md hover:-translate-y-0.5 transition-all">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-slate-500">סה"כ עותקים במערכת</p>
-                  <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><Package className="w-4 h-4" /></div>
+                  <p className="text-xs font-bold text-slate-500">שווי מלאי (צרכן / הדפסה)</p>
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><DollarSign className="w-4 h-4" /></div>
                 </div>
-                <p className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">{totalCopiesInSystem.toLocaleString()}</p>
-                <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                  <span>במחסן: <strong className="text-indigo-700">{totalWarehouseCopies.toLocaleString()}</strong></span>
-                  <span>ספקים: <strong className="text-emerald-700">{totalSuppliersCopies.toLocaleString()}</strong></span>
+                <p className="text-3xl font-extrabold text-emerald-700 mt-2 tracking-tight">₪{totalRetailValue.toLocaleString()}</p>
+                <div className="mt-3 pt-2.5 border-t border-slate-100 text-xs text-slate-500">
+                  שווי לפי עלות הדפסה: <strong className="text-rose-700">₪{totalProductionValue.toLocaleString()}</strong>
                 </div>
               </div>
 
               <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 hover:shadow-md hover:-translate-y-0.5 transition-all">
                 <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-slate-500">סה"כ הכנסות מתועדות</p>
+                  <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><TrendingUp className="w-4 h-4" /></div>
+                </div>
+                <p className="text-3xl font-extrabold text-purple-700 mt-2 tracking-tight">₪{(liveStoreRevenue + liveSupplierRevenue + livePosRevenue).toLocaleString()}</p>
+                <div className="mt-3 pt-2.5 border-t border-slate-100 text-[11px] text-slate-500 flex flex-wrap gap-x-2">
+                  <span>אתר ₪{liveStoreRevenue.toLocaleString()}</span>·
+                  <span>ספקים ₪{liveSupplierRevenue.toLocaleString()}</span>·
+                  <span>דוכן ₪{livePosRevenue.toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 hover:shadow-md hover:-translate-y-0.5 transition-all">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-slate-500">יתרת חוב פתוחה מספקים</p>
+                  <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center"><Wallet className="w-4 h-4" /></div>
+                </div>
+                <p className="text-3xl font-extrabold text-rose-600 mt-2 tracking-tight">₪{totalOpenSupplierDebt.toLocaleString()}</p>
+                <div className="mt-3 pt-2.5 border-t border-slate-100">
+                  <button onClick={() => setActiveTab('suppliers')} className="text-xs text-indigo-600 font-bold hover:underline">למסך ספקים וגבייה ←</button>
+                </div>
+              </div>
+            </div>
+
             {/* פס ויזואלי להתפלגות המלאי + התפלגות הכנסות לפי ערוצים */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-3">
@@ -4437,22 +4460,199 @@ export default function App() {
           </div>
         )}
 
-        {/* ==================== 9. INTEGRATIONS & BACKUP ==================== */}
-                      <div>
-                        <p className="font-bold text-slate-800">{pr.bookTitle}</p>
-                        <p className="text-slate-500 mt-0.5">{pr.recipient} · {pr.role}</p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-slate-400">{pr.date}</span>
+        {/* ==================== 9. NOTES ==================== */}
+        {activeTab === 'notes' && (
+          <div className="max-w-3xl mx-auto space-y-5">
+            <div className="bg-white p-6 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-4">
+              <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
+                <span className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center"><StickyNote className="w-5 h-5" /></span>
+                לוח פתקים ותזכורות לצוות
+              </h2>
+              {userRole === 'admin' && (
+                <form onSubmit={handleAddNote} className="flex gap-2">
+                  <input
+                    required
+                    value={newNoteText}
+                    onChange={e => setNewNoteText(e.target.value)}
+                    placeholder="כתוב פתק או משימה מהירה לצוות..."
+                    className="flex-1 p-3 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:bg-white outline-none"
+                  />
+                  <button type="submit" className="bg-amber-500 hover:bg-amber-600 text-white px-5 py-3 rounded-xl font-bold text-sm shadow-xs shrink-0">+ הוסף</button>
+                </form>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                {notesList.length === 0 ? (
+                  <p className="col-span-full text-center text-slate-400 text-sm py-8">אין פתקים שמורים כרגע.</p>
+                ) : (
+                  [...notesList].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map(note => (
+                    <div key={note.id} className="bg-amber-50/70 border border-amber-200/80 p-4 rounded-2xl flex flex-col justify-between gap-3">
+                      <p className="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">{note.text}</p>
+                      <div className="flex justify-between items-center text-[11px] text-slate-500 pt-2 border-t border-amber-200/50">
+                        <span>{note.user} · {note.date}</span>
                         {userRole === 'admin' && (
-                          <button type="button" onClick={() => handleDeletePrCopy(pr)} className="text-slate-400 hover:text-rose-600 p-1 rounded-lg" title="מחק רשומה">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <button type="button" onClick={() => handleDeleteNote(note)} className="text-slate-400 hover:text-rose-600 p-1"><Trash2 className="w-3.5 h-3.5" /></button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==================== 10. INTEGRATIONS & AUTO-BACKUP ==================== */}
+        {activeTab === 'integrations' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white p-6 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-4">
+                <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2.5">
+                  <span className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><RefreshCw className="w-5 h-5" /></span>
+                  חיבור לחנות WooCommerce (Webhook)
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  כתובת ה-Webhook של המערכת לקבלת הזמנות אוטומטיות מאתר הישיבה והפחתת מלאי בזמן אמת:
+                </p>
+                <div className="flex items-center gap-2 bg-slate-50 p-3 rounded-xl ring-1 ring-slate-200">
+                  <code className="text-xs font-mono text-indigo-700 flex-1 truncate" dir="ltr">{getWebhookUrl()}</code>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(getWebhookUrl());
+                      showToast('כתובת ה-Webhook הועתקה!', 'success');
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shrink-0"
+                  >
+                    העתק
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={handlePingWebhook} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold">בדוק תקינות שרת</button>
+                  <button type="button" onClick={handleSendTestOrder} className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-xs font-bold">צור הזמנת ניסיון</button>
+                </div>
+                {webhookCheckState.message && (
+                  <p className="text-xs font-bold text-slate-700 bg-slate-50 p-3 rounded-xl">{webhookCheckState.message}</p>
+                )}
+              </div>
+
+              <div className="bg-white p-6 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-4">
+                <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2.5">
+                  <span className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><Database className="w-5 h-5" /></span>
+                  גיבוי מלא ושחזור נתונים (JSON)
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  הורד קובץ גיבוי מלא של כל הספרים, הספקים, ההזמנות וההיסטוריה למחשב או שחזר מקובץ קיים.
+                </p>
+                <div className="flex flex-wrap gap-2.5">
+                  <button type="button" onClick={handleExportFullBackup} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs">
+                    <Download className="w-4 h-4" /> הורד קובץ גיבוי מלא
+                  </button>
+                  {userRole === 'admin' && (
+                    <label className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+                      <Upload className="w-4 h-4" /> שחזר מקובץ גיבוי
+                      <input type="file" accept=".json" onChange={handleImportBackupFile} className="hidden" />
+                    </label>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2.5">
+                    <span className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><ShieldCheck className="w-5 h-5" /></span>
+                    מכונת זמן — גיבוי אוטומטי ונקודות שחזור
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">המערכת שומרת אוטומטית נקודות שחזור מקומיות בדפדפן</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700 bg-slate-50 px-3 py-2 rounded-xl ring-1 ring-slate-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={autoBackupSettings.enabled}
+                      onChange={e => setAutoBackupSettings({ ...autoBackupSettings, enabled: e.target.checked })}
+                      className="rounded"
+                    />
+                    גיבוי אוטומטי פעיל
+                  </label>
+                  <button type="button" onClick={() => createAutoSnapshot('נקודת שחזור ידנית', false)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold">
+                    + צור נקודת שחזור עכשיו
+                  </button>
+                </div>
+              </div>
+
+              {autoSnapshots.length === 0 ? (
+                <p className="text-center text-slate-400 text-xs py-6">עדיין לא נוצרו נקודות שחזור.</p>
+              ) : (
+                <div className="space-y-2">
+                  {autoSnapshots.map(snap => (
+                    <div key={snap.id} className="p-3.5 bg-slate-50/90 rounded-2xl ring-1 ring-slate-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                      <div>
+                        <p className="font-bold text-slate-800">{snap.reason} — {snap.dateLabel}</p>
+                        <p className="text-slate-500 mt-0.5">{snap.summary?.books || 0} ספרים · {snap.summary?.suppliers || 0} ספקים · {snap.sizeKB}KB</p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button type="button" onClick={() => handleDownloadSnapshot(snap)} className="bg-white ring-1 ring-slate-200 px-3 py-1.5 rounded-xl font-bold text-slate-700 hover:bg-slate-100">הורד</button>
+                        {userRole === 'admin' && (
+                          <>
+                            <button type="button" onClick={() => handleRestoreSnapshot(snap)} className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl font-bold hover:bg-indigo-700">שחזר</button>
+                            <button type="button" onClick={() => handleDeleteSnapshot(snap.id)} className="p-1.5 text-slate-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
+                          </>
                         )}
                       </div>
                     </div>
                   ))}
                 </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ==================== 11. USERS MANAGEMENT (ADMIN ONLY) ==================== */}
+        {activeTab === 'users' && userRole === 'admin' && (
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-4">
+              <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
+                <span className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><UserCog className="w-5 h-5" /></span>
+                ניהול משתמשים והרשאות צוות
+              </h2>
+              <form onSubmit={handleAddUser} className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 bg-slate-50/90 p-4 rounded-2xl ring-1 ring-slate-200/70">
+                <input required placeholder="שם מלא *" value={newUserForm.name} onChange={e => setNewUserForm({ ...newUserForm, name: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white" />
+                <input required placeholder="שם משתמש *" value={newUserForm.username} onChange={e => setNewUserForm({ ...newUserForm, username: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white" dir="ltr" />
+                <input required type="password" placeholder="סיסמה *" value={newUserForm.password} onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white" dir="ltr" />
+                <input placeholder="טלפון לוואטסאפ" value={newUserForm.phone} onChange={e => setNewUserForm({ ...newUserForm, phone: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white" dir="ltr" />
+                <select value={newUserForm.role} onChange={e => setNewUserForm({ ...newUserForm, role: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white font-bold">
+                  <option value="viewer">צופה בלבד</option>
+                  <option value="admin">מנהל מערכת</option>
+                </select>
+                <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 px-4 rounded-xl text-xs font-bold">+ הוסף משתמש</button>
+              </form>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+                {usersList.map(u => (
+                  <div key={u.id} className="p-4 bg-slate-50/90 rounded-2xl ring-1 ring-slate-200/70 flex flex-col justify-between gap-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-extrabold text-slate-900 text-sm">{u.name}</h4>
+                        <p className="text-xs text-slate-500 mt-0.5">משתמש: <strong dir="ltr">{u.username}</strong></p>
+                        <span className={`inline-block mt-1.5 text-[10px] font-bold px-2.5 py-0.5 rounded-full ${u.role === 'admin' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-200 text-slate-700'}`}>
+                          {u.role === 'admin' ? 'מנהל מערכת' : 'צופה בלבד'}
+                        </span>
+                      </div>
+                      <div className="flex gap-1">
+                        <button type="button" onClick={() => setEditingUser({ ...u, newPassword: '' })} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-xl"><Edit className="w-4 h-4" /></button>
+                        {u.id !== currentUser?.id && (
+                          <button type="button" onClick={() => handleDeleteUser(u)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded-xl"><Trash2 className="w-4 h-4" /></button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 pt-2 border-t border-slate-200/70">
+                      <button type="button" onClick={() => handleSendCredentialsWhatsApp(u)} className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1"><MessageCircle className="w-3.5 h-3.5" /> שלח בוואטסאפ</button>
+                      <button type="button" onClick={() => handleSendCredentialsEmail(u)} className="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1"><Mail className="w-3.5 h-3.5" /> שלח במייל</button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
