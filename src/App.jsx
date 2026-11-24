@@ -1669,7 +1669,11 @@ export default function App() {
   const handleBarcodeDetected = (code) => {
     const clean = String(code || '').trim();
     if (!clean) return;
-    const found = inventoryList.find(b => (b.isbn || '').trim() === clean || (b.title || '').includes(clean));
+    const cleanDigits = clean.replace(/[-\s]/g, '');
+    const found = inventoryList.find(b => {
+      const isbnClean = String(b.isbn || '').replace(/[-\s]/g, '').trim();
+      return (isbnClean && isbnClean === cleanDigits) || (b.title || '').includes(clean);
+    });
     if (!found) {
       showToast(`לא נמצא ספר התואם לקוד "${clean}".`, 'warning');
       return;
@@ -1686,32 +1690,73 @@ export default function App() {
 
   useEffect(() => {
     if (!scannerTarget) return;
-    let stream = null;
+    let html5QrScanner = null;
+    let nativeStream = null;
     let rafId = null;
     let cancelled = false;
 
-    const startCamera = async () => {
+    const loadHtml5QrcodeScript = () => new Promise((resolve, reject) => {
+      if (window.Html5Qrcode) return resolve(window.Html5Qrcode);
+      const existing = document.getElementById('html5-qrcode-cdn');
+      if (existing) {
+        existing.addEventListener('load', () => resolve(window.Html5Qrcode));
+        existing.addEventListener('error', reject);
+        return;
+      }
+      const script = document.createElement('script');
+      script.id = 'html5-qrcode-cdn';
+      script.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+      script.async = true;
+      script.onload = () => resolve(window.Html5Qrcode);
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+
+    const startUniversalScanner = async () => {
       try {
         if (!navigator.mediaDevices?.getUserMedia) {
-          setScannerError('הדפדפן אינו תומך בגישה למצלמה — ניתן להקליד דאנאק ידנית למטה.');
+          setScannerError('הדפדפן אינו תומך בגישה למצלמה — ניתן להקליד דאנאקור או לסרוק עם סורק חיצוני למטה.');
           return;
         }
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+
+        // 1. טעינת ספריית html5-qrcode לתמיכה מלאה באייפון (Safari), אנדרואיד ומחשב
+        const Html5Qrcode = await loadHtml5QrcodeScript().catch(() => null);
+        if (cancelled) return;
+
+        if (Html5Qrcode && document.getElementById('qr-reader-container')) {
+          html5QrScanner = new Html5Qrcode('qr-reader-container');
+          await html5QrScanner.start(
+            { facingMode: 'environment' },
+            { fps: 12, qrbox: { width: 250, height: 140 }, aspectRatio: 1.5 },
+            (decodedText) => {
+              if (cancelled) return;
+              cancelled = true;
+              html5QrScanner.stop().catch(() => {});
+              handleBarcodeDetected(decodedText);
+            },
+            () => {}
+          );
+          return;
+        }
+
+        // 2. גיבוי: שימוש ב-BarcodeDetector מובנה אם הספרייה לא נטענה (מצב אופליין)
+        nativeStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
         if (cancelled) {
-          stream.getTracks().forEach(t => t.stop());
+          nativeStream.getTracks().forEach(t => t.stop());
           return;
         }
         if (videoRef.current) {
-          videoRef.current.srcObject = stream;
+          videoRef.current.srcObject = nativeStream;
           await videoRef.current.play();
         }
         if ('BarcodeDetector' in window) {
-          const detector = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128', 'qr_code'] });
+          const detector = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'qr_code'] });
           const scanLoop = async () => {
             if (cancelled || !videoRef.current) return;
             try {
               const barcodes = await detector.detect(videoRef.current);
               if (barcodes.length > 0 && barcodes[0].rawValue) {
+                cancelled = true;
                 handleBarcodeDetected(barcodes[0].rawValue);
                 return;
               }
@@ -1720,18 +1765,21 @@ export default function App() {
           };
           rafId = requestAnimationFrame(scanLoop);
         } else {
-          setScannerError('זיהוי אוטומטי במצלמה אינו נתמך בדפדפן זה — הקלד את מספר הדאנאק למטה.');
+          setScannerError('מצב אופליין: הקלד את מספר הדאנאקור או סרוק עם סורק ברקוד חיצוני למטה.');
         }
       } catch {
-        setScannerError('לא ניתנה הרשאת מצלמה — הקלד את מספר הדאנאק למטה.');
+        setScannerError('לא ניתנה הרשאת מצלמה — ניתן להקליד דאנאקור ידנית או לסרוק עם סורק חיצוני למטה.');
       }
     };
 
-    startCamera();
+    startUniversalScanner();
     return () => {
       cancelled = true;
       if (rafId) cancelAnimationFrame(rafId);
-      if (stream) stream.getTracks().forEach(t => t.stop());
+      if (html5QrScanner) {
+        html5QrScanner.stop().then(() => html5QrScanner.clear()).catch(() => {});
+      }
+      if (nativeStream) nativeStream.getTracks().forEach(t => t.stop());
     };
   }, [scannerTarget]);
 
@@ -7480,12 +7528,16 @@ export default function App() {
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md overflow-hidden" dir="rtl">
             <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
-              <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Camera className="w-5 h-5 text-indigo-600" /> סריקת ברקוד / דאנאק</h3>
+              <div>
+                <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Camera className="w-5 h-5 text-indigo-600" /> סריקת ברקוד / דאנאקור</h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">כוון את המצלמה לברקוד בגב הספר או סרוק עם אקדח ברקוד</p>
+              </div>
               <button onClick={() => setScannerTarget(null)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
             </div>
             <div className="p-5 space-y-4">
-              <div className="bg-slate-950 rounded-2xl overflow-hidden aspect-video flex items-center justify-center relative">
-                <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+              <div className="bg-slate-950 rounded-2xl overflow-hidden min-h-[210px] flex items-center justify-center relative">
+                <div id="qr-reader-container" className="w-full" />
+                <video ref={videoRef} className="w-full h-full object-cover hidden" playsInline muted />
               </div>
               {scannerError && <p className="text-xs text-amber-700 bg-amber-50 p-3 rounded-xl font-bold">{scannerError}</p>}
               <form
@@ -7493,16 +7545,43 @@ export default function App() {
                   e.preventDefault();
                   handleBarcodeDetected(manualBarcodeInput);
                 }}
-                className="flex gap-2"
+                className="space-y-2"
               >
-                <input
-                  type="text"
-                  value={manualBarcodeInput}
-                  onChange={e => setManualBarcodeInput(e.target.value)}
-                  placeholder="או הקלד מספר דאנאק / שם ספר..."
-                  className="flex-1 p-2.5 border border-slate-200 rounded-xl text-sm"
-                />
-                <button type="submit" className="bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold">אתר</button>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    autoFocus
+                    value={manualBarcodeInput}
+                    onChange={e => setManualBarcodeInput(e.target.value)}
+                    placeholder="סרוק ברקוד חיצוני או הקלד דאנאקור / שם ספר..."
+                    className="flex-1 p-2.5 border border-slate-200 rounded-xl text-sm"
+                  />
+                  <button type="submit" className="bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold">הוסף</button>
+                </div>
+                {manualBarcodeInput.trim().length >= 2 && (() => {
+                  const q = manualBarcodeInput.trim().toLowerCase();
+                  const qDigits = q.replace(/[-\s]/g, '');
+                  const matches = inventoryList.filter(b =>
+                    (b.title || '').toLowerCase().includes(q) ||
+                    (qDigits && String(b.isbn || '').replace(/[-\s]/g, '').includes(qDigits))
+                  ).slice(0, 4);
+                  if (matches.length === 0) return null;
+                  return (
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl divide-y divide-slate-200/70 overflow-hidden">
+                      {matches.map(m => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => handleBarcodeDetected(m.isbn || m.title)}
+                          className="w-full text-right px-3 py-2 text-xs hover:bg-indigo-50 flex justify-between items-center"
+                        >
+                          <span className="font-bold text-slate-800">{m.title}</span>
+                          <span className="text-[11px] font-mono text-slate-500" dir="ltr">{m.isbn || 'ללא דאנאקור'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
               </form>
             </div>
           </div>
