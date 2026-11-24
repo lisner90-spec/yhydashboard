@@ -1315,6 +1315,455 @@ export default function App() {
     showToast(`ההזמנה נשמרה ומלאי "${invoiceSupplier.name}" עודכן אוטומטית!`, 'success');
   };
 
+  // --- קונסיגנציה: דיווח מכירה / החזרה ---
+  const openConsignmentModal = (supplier) => {
+    const items = getSupplierInventoryItems(supplier.name);
+    const first = items[0];
+    setConsignmentSupplier(supplier);
+    setConsignmentForm({
+      type: 'sale',
+      bookId: first?.bookId || '',
+      quantity: 1,
+      unitPrice: first?.supplierPrice || 0,
+      notes: ''
+    });
+    setIsConsignmentModalOpen(true);
+  };
+
+  const handleSaveConsignment = async (e) => {
+    e.preventDefault();
+    if (!consignmentSupplier || !consignmentForm.bookId) return;
+    const book = inventoryList.find(b => b.id === consignmentForm.bookId);
+    if (!book) return;
+    const qty = Math.max(1, Number(consignmentForm.quantity || 1));
+    const isReturn = consignmentForm.type === 'return';
+    const totalAmount = isReturn ? 0 : qty * Number(consignmentForm.unitPrice || 0);
+
+    const updatedBreakdown = (book.breakdown || [])
+      .map(row => row.location === consignmentSupplier.name
+        ? { ...row, amount: Math.max(0, Number(row.amount || 0) - qty) }
+        : row
+      )
+      .filter(row => Number(row.amount) > 0);
+
+    const newPublisherStock = isReturn
+      ? Number(book.publisherStock || 0) + qty
+      : Number(book.publisherStock || 0);
+
+    setInventoryList(prev => prev.map(b =>
+      b.id === book.id ? { ...b, publisherStock: newPublisherStock, breakdown: updatedBreakdown, updatedAt: Date.now() } : b
+    ));
+    if (db && dbConnected && book.id) {
+      try {
+        await updateDoc(getDocRef('inventory', book.id), {
+          publisherStock: newPublisherStock,
+          breakdown: updatedBreakdown,
+          updatedAt: Date.now()
+        });
+      } catch {}
+    }
+
+    const details = isReturn
+      ? `הוחזרו ${qty} עותקים מהספר "${book.title}" למחסן הראשי.${consignmentForm.notes ? '\nהערות: ' + consignmentForm.notes : ''}`
+      : `נמכרו ${qty} עותקים מהספר "${book.title}" × ₪${consignmentForm.unitPrice} = ₪${totalAmount.toLocaleString()}.${consignmentForm.notes ? '\nהערות: ' + consignmentForm.notes : ''}`;
+
+    const logObj = {
+      supplierName: consignmentSupplier.name,
+      action: isReturn ? 'החזרת ספרים למחסן' : 'דיווח מכירת קונסיגנציה',
+      type: consignmentForm.type,
+      user: currentUserName,
+      date: new Date().toLocaleString('he-IL'),
+      timestamp: Date.now(),
+      totalAmount,
+      paymentStatus: isReturn ? 'paid' : 'unpaid',
+      paidAmount: 0,
+      details
+    };
+
+    if (db && dbConnected) {
+      try { await addDoc(getCollRef('supplier_logs'), logObj); } catch { setSupplierLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]); }
+    } else {
+      setSupplierLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]);
+    }
+    setIsConsignmentModalOpen(false);
+    showToast(isReturn ? `${qty} עותקים הוחזרו למחסן הראשי!` : `נרשמה מכירה ע"ס ₪${totalAmount.toLocaleString()}!`, 'success');
+  };
+
+  const handleUpdateLogPayment = async (log, status, customPaidAmount = null) => {
+    const total = Number(log.totalAmount || 0);
+    let paidAmount = 0;
+    if (status === 'paid') paidAmount = total;
+    else if (status === 'partial') {
+      const parsed = Number(customPaidAmount);
+      if (isNaN(parsed) || parsed < 0 || parsed > total) {
+        showToast(`אנא הזן סכום תקין בין 0 ל-₪${total.toLocaleString()}`, 'warning');
+        return;
+      }
+      paidAmount = parsed;
+    }
+
+    setSupplierLogs(prev => prev.map(l => l.id === log.id ? { ...l, paymentStatus: status, paidAmount } : l));
+    if (db && dbConnected && log.id) {
+      try { await updateDoc(getDocRef('supplier_logs', log.id), { paymentStatus: status, paidAmount }); } catch {}
+    }
+    showToast(status === 'paid' ? 'החיוב סומן כשולם!' : status === 'partial' ? `עודכן תשלום חלקי ע"ס ₪${paidAmount.toLocaleString()}` : 'סטטוס עודכן לטרם שולם', 'success');
+  };
+
+  const handleSendDebtWhatsAppReminder = (supplier) => {
+    const debt = getSupplierOpenDebt(supplier.name);
+    const waPhone = formatWhatsAppPhone(supplier.phone);
+    if (!waPhone) {
+      showToast('לספק זה לא מוגדר מספר טלפון תקין לוואטסאפ.', 'error');
+      return;
+    }
+    const msg = `שלום ${supplier.contact || supplier.name},\nמקווים ששלומכם טוב!\nפונים אליכם בעדינות מהוצאת ספרי ישיבת ירוחם לגבי יתרת תשלום פתוחה על הזמנות ספרים ע"ס ₪${debt.toLocaleString()}.\nנשמח לעדכון מתי צפויה העברה או אם נדרש מאיתנו מסמך נוסף.\nתודה רבה וכל טוב!`;
+    window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
+  };
+
+  // --- פענוח חכם של הודעת הזמנה מספק ---
+  const handleParseSupplierMessageText = (text) => {
+    setRawOrderMessage(text);
+    if (!text.trim()) {
+      setParsedItems([]);
+      return;
+    }
+    const foundSup = suppliersList.find(s => s.name && text.includes(s.name));
+    if (foundSup) setParsedSupplierName(foundSup.name);
+
+    const cleanWords = (s) => normalizeBookTitle(s)
+      .split(' ')
+      .map(w => w.replace(/^[והלבכמש]/, ''))
+      .filter(w => w.length >= 2 && !['ספר', 'ספרי', 'חוברת', 'חוברות', 'סט', 'עותקים', 'יחידות', 'שלום', 'נשמח', 'להזמין'].includes(w));
+
+    const levenshtein = (a, b) => {
+      if (Math.abs(a.length - b.length) > 2) return 99;
+      const dp = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+      for (let j = 1; j <= b.length; j++) dp[0][j] = j;
+      for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+          dp[i][j] = a[i - 1] === b[j - 1]
+            ? dp[i - 1][j - 1]
+            : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+        }
+      }
+      return dp[a.length][b.length];
+    };
+
+    const scoreBookMatch = (segment, book) => {
+      const normSeg = normalizeBookTitle(segment);
+      const normTitle = normalizeBookTitle(book.title);
+      if (!normSeg || !normTitle) return 0;
+
+      const segIsSet = normSeg.includes('סט');
+      const bookIsSet = normTitle.includes('סט') || Boolean(book.isSet);
+      if (segIsSet !== bookIsSet) return 0;
+
+      if (normSeg.includes(normTitle) || normTitle.includes(normSeg)) return 100;
+
+      const segWords = cleanWords(segment);
+      const titleWords = cleanWords(book.title);
+      if (segWords.length === 0 || titleWords.length === 0) return 0;
+
+      let matched = 0;
+      for (const sw of segWords) {
+        if (titleWords.some(tw => tw === sw || tw.includes(sw) || sw.includes(tw) || levenshtein(sw, tw) <= 1)) {
+          matched++;
+        }
+      }
+      if (matched === 0) return 0;
+      return Math.round((matched / Math.max(segWords.length, titleWords.length)) * 80) + matched * 5;
+    };
+
+    const segments = text.split(/[\n,;+]+|\s+ו(?=\d)/).map(s => s.trim()).filter(Boolean);
+    const detected = [];
+
+    for (const seg of segments) {
+      const qtyMatch = seg.match(/(\d+)/);
+      const qty = qtyMatch ? Math.max(1, Number(qtyMatch[1])) : 1;
+      const textPart = seg.replace(/\d+/g, '').replace(/[×x*:-]/g, ' ').trim();
+      if (textPart.length < 2) continue;
+
+      let bestBook = null;
+      let bestScore = 25;
+      for (const b of inventoryList) {
+        const sc = scoreBookMatch(textPart, b);
+        if (sc > bestScore) {
+          bestScore = sc;
+          bestBook = b;
+        }
+      }
+
+      if (bestBook) {
+        const existing = detected.find(d => d.bookId === bestBook.id);
+        if (existing) {
+          existing.quantity += qty;
+        } else {
+          detected.push({
+            bookId: bestBook.id,
+            title: bestBook.title,
+            quantity: qty,
+            unitPrice: Number(bestBook.prices?.supplier || 0)
+          });
+        }
+      }
+    }
+    setParsedItems(detected);
+  };
+
+  const handleConfirmParsedOrderAndReceipt = async () => {
+    const supName = parsedSupplierName.trim();
+    if (!supName) {
+      showToast('אנא הזן או בחר שם ספק / חנות.', 'warning');
+      return;
+    }
+    const validItems = parsedItems.filter(i => i.bookId && Number(i.quantity) > 0);
+    if (validItems.length === 0) {
+      showToast('לא נבחרו ספרים להזמנה.', 'warning');
+      return;
+    }
+
+    const totalOrderPrice = validItems.reduce((s, i) => s + Number(i.quantity) * Number(i.unitPrice || 0), 0);
+
+    const { nextInventory: afterWarehouseDeduct, updatedBooks: decomposedBooks } = parsedDeductWarehouse
+      ? applySaleInventoryDeduction(inventoryList, validItems.map(v => ({ bookId: v.bookId, qty: v.quantity })))
+      : { nextInventory: inventoryList, updatedBooks: [] };
+
+    const updatedMap = new Map(decomposedBooks.map(b => [b.id, b]));
+    const finalInventory = afterWarehouseDeduct.map(book => {
+      const orderItem = validItems.find(v => v.bookId === book.id);
+      if (!orderItem) return book;
+      const currentBreakdown = [...(book.breakdown || [])];
+      const existingIdx = currentBreakdown.findIndex(b => b.location === supName);
+      if (existingIdx !== -1) {
+        currentBreakdown[existingIdx] = {
+          ...currentBreakdown[existingIdx],
+          amount: Number(currentBreakdown[existingIdx].amount || 0) + Number(orderItem.quantity)
+        };
+      } else {
+        currentBreakdown.push({ location: supName, amount: Number(orderItem.quantity) });
+      }
+      const updated = { ...book, breakdown: currentBreakdown, updatedAt: Date.now() };
+      updatedMap.set(book.id, updated);
+      return updated;
+    });
+
+    setInventoryList(finalInventory);
+    const updatedBooks = Array.from(updatedMap.values());
+    if (db && dbConnected && updatedBooks.length > 0) {
+      try {
+        await Promise.all(updatedBooks.map(b =>
+          updateDoc(getDocRef('inventory', b.id), { publisherStock: b.publisherStock, breakdown: b.breakdown, updatedAt: b.updatedAt })
+        ));
+      } catch {}
+    }
+
+    const itemsText = validItems
+      .map((item, idx) => `${idx + 1}. ${item.title} — ${item.quantity} עותקים × ₪${item.unitPrice} = ₪${(Number(item.quantity) * Number(item.unitPrice)).toLocaleString()}`)
+      .join('\n');
+
+    const logObj = {
+      supplierName: supName,
+      action: 'קליטת הזמנה והפקת קבלה מהודעה',
+      type: 'order',
+      user: currentUserName,
+      date: new Date().toLocaleString('he-IL'),
+      timestamp: Date.now(),
+      totalAmount: totalOrderPrice,
+      paymentStatus: parsedMarkAsPaid ? 'paid' : 'unpaid',
+      paidAmount: parsedMarkAsPaid ? totalOrderPrice : 0,
+      details: itemsText
+    };
+
+    if (db && dbConnected) {
+      try { await addDoc(getCollRef('supplier_logs'), logObj); } catch { setSupplierLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]); }
+    } else {
+      setSupplierLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]);
+    }
+
+    setIsParseOrderModalOpen(false);
+    setPrintDoc({
+      type: 'supplier_delivery',
+      docTitle: parsedMarkAsPaid ? 'קבלה ותעודת משלוח לספק' : 'תעודת משלוח / הזמנה לספק',
+      orderId: `RCP-${Date.now().toString().slice(-5)}`,
+      date: new Date().toLocaleDateString('he-IL'),
+      recipient: supName,
+      totalAmount: totalOrderPrice,
+      notes: parsedMarkAsPaid ? 'סטטוס תשלום: שולם במלואו' : 'סטטוס תשלום: לתשלום',
+      items: validItems.map(i => ({
+        name: i.title,
+        quantity: Number(i.quantity),
+        price: Number(i.unitPrice),
+        lineTotal: Number(i.quantity) * Number(i.unitPrice)
+      }))
+    });
+    showToast('ההזמנה נקלטה, המלאי עודכן והופקה קבלה!', 'success');
+  };
+
+  // ==========================================
+  // פעולות הזמנות חנות (אתר)
+  // ==========================================
+  const handleMarkOrderShipped = (order) => {
+    setConfirmDialog({
+      title: 'אישור שליחת הזמנה',
+      message: `האם הזמנה #${order.orderId} עבור ${order.customerName} נארזה ומוכנה להעברה ל"הזמנות שנשלחו"?`,
+      confirmText: 'אשר וסמן כנשלח',
+      confirmStyle: 'bg-emerald-600 hover:bg-emerald-700',
+      icon: <CheckCircle className="w-6 h-6" />,
+      iconStyle: 'bg-emerald-100 text-emerald-600',
+      onConfirm: async () => {
+        setOrdersList(prev => prev.map(o => o.id === order.id ? { ...o, status: 'shipped', shippedAt: Date.now() } : o));
+        if (db && dbConnected && order.id) {
+          try { await updateDoc(getDocRef('orders', order.id), { status: 'shipped', shippedAt: Date.now() }); } catch {}
+        }
+        showToast(`הזמנה #${order.orderId} הועברה להזמנות שנשלחו!`, 'success');
+      }
+    });
+  };
+
+  const handleDeleteOrder = (order) => {
+    setConfirmDialog({
+      title: 'מחיקת הזמנה',
+      message: `האם למחוק את הזמנה #${String(order.orderId || '').replace(/^#/, '')} (${order.customerName})?`,
+      confirmText: 'מחק הזמנה',
+      confirmStyle: 'bg-red-600 hover:bg-red-700',
+      icon: <Trash2 className="w-6 h-6" />,
+      iconStyle: 'bg-red-100 text-red-600',
+      onConfirm: async () => {
+        setOrdersList(prev => prev.filter(o => o.id !== order.id));
+        if (db && dbConnected && order.id) {
+          try { await deleteDoc(getDocRef('orders', order.id)); } catch {}
+        }
+        showToast('ההזמנה נמחקה.', 'info');
+      }
+    });
+  };
+
+  const getWebhookUrl = () => {
+    if (typeof window !== 'undefined') {
+      const host = window.location.hostname || '';
+      const isPreviewOrLocal =
+        !host ||
+        host.includes('localhost') ||
+        host.includes('127.0.0.1') ||
+        host.includes('googleusercontent') ||
+        host.includes('webcontainer');
+      if (!isPreviewOrLocal && window.location.protocol.startsWith('http')) {
+        return `${window.location.origin}/api/webhook`;
+      }
+    }
+    return 'https://yhydashboard.vercel.app/api/webhook';
+  };
+
+  const handlePingWebhook = async () => {
+    const url = getWebhookUrl();
+    setWebhookCheckState({ loading: true, status: null, message: `בודק זמינות שרת (${url})...` });
+    try {
+      const res = await fetch(url, { method: 'GET' });
+      const text = await res.text();
+      if (res.ok) {
+        setWebhookCheckState({ loading: false, status: 'ok', message: `החיבור תקין! השרת (${url}) פעיל ומוכן לקבל הזמנות מהאתר.` });
+        showToast('שרת ה-Webhook פעיל ותקין!', 'success');
+      } else {
+        setWebhookCheckState({ loading: false, status: 'error', message: `השרת החזיר שגיאה ${res.status} בכתובת ${url}. ${res.status === 404 ? 'הקובץ api/webhook.js לא נמצא ב-Vercel.' : text.slice(0, 120)}` });
+        showToast(`שגיאת שרת (${res.status}) בבדיקת ה-Webhook`, 'error');
+      }
+    } catch (err) {
+      setWebhookCheckState({ loading: false, status: 'error', message: `שגיאת תקשורת מול ${url}: ${err?.message || 'השרת לא הגיב (בדוק שהאפליקציה ו-api/webhook.js עלו ל-Vercel).'}` });
+      showToast('לא ניתן להתחבר לשרת ה-Webhook.', 'error');
+    }
+  };
+
+  const handleSendTestOrder = async () => {
+    const url = getWebhookUrl();
+    setSendingTestOrder(true);
+    setWebhookCheckState({ loading: true, status: null, message: `שולח הזמנת ניסיון אמיתית אל ${url}...` });
+    const testId = `TEST-${Date.now().toString().slice(-4)}`;
+    const sampleBookTitle = inventoryList[0]?.title || 'אותך אבקש - שערים לימי התשובה';
+    const samplePayload = {
+      id: testId,
+      number: testId,
+      status: 'processing',
+      is_test: true,
+      total: '59',
+      customer_note: 'הזמנת בדיקה אמיתית שעברה דרך שרת ה-Webhook (ללא הורדת מלאי)',
+      billing: { first_name: 'הזמנת', last_name: 'בדיקה (אתר)', phone: '050-0000000', email: 'test@yhyh.co.il', address_1: 'ישיבת ירוחם', city: 'ירוחם' },
+      shipping_lines: [{ method_title: 'איסוף עצמי / בדיקה' }],
+      line_items: [{ name: sampleBookTitle, quantity: 1 }]
+    };
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(samplePayload)
+      });
+      const responseText = await res.text();
+      if (res.ok) {
+        setWebhookCheckState({ loading: false, status: 'ok', message: `הזמנת הבדיקה #${testId} עברה בהצלחה דרך שרת ה-Webhook ונשמרה!` });
+        showToast(`הזמנת הבדיקה #${testId} נשלחה בהצלחה דרך ה-Webhook!`, 'success');
+        setActiveTab('orders');
+      } else {
+        setWebhookCheckState({
+          loading: false,
+          status: 'error',
+          message: `שליחת הזמנת הניסיון נכשלה (שגיאה ${res.status}) בכתובת ${url}. ${res.status === 404 ? 'ודא שהקובץ api/webhook.js קיים בתיקיית api ב-GitHub/Vercel.' : responseText.slice(0, 140)}`
+        });
+        showToast(`שגיאה ${res.status} בשליחת הזמנת ניסיון לשרת.`, 'error');
+      }
+    } catch (err) {
+      setWebhookCheckState({
+        loading: false,
+        status: 'error',
+        message: `לא ניתן להגיע לשרת ה-Webhook (${url}): ${err?.message || 'שגיאת רשת / CORS'}.`
+      });
+      showToast('הבקשה לשרת ה-Webhook נכשלה — ראה פירוט בתיבת הסטטוס.', 'error');
+    } finally {
+      setSendingTestOrder(false);
+    }
+  };
+
+  // ==========================================
+  // פעולות קופה מהירה (POS)
+  // ==========================================
+  const getPosBookPrice = (book, mode = posPriceMode) => {
+    const eff = getEffectiveBookPrices(book);
+    if (mode === 'yeshiva') return eff.yeshiva;
+    if (mode === 'yeshivaGuest') return eff.yeshivaGuest;
+    return eff.general;
+  };
+
+  const handleAddToPosCart = (book) => {
+    setPosCart(prev => {
+      const existing = prev.find(i => i.bookId === book.id);
+      if (existing) return prev.map(i => i.bookId === book.id ? { ...i, qty: i.qty + 1 } : i);
+      return [...prev, { bookId: book.id, title: book.title, qty: 1 }];
+    });
+  };
+
+  const handleUpdatePosCartQty = (bookId, delta) => {
+    setPosCart(prev => prev.map(i => i.bookId === bookId ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0));
+  };
+
+  const handleCompletePosSale = async () => {
+    if (posCart.length === 0) return;
+    let totalAmount = 0;
+    const saleItems = posCart.map(item => {
+      const book = inventoryList.find(b => b.id === item.bookId);
+      const unitPrice = book ? getPosBookPrice(book, posPriceMode) : 0;
+      const lineTotal = unitPrice * item.qty;
+      totalAmount += lineTotal;
+      return { bookId: item.bookId, title: item.title, qty: item.qty, unitPrice, lineTotal };
+    });
+
+    const { nextInventory, updatedBooks } = applySaleInventoryDeduction(inventoryList, posCart);
+    setInventoryList(nextInventory);
+
+    if (db && dbConnected && updatedBooks.length > 0) {
+      try {
+        await Promise.all(updatedBooks.map(b => updateDoc(getDocRef('inventory', b.id), { publisherStock: b.publisherStock, updatedAt: b.updatedAt })));
+      } catch {}
+    }
+
     const saleObj = {
       items: saleItems,
       totalAmount,
