@@ -52,40 +52,37 @@ export default async function handler(req, res) {
   if (!body || body.webhook_id) {
     return res.status(200).json({ ok: true, message: 'Ping received successfully' });
   }
-
-  try {
-    const order = body;
-    const lineItems = Array.isArray(order.line_items) ? order.line_items : [];
-
-    // התעלמות מהזמנות מבוטלות, נכשלות או שנמחקו
+    // התעלמות מהזמנות מבוטלות, נכשלות, שנמחקו או הזמנות דמה חוזרות מ"ישראל ישראלי"
     const ignoredStatuses = ['cancelled', 'failed', 'refunded', 'trash'];
     if (order.status && ignoredStatuses.includes(String(order.status).toLowerCase())) {
       return res.status(200).json({ ok: true, skipped: true, message: `Order skipped due to status: ${order.status}` });
     }
 
-    if (lineItems.length > 0) {
-      const ordersRef = collection(db, 'erp', appId, 'orders');
-      const incomingOrderId = String(order.number || order.id || Date.now());
-
-      // מניעת כפילויות: בדיקה אם ההזמנה כבר קיימת במסד הנתונים
-      const dupQuery = query(ordersRef, where('orderId', '==', incomingOrderId));
-      const dupSnap = await getDocs(dupQuery);
-      if (!dupSnap.empty) {
-        return res.status(200).json({ ok: true, duplicate: true, message: `Order #${incomingOrderId} already exists` });
-      }
-
-      // משיכת המלאי פעם אחת והתאמה חכמה של שמות הספרים (מדלג על הורדת מלאי בהזמנת ניסיון)
+    const rawCustomerName = `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim();
+    if (rawCustomerName.includes('ישראל ישראלי')) {
+      return res.status(200).json({ ok: true, skipped: true, message: 'Dummy test order (ישראל ישראלי) ignored' });
+    }
+      // משיכת המלאי פעם אחת והתאמה חכמה של שמות הספרים (כולל פירוק אוטומטי של סטים לכרכים בודדים)
       const isTestOrder = Boolean(order.is_test);
       if (!isTestOrder) {
         const inventoryRef = collection(db, 'erp', appId, 'inventory');
         const invSnap = await getDocs(inventoryRef);
         const allBooks = invSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
+        const deductSingleBook = async (targetBook, qty) => {
+          const currentStock = Number(targetBook.publisherStock) || 0;
+          const newStock = Math.max(0, currentStock - qty);
+          targetBook.publisherStock = newStock;
+          await updateDoc(doc(db, 'erp', appId, 'inventory', targetBook.id), {
+            publisherStock: newStock,
+            updatedAt: Date.now()
+          });
+        };
+
         for (const item of lineItems) {
           const normItemName = normalizeTitle(item.name);
           const quantitySold = Math.max(1, Number(item.quantity) || 1);
 
-          // קודם חיפוש התאמה מדויקת מנורמלת, ואם לא נמצא — חיפוש הכלה חלקית
           const matchedBook =
             allBooks.find(b => normalizeTitle(b.title) === normItemName) ||
             allBooks.find(b => {
@@ -94,14 +91,17 @@ export default async function handler(req, res) {
             });
 
           if (matchedBook) {
-            const currentStock = Number(matchedBook.publisherStock) || 0;
-            const newStock = Math.max(0, currentStock - quantitySold);
-            matchedBook.publisherStock = newStock;
-
-            await updateDoc(doc(db, 'erp', appId, 'inventory', matchedBook.id), {
-              publisherStock: newStock,
-              updatedAt: Date.now()
-            });
+            const compIds = Array.isArray(matchedBook.setComponents) ? matchedBook.setComponents.filter(Boolean) : [];
+            if ((matchedBook.isSet || compIds.length > 0) && compIds.length > 0) {
+              for (const cid of compIds) {
+                const compBook = allBooks.find(b => b.id === cid);
+                if (compBook) {
+                  await deductSingleBook(compBook, quantitySold);
+                }
+              }
+            } else {
+              await deductSingleBook(matchedBook, quantitySold);
+            }
           }
         }
       }
