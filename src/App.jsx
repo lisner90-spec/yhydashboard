@@ -2494,6 +2494,24 @@ export default function App() {
 
     return items;
   }, [lowStockBooks, pendingOrders, suppliersList, supplierLogs, inventoryList]);
+
+  // --- אומדן רווחיות, רבי-מכר ותמלוגים ---
+  const salesAnalytics = useMemo(() => {
+    const getUnitProductionCost = (book, title = '') => {
+      if (book && Number(book.productionCost) > 0) return Number(book.productionCost);
+      const cat = findMatchingCatalogBook(title || book?.title || '');
+      return Number(cat?.productionCost || 0);
+    };
+
+    const bookStats = new Map();
+    const ensureStat = (title, matched) => {
+      const key = matched?.id || normalizeBookTitle(title) || title;
+      if (!bookStats.has(key)) {
+        bookStats.set(key, {
+          id: key,
+          title: matched?.title || title,
+          author: matched?.author || 'הוצאת ישיבת ירוחם',
+          units: 0,
           revenue: 0,
           cost: 0,
           unitCost: getUnitProductionCost(matched, title),
@@ -2529,11 +2547,10 @@ export default function App() {
       });
     });
 
-    // 3. הזמנות ומכירות מול ספקים וחנויות (חילוץ שורות הספרים והכמויות מההיסטוריה)
+    // 3. הזמנות ומכירות מול ספקים וחנויות
     filteredDashboardSupplierLogs.filter(l => l.type !== 'return').forEach(log => {
       const lines = String(log.details || '').split('\n');
       lines.forEach(line => {
-        // תבנית: "1. שם הספר — 10 עותקים × ₪30 = ₪300"
         const m = line.match(/^\d+\.\s*(.+?)\s*[—–-]\s*(\d+)\s*עותקים\s*[×x]\s*₪([\d.,]+)/);
         if (m) {
           const rawTitle = m[1].trim();
@@ -2555,7 +2572,6 @@ export default function App() {
     const totalMarketingSpent = campaignsList.reduce((s, c) => s + Number(c.spent || 0), 0);
     const totalGrossRevenue = liveStoreRevenue + liveSupplierRevenue + livePosRevenue;
 
-    // חישוב תמלוגים למחברים
     const royaltyRows = allRanked
       .filter(r => r.royaltyPct > 0 && r.units > 0)
       .map(r => ({
@@ -2677,6 +2693,30 @@ export default function App() {
     .animate-page-enter .grid > div:nth-child(3) { animation-delay: 80ms; }
     .animate-page-enter .grid > div:nth-child(4) { animation-delay: 120ms; }
     .animate-page-enter .grid > div:nth-child(5) { animation-delay: 160ms; }
+    @keyframes shimmerSweep {
+      0% { transform: translateX(100%); }
+      100% { transform: translateX(-100%); }
+    }
+    .premium-card {
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
+    }
+    .premium-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 14px 30px -10px rgba(15, 23, 42, 0.12);
+    }
+    .premium-card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.22) 50%, transparent 70%);
+      transform: translateX(100%);
+      pointer-events: none;
+    }
+    .premium-card:hover::after {
+      animation: shimmerSweep 0.85s ease-out;
+    }
     .animate-tab-progress {
       transform-origin: right center;
       animation: tabProgressBar 0.36s cubic-bezier(0.22, 1, 0.36, 1) forwards;
@@ -3090,6 +3130,15 @@ export default function App() {
           >
             {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-300" />}
           </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="px-2.5 py-2 rounded-xl bg-rose-600/90 hover:bg-rose-600 text-white text-xs font-bold flex items-center gap-1 transition-colors"
+            title="התנתק מהמערכת"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>יציאה</span>
+          </button>
           <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 transition-colors">
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -3295,6 +3344,16 @@ export default function App() {
               {darkMode ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-indigo-600" />}
               <span>{darkMode ? 'מצב יום' : 'מצב לילה'}</span>
             </button>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white ring-1 ring-rose-200 hover:ring-rose-600 px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all"
+              title="התנתק מהמערכת"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>התנתק</span>
+            </button>
           </div>
         </div>
 
@@ -3451,7 +3510,19 @@ export default function App() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 hover:shadow-md hover:-translate-y-0.5 transition-all">
+              <div className="premium-card bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-slate-500">סה"כ עותקים במערכת</p>
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><BookOpen className="w-4 h-4" /></div>
+                </div>
+                <p className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">{totalCopiesInSystem.toLocaleString()}</p>
+                <div className="mt-3 pt-2.5 border-t border-slate-100 flex justify-between text-xs text-slate-500">
+                  <span>במחסן: <strong className="text-indigo-700">{totalWarehouseCopies.toLocaleString()}</strong></span>
+                  <span>אצל ספקים: <strong className="text-emerald-700">{totalSuppliersCopies.toLocaleString()}</strong></span>
+                </div>
+              </div>
+
+              <div className="premium-card bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-bold text-slate-500">שווי מלאי (צרכן / הדפסה)</p>
                   <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><DollarSign className="w-4 h-4" /></div>
@@ -3462,7 +3533,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 hover:shadow-md hover:-translate-y-0.5 transition-all">
+              <div className="premium-card bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-bold text-slate-500">סה"כ הכנסות מתועדות</p>
                   <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><TrendingUp className="w-4 h-4" /></div>
@@ -3475,7 +3546,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 hover:shadow-md hover:-translate-y-0.5 transition-all">
+              <div className="premium-card bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-bold text-slate-500">יתרת חוב פתוחה מספקים</p>
                   <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center"><Wallet className="w-4 h-4" /></div>
@@ -3501,6 +3572,41 @@ export default function App() {
                   <div
                     className="bg-gradient-to-l from-indigo-500 to-violet-500 h-full transition-all duration-500"
                     style={{ width: `${totalCopiesInSystem > 0 ? Math.min(100, (totalWarehouseCopies / totalCopiesInSystem) * 100) : 0}%` }}
+                  />
+                  <div
+                    className="bg-gradient-to-l from-emerald-500 to-teal-400 h-full transition-all duration-500"
+                    style={{ width: `${totalCopiesInSystem > 0 ? Math.min(100, (totalSuppliersCopies / totalCopiesInSystem) * 100) : 0}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-3">
+                {(() => {
+                  const sumRev = Math.max(1, liveStoreRevenue + liveSupplierRevenue + livePosRevenue);
+                  const webPct = Math.round((liveStoreRevenue / sumRev) * 100);
+                  const supPct = Math.round((liveSupplierRevenue / sumRev) * 100);
+                  const posPct = Math.max(0, 100 - webPct - supPct);
+                  return (
+                    <>
+                      <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
+                        <span className="font-extrabold text-slate-800 text-sm">התפלגות הכנסות לפי ערוץ מכירה</span>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="font-bold text-purple-600">● אתר ({webPct}%)</span>
+                          <span className="font-bold text-indigo-600">● ספקים ({supPct}%)</span>
+                          <span className="font-bold text-emerald-600">● דוכן ({posPct}%)</span>
+                        </div>
+                      </div>
+                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
+                        <div className="bg-purple-500 h-full transition-all duration-500" style={{ width: `${webPct}%` }} />
+                        <div className="bg-indigo-500 h-full transition-all duration-500" style={{ width: `${supPct}%` }} />
+                        <div className="bg-emerald-500 h-full transition-all duration-500" style={{ width: `${posPct}%` }} />
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+
             {/* גרף עמודות חזותי: הכנסות מול הוצאות ורווח נקי */}
             <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-3">
               <div className="flex flex-wrap justify-between items-center gap-2">
@@ -3880,27 +3986,6 @@ export default function App() {
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* ==================== 3. STORE ORDERS ==================== */}
-        {activeTab === 'orders' && (
-          <div className="space-y-5">
-            <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-4">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                  <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
-                    <span className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><ShoppingCart className="w-5 h-5" /></span>
-                    הזמנות מהחנות (אתר הישיבה)
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-1">הזמנות שנכנסות מהאתר וממתינות לאריזה ומשלוח</p>
-                </div>
-                <div className="bg-slate-100 p-1 rounded-xl flex gap-1 ring-1 ring-slate-200/80 w-full sm:w-auto">
-                  <button onClick={() => setOrdersSubTab('pending')} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-bold transition-all ${ordersSubTab === 'pending' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>הזמנות פתוחות ({pendingOrders.length})</button>
-                  <button onClick={() => setOrdersSubTab('shipped')} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-bold transition-all ${ordersSubTab === 'shipped' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>הזמנות שנשלחו ({shippedOrders.length})</button>
-                </div>
-              </div>
 
               {userRole === 'admin' && (
                 <div className="pt-3 border-t border-slate-100 space-y-2.5">
@@ -4238,68 +4323,123 @@ export default function App() {
                 {/* טבלה מלאה למסכי מחשב וטאבלט */}
                 <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-right text-sm min-w-[980px]">
-                            {userRole === 'admin' ? (
-                              <input
-                                type="number"
-                                min="0"
-                                value={book.publisherStock}
-                                onChange={(e) => handleInlineStockChange(book, e.target.value)}
-                                className="w-20 font-extrabold text-indigo-700 text-base text-center bg-white border border-indigo-200/80 rounded-xl py-1.5 focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none shadow-2xs transition-all"
-                                dir="ltr"
-                              />
-                            ) : (
-                              <span className="font-extrabold text-indigo-700 text-base">{Number(book.publisherStock || 0).toLocaleString()}</span>
-                            )}
-                          </td>
+                    <thead className="bg-slate-50/90 text-slate-500 border-b border-slate-200/80 text-xs uppercase tracking-wider">
+                      <tr>
+                        <th className="py-3.5 px-4 font-bold">שם הספר / סדרה</th>
+                        <th className="py-3.5 px-4 font-bold text-center">מחירון (אתר / ספק / ישיבה)</th>
+                        <th className="py-3.5 px-4 font-bold text-center">עלות הפקה</th>
+                        <th className="py-3.5 px-4 font-bold text-center">במחסן הראשי</th>
+                        <th className="py-3.5 px-4 font-bold">אצל ספקים וחנויות</th>
+                        <th className="py-3.5 px-4 font-bold text-center">סה"כ מלאי</th>
+                        {userRole === 'admin' && <th className="py-3.5 px-4 font-bold text-center print:hidden">פעולות</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {sortedInventory.map(book => {
+                        const totalStock = calculateTotalStock(book);
+                        const isLow = totalStock < Number(book.threshold || 30);
+                        const effPrices = getEffectiveBookPrices(book);
+                        const seriesBadge = getBookSeriesBadge(book.title);
+                        const possibleSets = (book.isSet || (book.setComponents || []).length > 0)
+                          ? getPossibleSetsFromComponents(book)
+                          : null;
 
-                          <td className="py-4 px-4">
-                            {(book.breakdown || []).filter(r => Number(r.amount) > 0).length > 0 ? (
-                              <div className="flex flex-wrap gap-1.5">
-                                {(book.breakdown || []).filter(r => Number(r.amount) > 0).map((row, i) => (
-                                  <span key={i} className="bg-slate-100/90 text-slate-700 ring-1 ring-slate-200/80 px-2.5 py-0.5 rounded-lg text-xs font-medium">
-                                    {row.location}: <strong className="text-slate-900">{row.amount}</strong>
+                        return (
+                          <tr key={book.id} className={`hover:bg-slate-50/80 transition-colors ${seriesBadge?.strip || ''}`}>
+                            <td className="py-4 px-4">
+                              <div className="font-extrabold text-slate-900">{book.title}</div>
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                {seriesBadge && (
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${seriesBadge.cls}`}>
+                                    {seriesBadge.label}
                                   </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-xs text-slate-400">אין אצל ספקים</span>
-                            )}
-                          </td>
-
-                          <td className="py-4 px-4 text-center">
-                            <div className="font-extrabold text-slate-900 text-base">{totalStock.toLocaleString()}</div>
-                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5 ${isLow ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${isLow ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                              {isLow ? 'מלאי נמוך' : 'תקין'}
-                            </span>
-                          </td>
-
-                          {userRole === 'admin' && (
-                            <td className="py-4 px-4 text-center print:hidden">
-                              <div className="flex items-center justify-center gap-1">
-                                <button
-                                  onClick={() => setEditingBook({
-                                    ...book,
-                                    prices: { catalog: 0, general: 0, supplier: 0, yeshiva: 0, yeshivaGuest: book.prices?.yeshiva || 0, ...(book.prices || {}) },
-                                    editions: book.editions?.length ? book.editions : [{ name: 'מהדורה 1', printRun: 0 }],
-                                    breakdown: book.breakdown || []
-                                  })}
-                                  className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
-                                  title="ערוך ספר"
-                                >
-                                  <Edit className="w-4 h-4" />
-                                </button>
-                                <button onClick={() => handleDeleteBook(book)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors" title="מחק ספר">
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+                                )}
+                                {possibleSets !== null && (
+                                  <span className="text-[10px] font-bold bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded">
+                                    ניתן להרכיב מהמלאי: {possibleSets} סטים
+                                  </span>
+                                )}
+                                {book.isbn && <span className="text-[10px] font-mono text-slate-400" dir="ltr">#{book.isbn}</span>}
                               </div>
                             </td>
-                          )}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+
+                            <td className="py-4 px-4 text-center text-xs">
+                              <div className="inline-flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-xl ring-1 ring-slate-200/70">
+                                <span className="font-bold text-slate-700" title="צרכן">₪{effPrices.general}</span>
+                                <span className="text-slate-300">|</span>
+                                <span className="font-bold text-indigo-700" title="ספק">₪{effPrices.supplier}</span>
+                                <span className="text-slate-300">|</span>
+                                <span className="font-bold text-emerald-700" title="ישיבה">₪{effPrices.yeshiva}</span>
+                              </div>
+                            </td>
+
+                            <td className="py-4 px-4 text-center text-xs font-bold text-rose-700">
+                              {Number(book.productionCost || 0) > 0 ? `₪${Number(book.productionCost).toFixed(2)}` : '—'}
+                            </td>
+
+                            <td className="py-4 px-4 text-center">
+                              {userRole === 'admin' ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={book.publisherStock}
+                                  onChange={(e) => handleInlineStockChange(book, e.target.value)}
+                                  className="w-20 font-extrabold text-indigo-700 text-base text-center bg-white border border-indigo-200/80 rounded-xl py-1.5 focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none shadow-2xs transition-all"
+                                  dir="ltr"
+                                />
+                              ) : (
+                                <span className="font-extrabold text-indigo-700 text-base">{Number(book.publisherStock || 0).toLocaleString()}</span>
+                              )}
+                            </td>
+
+                            <td className="py-4 px-4">
+                              {(book.breakdown || []).filter(r => Number(r.amount) > 0).length > 0 ? (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {(book.breakdown || []).filter(r => Number(r.amount) > 0).map((row, i) => (
+                                    <span key={i} className="bg-slate-100/90 text-slate-700 ring-1 ring-slate-200/80 px-2.5 py-0.5 rounded-lg text-xs font-medium">
+                                      {row.location}: <strong className="text-slate-900">{row.amount}</strong>
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-400">אין אצל ספקים</span>
+                              )}
+                            </td>
+
+                            <td className="py-4 px-4 text-center">
+                              <div className="font-extrabold text-slate-900 text-base">{totalStock.toLocaleString()}</div>
+                              <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5 ${isLow ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${isLow ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                                {isLow ? 'מלאי נמוך' : 'תקין'}
+                              </span>
+                            </td>
+
+                            {userRole === 'admin' && (
+                              <td className="py-4 px-4 text-center print:hidden">
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    onClick={() => setEditingBook({
+                                      ...book,
+                                      prices: { catalog: 0, general: 0, supplier: 0, yeshiva: 0, yeshivaGuest: book.prices?.yeshiva || 0, ...(book.prices || {}) },
+                                      editions: book.editions?.length ? book.editions : [{ name: 'מהדורה 1', printRun: 0 }],
+                                      breakdown: book.breakdown || []
+                                    })}
+                                    className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
+                                    title="ערוך ספר"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => handleDeleteBook(book)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors" title="מחק ספר">
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </>
             )}
