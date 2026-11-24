@@ -1874,68 +1874,7 @@ export default function App() {
     setPosCart(prev => prev.map(i => i.bookId === bookId ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0));
   };
 
-  const handleUpdatePosCartPrice = (bookId, rawVal) => {
-    setPosCart(prev => prev.map(i =>
-      i.bookId === bookId
-        ? { ...i, customPrice: rawVal === '' ? undefined : Math.max(0, Number(rawVal)) }
-        : i
-    ));
-  };
-
-  const handleCompletePosSale = async () => {
-    if (posCart.length === 0) return;
-    let subtotalAmount = 0;
-    const saleItems = posCart.map(item => {
-      const unitPrice = getPosCartItemPrice(item, posPriceMode);
-      const lineTotal = unitPrice * item.qty;
-      subtotalAmount += lineTotal;
-      return { bookId: item.bookId, title: item.title, qty: item.qty, unitPrice, lineTotal };
-    });
-
-    const rawDisc = Math.max(0, Number(posDiscountValue || 0));
-    const discountAmount = posDiscountType === 'pct'
-      ? Math.round((subtotalAmount * Math.min(100, rawDisc)) / 100)
-      : Math.min(subtotalAmount, rawDisc);
-    const totalAmount = Math.max(0, subtotalAmount - discountAmount);
-
-    const { nextInventory, updatedBooks } = applySaleInventoryDeduction(inventoryList, posCart);
-    setInventoryList(nextInventory);
-
-    if (db && dbConnected && updatedBooks.length > 0) {
-      try {
-        await Promise.all(updatedBooks.map(b => updateDoc(getDocRef('inventory', b.id), { publisherStock: b.publisherStock, updatedAt: b.updatedAt })));
-      } catch {}
-    }
-
-    const saleObj = {
-      items: saleItems,
-      subtotalAmount,
-      discountAmount,
-      totalAmount,
-      priceMode: posPriceMode === 'yeshiva' ? 'תלמיד ישיבה (ראשון)' : posPriceMode === 'yeshivaGuest' ? 'ישיבה (שני / אורח)' : 'מחיר אתר (צרכן)',
-      paymentMethod: posPaymentMethod,
-      buyerNote: posBuyerNote.trim(),
-      eventTag: activeEventName.trim() || '',
-      user: currentUserName,
-      date: new Date().toLocaleString('he-IL'),
-      timestamp: Date.now()
-    };
-    if (db && dbConnected) {
-      try { await addDoc(getCollRef('pos_sales'), saleObj); } catch { setPosSales(prev => [{ ...saleObj, id: Date.now().toString() }, ...prev]); }
-    } else {
-      setPosSales(prev => [{ ...saleObj, id: Date.now().toString() }, ...prev]);
-    }
-    setPosCart([]);
-    setPosDiscountValue(0);
-    setPosBuyerNote('');
-    setSelectedPosCustomerId('');
-    setLastPosSaleReceipt(saleObj);
-    playPosTone('sale');
-    logAuditAction('קופה', `מכירה בדוכן ע"ס ₪${totalAmount.toLocaleString()}`, `${saleItems.map(i => `${i.title} ×${i.qty}`).join(', ')} (${posPaymentMethod})`);
-    showToast(`מכירה הושלמה ע"ס ₪${totalAmount.toLocaleString()} והמלאי עודכן!`, 'success');
-  };
-
-  // --- מנוע עוזר AI בשפה חופשית ופקודות קוליות ---
+  // --- מנוע עוזר AI בשפה חופשית, ניתוח עסקי וביצוע פקודות ---
   const handleAskAiAssistant = (rawQuestion) => {
     const q = String(rawQuestion || aiQueryText || '').trim();
     if (!q) return;
@@ -1943,20 +1882,74 @@ export default function App() {
     const normQ = q.toLowerCase();
     let answer = '';
 
-    // 1. שאלות על ספר ספציפי (מלאי / מחיר / ספקים)
+    // 1. פקודות ניווט וביצוע פעולות מהירות מתוך הצ'אט
+    if (normQ.includes('פתח קופה') || normQ.includes('עבור לקופה') || normQ.includes('דוכן')) {
+      setActiveTab('pos');
+      setIsAiAssistantOpen(false);
+      showToast('עברנו למסך הקופה המהירה!', 'success');
+      return;
+    }
+    if (normQ.includes('פתח מלאי') || normQ.includes('עבור למלאי') || normQ.includes('טבלת מלאי')) {
+      setActiveTab('inventory');
+      setIsAiAssistantOpen(false);
+      return;
+    }
+    if (normQ.includes('צור גיבוי') || normQ.includes('שמור גיבוי')) {
+      createAutoSnapshot('גיבוי יזום דרך עוזר AI', false);
+      answer = '🛡️ נוצרה ונשמרה נקודת שחזור חדשה למערכת בהצלחה!';
+      setAiHistory(prev => [...prev, { role: 'user', text: q }, { role: 'bot', text: answer }]);
+      return;
+    }
+
+    // 2. שאלות על ספק ספציפי (מלאי מוחזק + יתרת חוב)
+    const matchedSupplier = suppliersList.find(s =>
+      s.name && (normQ.includes(s.name.toLowerCase()) || s.name.toLowerCase().includes(normQ.replace(/ספק|חנות|כמה|חוב|מלאי/g, '').trim()))
+    );
+    if (matchedSupplier && matchedSupplier.name.length >= 2 && (normQ.includes('ספק') || normQ.includes('חנות') || normQ.includes('חוב') || normQ.includes('אצל'))) {
+      const held = getSupplierInventoryItems(matchedSupplier.name);
+      const debt = getSupplierOpenDebt(matchedSupplier.name);
+      const totalHeld = held.reduce((s, x) => s + x.amount, 0);
+      answer =
+        `🏪 מצב מול "${matchedSupplier.name}":\n` +
+        `• יתרת חוב פתוחה: ₪${debt.toLocaleString()}\n` +
+        `• סה"כ ספרים מוחזקים אצל הספק: ${totalHeld} עותקים\n` +
+        (held.length > 0
+          ? held.map(h => `  - ${h.title}: ${h.amount} עותקים`).join('\n')
+          : '  - אין כרגע ספרים רשומים אצל ספק זה.');
+      setAiHistory(prev => [...prev, { role: 'user', text: q }, { role: 'bot', text: answer }]);
+      return;
+    }
+
+    // 3. שאלות על ספר ספציפי (מלאי / מחיר / ספקים / עלות הפקה)
     const matchedBook = inventoryList.find(b => {
       const words = normalizeBookTitle(b.title).split(' ').filter(w => w.length >= 3);
       return words.some(w => normQ.includes(w.toLowerCase()));
     });
 
-    if (matchedBook && (normQ.includes('כמה') || normQ.includes('מלאי') || normQ.includes('עותק') || normQ.includes('מחיר') || normQ.includes('ספק'))) {
+    if (matchedBook && (normQ.includes('כמה') || normQ.includes('מלאי') || normQ.includes('עותק') || normQ.includes('מחיר') || normQ.includes('ספק') || normQ.includes('עלות'))) {
       const total = calculateTotalStock(matchedBook);
       const supStock = calculateSuppliersStock(matchedBook);
       const eff = getEffectiveBookPrices(matchedBook);
       const supListStr = (matchedBook.breakdown || []).filter(r => Number(r.amount) > 0).map(r => `${r.location} (${r.amount})`).join(', ');
-      answer = `📚 "${matchedBook.title}":\n• במחסן הראשי: ${matchedBook.publisherStock} עותקים\n• אצל ספקים: ${supStock} עותקים${supListStr ? ` (${supListStr})` : ''}\n• סה"כ במערכת: ${total} עותקים\n• מחירים: צרכן ₪${eff.general} | ישיבה ₪${eff.yeshiva} | ספק ₪${eff.supplier}`;
-    } else if (normQ.includes('רווח') || normQ.includes('הכנס') || normQ.includes('מכיר')) {
-      answer = `💰 תמונת הכנסות ורווחיות:\n• סה"כ הכנסות ברוטו: ₪${Math.round(salesAnalytics.totalGrossRevenue).toLocaleString()}\n• עלויות הפקה ושיווק: ₪${Math.round(salesAnalytics.totalAllExpenses).toLocaleString()}\n• רווח נקי משוער: ₪${Math.round(salesAnalytics.netProfitEstimate).toLocaleString()}`;
+      answer =
+        `📚 "${matchedBook.title}":\n` +
+        `• במחסן הראשי: ${matchedBook.publisherStock} עותקים\n` +
+        `• אצל ספקים: ${supStock} עותקים${supListStr ? ` (${supListStr})` : ''}\n` +
+        `• סה"כ במערכת: ${total} עותקים\n` +
+        `• מחירים: צרכן ₪${eff.general} | תלמיד ₪${eff.yeshiva} | ספק ₪${eff.supplier}` +
+        (Number(matchedBook.productionCost) > 0 ? `\n• עלות הפקה לעותק: ₪${Number(matchedBook.productionCost).toFixed(2)}` : '');
+    } else if (normQ.includes('רב מכר') || normQ.includes('הכי נמכר') || normQ.includes('מוביל')) {
+      answer = salesAnalytics.topBooks.length === 0
+        ? 'עדיין לא נרשמו מספיק מכירות לדירוג רבי-מכר.'
+        : `🏆 רבי-המכר המובילים שלנו:\n${salesAnalytics.topBooks.map((b, i) => `${i + 1}. ${b.title} — ${b.units} עותקים (₪${Math.round(b.revenue).toLocaleString()})`).join('\n')}`;
+    } else if (normQ.includes('רווח') || normQ.includes('הכנס') || normQ.includes('מכיר') || normQ.includes('כסף')) {
+      answer =
+        `💰 תמונת הכנסות ורווחיות:\n` +
+        `• הכנסות מאתר הישיבה: ₪${liveStoreRevenue.toLocaleString()}\n` +
+        `• הכנסות מספקים וחנויות: ₪${liveSupplierRevenue.toLocaleString()}\n` +
+        `• הכנסות מקופת דוכן: ₪${livePosRevenue.toLocaleString()}\n` +
+        `• סה"כ הכנסות ברוטו: ₪${Math.round(salesAnalytics.totalGrossRevenue).toLocaleString()}\n` +
+        `• רווח נקי משוער (לאחר הפקה ושיווק): ₪${Math.round(salesAnalytics.netProfitEstimate).toLocaleString()}`;
     } else if (normQ.includes('חוב') || normQ.includes('גבייה') || normQ.includes('ספק')) {
       const debtors = suppliersList
         .map(s => ({ name: s.name, debt: getSupplierOpenDebt(s.name) }))
@@ -1969,10 +1962,17 @@ export default function App() {
       answer = lowStockBooks.length === 0
         ? '✅ כל הספרים מעל רף המלאי המינימלי!'
         : `⚠️ ${lowStockBooks.length} ספרים מתחת לרף ההתראה:\n${lowStockBooks.map(b => `• ${b.title} (${calculateTotalStock(b)} / רף ${b.threshold || 30})`).join('\n')}`;
+    } else if (normQ.includes('שווי') || normQ.includes('ערך')) {
+      answer = `📦 שווי המלאי הנוכחי:\n• לפי מחיר צרכן: ₪${totalRetailValue.toLocaleString()}\n• לפי עלות הדפסה והפקה: ₪${totalProductionValue.toLocaleString()}\n• סה"כ עותקים במערכת: ${totalCopiesInSystem.toLocaleString()}`;
     } else if (normQ.includes('הזמנ')) {
-      answer = `📦 יש כרגע ${pendingOrders.length} הזמנות פתוחות מהאתר ו-${shippedOrders.length} הזמנות שנשלחו.`;
+      answer = `📦 יש כרגע ${pendingOrders.length} הזמנות פתוחות מהאתר (סה"כ ${aggregatedPickingItems.reduce((s, i) => s + i.totalQty, 0)} ספרים לליקוט) ו-${shippedOrders.length} הזמנות שכבר נשלחו.`;
     } else {
-      answer = `📊 סיכום מהיר: במערכת יש ${totalCopiesInSystem.toLocaleString()} עותקים (שווי צרכן ₪${totalRetailValue.toLocaleString()}), ${pendingOrders.length} הזמנות פתוחות, ויתרת גבייה מספקים ע"ס ₪${totalOpenSupplierDebt.toLocaleString()}. נסה לשאול על שם ספר מסוים, רווחיות, חובות ספקים או מלאי נמוך!`;
+      answer =
+        `📊 סיכום מצב ההוצאה:\n` +
+        `• מלאי כולל: ${totalCopiesInSystem.toLocaleString()} עותקים (שווי צרכן ₪${totalRetailValue.toLocaleString()})\n` +
+        `• הזמנות פתוחות מהאתר: ${pendingOrders.length}\n` +
+        `• יתרת גבייה מספקים: ₪${totalOpenSupplierDebt.toLocaleString()}\n\n` +
+        `💡 אפשר לשאול אותי על ספר או ספק ספציפי, רבי-מכר, רווחיות, או לכתוב "פתח קופה" / "צור גיבוי".`;
     }
 
     setAiHistory(prev => [...prev, { role: 'user', text: q }, { role: 'bot', text: answer }]);
@@ -8140,7 +8140,260 @@ export default function App() {
       {/* מודאל עוזר AI בשפה חופשית ופקודות קוליות */}
       {isAiAssistantOpen && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" dir="rtl">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-stone-200 w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" dir="rtl">
+            <div className="p-5 bg-gradient-to-l from-[#1C2414] via-[#2D381E] to-[#3F4E29] text-white flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-400/20 text-amber-300 flex items-center justify-center ring-1 ring-amber-300/30">
+                  <Bot className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-editorial text-lg font-extrabold">העוזר החכם של ההוצאה (AI)</h3>
+                  <p className="text-[11px] text-stone-200">שאל בעברית חופשית או תן פקודה קולית</p>
+                </div>
+              </div>
+              <button onClick={() => setIsAiAssistantOpen(false)} className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white"><X className="w-4 h-4" /></button>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-3 flex-1 bg-[#FAF8F5]">
+              {aiHistory.map((msg, idx) => (
+                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+                  <div className={`max-w-[85%] p-3.5 rounded-2xl text-xs whitespace-pre-wrap leading-relaxed shadow-2xs ${
+                    msg.role === 'user'
+                      ? 'bg-[#3D4A26] text-amber-50 font-bold rounded-tr-sm'
+                      : 'bg-white text-stone-800 ring-1 ring-stone-200/80 rounded-tl-sm'
+                  }`}>
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="px-4 py-2.5 bg-stone-50 border-t border-stone-200/70 flex flex-wrap gap-1.5 shrink-0">
+              {[
+                'מה הרווח שלנו?',
+                'מי הספקים עם חוב?',
+                'אילו ספרים במלאי נמוך?',
+                'מי רבי-המכר?',
+                'מה שווי המלאי?'
+              ].map(prompt => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => handleAskAiAssistant(prompt)}
+                  className="text-[11px] font-bold bg-white hover:bg-amber-50 text-stone-700 hover:text-[#3D4A26] px-2.5 py-1 rounded-full ring-1 ring-stone-200 transition-colors"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+
+            <form
+              onSubmit={e => {
+                e.preventDefault();
+                handleAskAiAssistant();
+              }}
+              className="p-3.5 bg-white border-t border-stone-200 flex items-center gap-2 shrink-0"
+            >
+              <button
+                type="button"
+                onClick={handleStartVoiceRecognition}
+                className={`p-2.5 rounded-xl transition-all shrink-0 ${
+                  isListeningVoice ? 'bg-rose-600 text-white animate-pulse' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
+                }`}
+                title="שאל בקול (מיקרופון)"
+              >
+                {isListeningVoice ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </button>
+              <input
+                type="text"
+                value={aiQueryText}
+                onChange={e => setAiQueryText(e.target.value)}
+                placeholder="שאל על ספר, ספק, רווחים או פקודה..."
+                className="flex-1 p-2.5 border border-stone-200 rounded-xl text-xs bg-stone-50 focus:bg-white outline-none"
+              />
+              <button type="submit" className="bg-[#3D4A26] hover:bg-[#4E5E31] text-amber-50 px-4 py-2.5 rounded-xl text-xs font-extrabold shrink-0">
+                שלח
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* מודאל סימולטור "מה אם?" (What-If Pricing & Profit Simulator) */}
+      {isWhatIfOpen && (() => {
+        const selectedBook = inventoryList.find(b => b.id === whatIfBookId) || null;
+        const basePrice = selectedBook ? Number(getEffectiveBookPrices(selectedBook).general || 60) : 60;
+        const baseCost = selectedBook
+          ? Number(selectedBook.productionCost || findMatchingCatalogBook(selectedBook.title)?.productionCost || 14)
+          : 14;
+        const discountedBase = basePrice * (1 - Math.max(0, Math.min(80, Number(whatIfDiscountPct || 0))) / 100);
+        const simulatedUnitPrice = Math.max(0, discountedBase + Number(whatIfPriceDelta || 0));
+        const units = Math.max(1, Number(whatIfExtraUnits || 1));
+        const projectedRevenue = Math.round(simulatedUnitPrice * units);
+        const projectedCost = Math.round(baseCost * units);
+        const projectedProfit = projectedRevenue - projectedCost;
+        const baselineProfit = Math.round((basePrice - baseCost) * units);
+        const profitDiff = projectedProfit - baselineProfit;
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-stone-200 w-full max-w-lg overflow-hidden" dir="rtl">
+              <div className="p-5 border-b bg-[#FAF8F5] flex justify-between items-center">
+                <div>
+                  <h3 className="font-editorial font-extrabold text-lg text-stone-900 flex items-center gap-2"><Sliders className="w-5 h-5 text-amber-600" /> סימולטור "מה אם?" לתמחור ומבצעים</h3>
+                  <p className="text-xs text-stone-500 mt-0.5">בדוק בזמן אמת השפעה של שינוי מחיר, הנחה או מהדורה על הרווח הנקי</p>
+                </div>
+                <button onClick={() => setIsWhatIfOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-stone-200 text-stone-400"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-stone-600 mb-1">בחר ספר מהמלאי לסימולציה:</label>
+                  <select
+                    value={whatIfBookId}
+                    onChange={e => setWhatIfBookId(e.target.value)}
+                    className="w-full p-2.5 border border-stone-200 rounded-xl text-xs font-bold bg-stone-50"
+                  >
+                    <option value="">ספר ממוצע בקטלוג (מחיר ₪60 | עלות ₪14)</option>
+                    {[...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => (
+                      <option key={b.id} value={b.id}>{b.title} (צרכן ₪{getEffectiveBookPrices(b).general})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-3 bg-[#FAF8F5] p-4 rounded-2xl ring-1 ring-stone-200/80 text-xs">
+                  <div>
+                    <div className="flex justify-between font-bold text-stone-700 mb-1">
+                      <span>שינוי במחיר ליחידה:</span>
+                      <span className="text-indigo-700" dir="ltr">{whatIfPriceDelta >= 0 ? `+₪${whatIfPriceDelta}` : `-₪${Math.abs(whatIfPriceDelta)}`}</span>
+                    </div>
+                    <input type="range" min="-20" max="30" step="1" value={whatIfPriceDelta} onChange={e => setWhatIfPriceDelta(Number(e.target.value))} className="w-full accent-[#3D4A26]" />
+                  </div>
+                  <div>
+                    <div className="flex justify-between font-bold text-stone-700 mb-1">
+                      <span>הנחת מבצע / שבת בוגרים (%):</span>
+                      <span className="text-amber-700">{whatIfDiscountPct}%</span>
+                    </div>
+                    <input type="range" min="0" max="50" step="5" value={whatIfDiscountPct} onChange={e => setWhatIfDiscountPct(Number(e.target.value))} className="w-full accent-amber-600" />
+                  </div>
+                  <div>
+                    <div className="flex justify-between font-bold text-stone-700 mb-1">
+                      <span>כמות עותקים צפויה למכירה:</span>
+                      <span className="text-emerald-700">{units.toLocaleString()} עותקים</span>
+                    </div>
+                    <input type="range" min="20" max="1500" step="10" value={whatIfExtraUnits} onChange={e => setWhatIfExtraUnits(Number(e.target.value))} className="w-full accent-emerald-600" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2.5 text-center text-xs">
+                  <div className="bg-stone-50 p-3 rounded-2xl ring-1 ring-stone-200">
+                    <span className="text-stone-500 block">מחיר סופי ליח'</span>
+                    <strong className="text-lg text-stone-900">₪{simulatedUnitPrice.toFixed(1)}</strong>
+                  </div>
+                  <div className="bg-indigo-50 p-3 rounded-2xl ring-1 ring-indigo-100">
+                    <span className="text-indigo-700 block">הכנסה צפויה</span>
+                    <strong className="text-lg text-indigo-900">₪{projectedRevenue.toLocaleString()}</strong>
+                  </div>
+                  <div className="bg-emerald-50 p-3 rounded-2xl ring-1 ring-emerald-200">
+                    <span className="text-emerald-700 block">רווח נקי</span>
+                    <strong className="text-lg text-emerald-800">₪{projectedProfit.toLocaleString()}</strong>
+                  </div>
+                </div>
+
+                <div className={`p-3 rounded-xl text-xs font-bold text-center ${profitDiff >= 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'}`}>
+                  השוואה למחיר הבסיס: {profitDiff >= 0 ? `תוספת רווח של +₪${profitDiff.toLocaleString()}` : `פער של -₪${Math.abs(profitDiff).toLocaleString()}`}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* מודאל ספירת מלאי עיוורת (Blind Stock Audit) */}
+      {isBlindAuditOpen && (
+        <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-stone-200 w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-[#FAF8F5] flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="font-editorial font-extrabold text-lg text-stone-900 flex items-center gap-2"><EyeOff className="w-5 h-5 text-amber-600" /> ספירת מלאי עיוורת (Blind Stock Audit)</h3>
+                <p className="text-xs text-stone-500 mt-0.5">הזן את הכמות שנספרה בפועל במדפים בלי לראות את יתרת המחשב — בסיום יוצג דוח פערים</p>
+              </div>
+              <button onClick={() => setIsBlindAuditOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-stone-200 text-stone-400"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-5 overflow-y-auto space-y-2.5 flex-1">
+              {[...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(book => {
+                const rawVal = blindCounts[book.id];
+                const hasVal = rawVal !== undefined && rawVal !== '';
+                const actual = Number(rawVal || 0);
+                const expected = Number(book.publisherStock || 0);
+                const diff = actual - expected;
+
+                return (
+                  <div key={book.id} className="p-3 bg-[#FAF8F5] rounded-2xl ring-1 ring-stone-200/80 flex items-center justify-between gap-3 text-xs">
+                    <span className="font-extrabold text-stone-800">{book.title}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {blindAuditSubmitted && hasVal && (
+                        <span className={`px-2.5 py-1 rounded-lg font-extrabold ${
+                          diff === 0 ? 'bg-emerald-100 text-emerald-800' : diff > 0 ? 'bg-indigo-100 text-indigo-800' : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          מחשב: {expected} ({diff === 0 ? 'מדויק ✓' : diff > 0 ? `+${diff}` : diff})
+                        </span>
+                      )}
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="כמות שנספרה..."
+                        value={blindCounts[book.id] ?? ''}
+                        onChange={e => setBlindCounts(prev => ({ ...prev, [book.id]: e.target.value }))}
+                        className="w-28 p-2 border border-stone-300 rounded-xl text-center font-extrabold bg-white"
+                        dir="ltr"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="p-4 border-t bg-[#FAF8F5] flex justify-between items-center gap-2 shrink-0">
+              {!blindAuditSubmitted ? (
+                <button
+                  type="button"
+                  onClick={() => setBlindAuditSubmitted(true)}
+                  className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2.5 rounded-xl text-xs font-extrabold shadow-xs"
+                >
+                  הצג דוח פערים מול המחשב
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const now = Date.now();
+                    let updatedCount = 0;
+                    const nextInv = inventoryList.map(b => {
+                      const val = blindCounts[b.id];
+                      if (val === undefined || val === '') return b;
+                      updatedCount++;
+                      return { ...b, publisherStock: Math.max(0, Number(val)), updatedAt: now };
+                    });
+                    setInventoryList(nextInv);
+                    if (db && dbConnected) {
+                      try {
+                        await Promise.all(nextInv.filter(b => b.updatedAt === now).map(b => updateDoc(getDocRef('inventory', b.id), { publisherStock: b.publisherStock, updatedAt: now })));
+                      } catch {}
+                    }
+                    logAuditAction('ספירה עיוורת', `עדכון מלאי מספירה עיוורת`, `עודכנו ${updatedCount} ספרים`);
+                    setIsBlindAuditOpen(false);
+                    showToast(`המלאי עודכן בהצלחה עבור ${updatedCount} ספרים!`, 'success');
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs font-extrabold shadow-xs"
+                >
+                  אשר ועדכן מלאי בפועל
+                </button>
+              )}
+              <button type="button" onClick={() => setIsBlindAuditOpen(false)} className="px-4 py-2 text-xs font-bold text-stone-600">סגור</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* מודאל כרטיס ביקור וקטלוג דיגיטלי חי (Public QR Card) — מפוצל לפי קטגוריה + עריכה חד פעמית + ייצוא תמונה */}
       {isPublicCardOpen && (() => {
         const creditUrl = paymentLinks.creditBit || DEFAULT_CREDIT_BIT_LINK;
