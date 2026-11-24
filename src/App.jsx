@@ -439,6 +439,7 @@ export default function App() {
   // כרטיס ביקור וקטלוג דיגיטלי חיצוני (QR Public Card)
   const [isPublicCardOpen, setIsPublicCardOpen] = useState(false);
   const [publicCardTier, setPublicCardTier] = useState('general'); // 'general' | 'yeshiva' | 'supplier'
+  const [publicCardOverrides, setPublicCardOverrides] = useState({});
 
   // --- פיצ'רים חדשים: מפת חנויות ארצית, מצב יריד/שבת בוגרים, מחשבון ארגזים ותפריט כלים ---
   const [isStoreLocatorOpen, setIsStoreLocatorOpen] = useState(false);
@@ -452,6 +453,20 @@ export default function App() {
   const [boxCalcCapacity, setBoxCalcCapacity] = useState(20);
   const [boxCalcAvgWeightGr, setBoxCalcAvgWeightGr] = useState(650);
   const [isMoreToolsOpen, setIsMoreToolsOpen] = useState(false);
+
+  // --- פיצ'רי על נוספים: מצב גופן מוגדל (א+), מחולל חבילות מתנה לחתנים/בוגרים, תגיות מדף ומצגת הנהלה ---
+  const [isLargeFontMode, setIsLargeFontMode] = useState(() => loadLocal('yhy_erp_large_font', false));
+  const [isBundleBuilderOpen, setIsBundleBuilderOpen] = useState(false);
+  const [bundleTitle, setBundleTitle] = useState('ערכת חתן מבית המדרש — ישיבת ירוחם');
+  const [bundleRecipient, setBundleRecipient] = useState('');
+  const [bundleDedication, setBundleDedication] = useState('בברכת בניין עדי עד ולימוד תורה מתוך שמחה');
+  const [bundleSelectedBookIds, setBundleSelectedBookIds] = useState(['book_1', 'book_5']);
+  const [bundleCustomPrice, setBundleCustomPrice] = useState(180);
+  const [isBoardSummaryOpen, setIsBoardSummaryOpen] = useState(false);
+
+  useEffect(() => {
+    try { localStorage.setItem('yhy_erp_large_font', JSON.stringify(isLargeFontMode)); } catch {}
+  }, [isLargeFontMode]);
 
   useEffect(() => {
     try { localStorage.setItem('yhy_erp_active_event', JSON.stringify(activeEventName)); } catch {}
@@ -2882,6 +2897,9 @@ export default function App() {
     .erp-shell, .erp-shell * {
       font-family: 'Heebo', -apple-system, BlinkMacSystemFont, sans-serif;
     }
+    .erp-large-font {
+      zoom: 1.12;
+    }
     .font-editorial {
       font-family: 'Frank Ruhl Libre', Georgia, serif !important;
       letter-spacing: -0.015em;
@@ -3233,7 +3251,7 @@ export default function App() {
   // תצוגה ראשית
   // ==========================================
   return (
-    <div className={`erp-shell min-h-screen flex flex-col lg:flex-row font-sans antialiased transition-colors duration-300 ${darkMode ? 'erp-dark bg-[#0B0E0A] text-slate-100' : 'bg-[#FAF8F5] text-[#1C1917]'}`} dir="rtl">
+    <div className={`erp-shell ${isLargeFontMode ? 'erp-large-font' : ''} min-h-screen flex flex-col lg:flex-row font-sans antialiased transition-colors duration-300 ${darkMode ? 'erp-dark bg-[#0B0E0A] text-slate-100' : 'bg-[#FAF8F5] text-[#1C1917]'}`} dir="rtl">
       <style>{themeStyles}</style>
 
       {/* Toast Notification */}
@@ -3573,6 +3591,19 @@ export default function App() {
               <Bot className="w-3.5 h-3.5 text-amber-300" /> עוזר AI
             </button>
 
+            <button
+              type="button"
+              onClick={() => setIsLargeFontMode(prev => !prev)}
+              className={`px-2.5 py-1.5 rounded-xl text-xs font-black ring-1 transition-all ${
+                isLargeFontMode
+                  ? 'bg-amber-500 text-white ring-amber-500 shadow-xs'
+                  : 'bg-[#F3EFE6] hover:bg-[#EAE4D7] text-[#3D4A26] ring-[#DFD8C8]'
+              }`}
+              title="הגדל גופנים וכפתורים לעבודה נוחה בדוכן ובמחסן"
+            >
+              א+
+            </button>
+
             {/* תפריט כלים מאוחד למראה נקי ומרווח */}
             <div className="relative">
               <button
@@ -3600,6 +3631,13 @@ export default function App() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => { setIsMoreToolsOpen(false); setIsBundleBuilderOpen(true); }}
+                    className="w-full text-right px-4 py-2.5 text-xs font-bold text-stone-700 hover:bg-purple-50 flex items-center gap-2.5"
+                  >
+                    <Gift className="w-4 h-4 text-purple-600" /> מחולל חבילות מתנה וחתנים
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => { setIsMoreToolsOpen(false); setIsStoreLocatorOpen(true); }}
                     className="w-full text-right px-4 py-2.5 text-xs font-bold text-stone-700 hover:bg-emerald-50 flex items-center gap-2.5"
                   >
@@ -3611,6 +3649,13 @@ export default function App() {
                     className="w-full text-right px-4 py-2.5 text-xs font-bold text-stone-700 hover:bg-indigo-50 flex items-center gap-2.5"
                   >
                     <Boxes className="w-4 h-4 text-indigo-600" /> מחשבון ארגזים ומשקל שילוח
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setIsMoreToolsOpen(false); setIsBoardSummaryOpen(true); }}
+                    className="w-full text-right px-4 py-2.5 text-xs font-bold text-stone-700 hover:bg-amber-50 flex items-center gap-2.5"
+                  >
+                    <Award className="w-4 h-4 text-amber-700" /> דוח שנתי מסכם להנהלה
                   </button>
                   <button
                     type="button"
@@ -3726,6 +3771,9 @@ export default function App() {
                   </button>
                   <button onClick={() => setIsPublicCardOpen(true)} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
                     <QrCode className="w-4 h-4 text-sky-300" /> כרטיס ביקור & קטלוג QR
+                  </button>
+                  <button onClick={() => setIsBoardSummaryOpen(true)} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
+                    <Award className="w-4 h-4 text-amber-300" /> דוח הנהלה מסכם
                   </button>
                   <button onClick={() => setIsDailyReportOpen(true)} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
                     <FileText className="w-4 h-4 text-sky-300" /> סיכום יומי
@@ -4770,6 +4818,25 @@ export default function App() {
                   <Layers className="w-3.5 h-3.5" /> פירוק סטים אוטומטי: {autoDecomposeSets ? 'פעיל' : 'כבוי'}
                 </button>
                 <button onClick={() => setIsCatalogModalOpen(true)} className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200/80 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"><BookMarked className="w-3.5 h-3.5" /> קטלוג לשליחה</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrintDoc({
+                      type: 'price_tags',
+                      docTitle: 'תגיות מחיר לדוכן ולמדפי המחסן',
+                      orderId: new Date().toLocaleDateString('he-IL'),
+                      date: new Date().toLocaleDateString('he-IL'),
+                      recipient: 'דוכן ומחסן הוצאת ישיבת ירוחם',
+                      items: [...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => {
+                        const eff = getEffectiveBookPrices(b);
+                        return { name: b.title, yeshivaPrice: eff.yeshiva, generalPrice: eff.general, supplierPrice: eff.supplier };
+                      })
+                    });
+                  }}
+                  className="bg-amber-50 hover:bg-amber-100 text-amber-900 ring-1 ring-amber-200/80 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
+                >
+                  <Tag className="w-3.5 h-3.5 text-amber-600" /> מדפסת תגיות מחיר
+                </button>
                 <button onClick={() => setIsGiftHistoryOpen(true)} className="bg-slate-50 hover:bg-slate-100 text-slate-700 ring-1 ring-slate-200/80 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"><History className="w-3.5 h-3.5" /> מעקב מתנות ({giftLogs.length})</button>
                 <div className="mr-auto flex items-center gap-2">
                   <button
@@ -5103,6 +5170,12 @@ export default function App() {
                   const heldItems = getSupplierInventoryItems(supplier.name);
                   const totalHeld = heldItems.reduce((s, i) => s + i.amount, 0);
                   const openDebt = getSupplierOpenDebt(supplier.name);
+                  const lastSupplierOrder = supplierLogs
+                    .filter(l => (l.supplierName || '').trim() === (supplier.name || '').trim() && l.type === 'order')
+                    .sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0))[0];
+                  const daysSinceLastOrder = lastSupplierOrder
+                    ? Math.floor((Date.now() - Number(lastSupplierOrder.timestamp || Date.now())) / (24 * 60 * 60 * 1000))
+                    : null;
 
                   return (
                     <div key={supplier.id} className="bg-white rounded-2xl shadow-xs ring-1 ring-slate-200/70 hover:shadow-md transition-all p-5 flex flex-col justify-between gap-4">
@@ -5115,6 +5188,11 @@ export default function App() {
                             <div>
                               <h3 className="font-extrabold text-slate-900 text-base leading-tight">{supplier.name}</h3>
                               {supplier.contact && <p className="text-xs text-slate-500 mt-0.5">איש קשר: {supplier.contact}</p>}
+                              {daysSinceLastOrder !== null && daysSinceLastOrder >= 45 && (
+                                <span className="inline-block mt-1 text-[10px] font-extrabold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full">
+                                  ⏰ חלון הזדמנות להזמנה חוזרת ({daysSinceLastOrder} יום)
+                                </span>
+                              )}
                             </div>
                           </div>
                           {userRole === 'admin' && (
@@ -7091,6 +7169,26 @@ export default function App() {
                 </div>
               </div>
               <p className="text-sm"><strong>לכבוד:</strong> {printDoc.recipient}</p>
+              {printDoc.type === 'price_tags' ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2">
+                  {(printDoc.items || []).map((item, idx) => (
+                    <div key={idx} className="border-2 border-dashed border-stone-400 rounded-xl p-3 text-center space-y-1.5 bg-[#FAF8F5]">
+                      <span className="text-[10px] font-bold text-[#3D4A26] block">הוצאת ספרי ישיבת ירוחם</span>
+                      <h4 className="font-editorial font-extrabold text-sm text-stone-900 leading-snug min-h-[38px] flex items-center justify-center">{item.name}</h4>
+                      <div className="border-t border-stone-300 pt-1.5 flex justify-around text-xs">
+                        <div>
+                          <span className="text-[10px] text-stone-500 block">תלמיד ישיבה</span>
+                          <strong className="text-base text-emerald-800">₪{item.yeshivaPrice}</strong>
+                        </div>
+                        <div className="border-r border-stone-300 pr-2">
+                          <span className="text-[10px] text-stone-500 block">אורח / צרכן</span>
+                          <strong className="text-base text-stone-900">₪{item.generalPrice}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
               <table className="w-full text-right border-collapse border border-slate-200 text-sm">
                 <thead className="bg-slate-100">
                   <tr>
@@ -7141,6 +7239,7 @@ export default function App() {
                   ))}
                 </tbody>
               </table>
+              )}
               {printDoc.notes && (
                 <p className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200">
                   <strong>הערות:</strong> {printDoc.notes}
@@ -8042,274 +8141,31 @@ export default function App() {
       {isAiAssistantOpen && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" dir="rtl">
-            <div className="p-5 border-b bg-gradient-to-l from-indigo-900 to-violet-950 text-white flex justify-between items-center shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-2xl bg-white/15 flex items-center justify-center"><Bot className="w-5 h-5 text-amber-300" /></div>
-                <div>
-                  <h3 className="font-extrabold text-base">עוזר AI חכם — שאל את המערכת</h3>
-                  <p className="text-[11px] text-indigo-200">הקלד או דבר בעברית חופשית לקבלת נתונים מיידיים</p>
-                </div>
-              </div>
-              <button onClick={() => setIsAiAssistantOpen(false)} className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="p-4 overflow-y-auto space-y-3 flex-1 bg-slate-50/60">
-              {aiHistory.map((m, idx) => (
-                <div key={idx} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                  <div className={`max-w-[85%] p-3.5 rounded-2xl text-xs whitespace-pre-line leading-relaxed shadow-2xs ${
-                    m.role === 'user'
-                      ? 'bg-indigo-600 text-white font-bold'
-                      : 'bg-white text-slate-800 ring-1 ring-slate-200/80'
-                  }`}>
-                    {m.text}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="px-4 py-2 bg-slate-50 border-t flex flex-wrap gap-1.5">
-              {['מה הרווח שלנו?', 'מי הספקים עם חוב?', 'אילו ספרים במלאי נמוך?', 'כמה מניטו יש במלאי?'].map(q => (
-                <button key={q} type="button" onClick={() => handleAskAiAssistant(q)} className="text-[11px] bg-white hover:bg-indigo-50 text-indigo-700 ring-1 ring-slate-200 px-2.5 py-1 rounded-full font-bold">
-                  {q}
-                </button>
-              ))}
-            </div>
-            <form onSubmit={e => { e.preventDefault(); handleAskAiAssistant(); }} className="p-3.5 border-t bg-white flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={handleStartVoiceRecognition}
-                className={`p-2.5 rounded-xl transition-all ${isListeningVoice ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-                title="שאלה קולית במיקרופון"
-              >
-                {isListeningVoice ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              </button>
-              <input
-                type="text"
-                value={aiQueryText}
-                onChange={e => setAiQueryText(e.target.value)}
-                placeholder="שאל משהו על המלאי, הרווחים או הספקים..."
-                className="flex-1 p-2.5 border border-slate-200 rounded-xl text-xs outline-none focus:border-indigo-500"
-              />
-              <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold">שלח</button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* מודאל סימולטור "מה אם?" (What-If Pricing & Profit Simulator) */}
-      {isWhatIfOpen && (() => {
-        const selectedSimBook = inventoryList.find(b => b.id === whatIfBookId) || null;
-        const selectedEffPrices = selectedSimBook ? getEffectiveBookPrices(selectedSimBook) : null;
-        const selectedCatMatch = selectedSimBook ? findMatchingCatalogBook(selectedSimBook.title) : null;
-
-        const baseSellPrice = selectedSimBook
-          ? (selectedEffPrices?.general || selectedEffPrices?.yeshiva || 58)
-          : 58;
-        const baseProdCost = selectedSimBook
-          ? (Number(selectedSimBook.productionCost || 0) > 0
-              ? Number(selectedSimBook.productionCost)
-              : Number(selectedCatMatch?.productionCost || 14.5))
-          : 14.5;
-
-        const simulatedUnitPrice = Math.max(1, Math.round((baseSellPrice + Number(whatIfPriceDelta || 0)) * (1 - Number(whatIfDiscountPct || 0) / 100)));
-        const simulatedUnits = Math.max(0, Number(whatIfExtraUnits || 0));
-        const simulatedRevenue = simulatedUnits * simulatedUnitPrice;
-        const simulatedCost = simulatedUnits * baseProdCost;
-        const simulatedExtraProfit = simulatedRevenue - simulatedCost;
-        const totalProjectedProfit = Math.round(salesAnalytics.netProfitEstimate + simulatedExtraProfit);
-
-        return (
-          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-lg overflow-hidden" dir="rtl">
-              <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
-                <div>
-                  <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Sliders className="w-5 h-5 text-indigo-600" /> סימולטור "מה אם?" (תמחור ומבצעים)</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">בחר ספר ספציפי מהמלאי ובדוק איך שינוי מחיר או מבצע ישפיעו על הרווח</p>
-                </div>
-                <button onClick={() => setIsWhatIfOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
-              </div>
-              <div className="p-5 space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">בחר ספר ספציפי לסימולציה:</label>
-                  <select
-                    value={whatIfBookId}
-                    onChange={e => {
-                      setWhatIfBookId(e.target.value);
-                      setWhatIfPriceDelta(0);
-                    }}
-                    className="w-full p-2.5 border border-indigo-200 rounded-xl text-xs font-bold bg-indigo-50/40 text-slate-800 outline-none"
-                  >
-                    <option value="">ממוצע כללי של ספרי ההוצאה (₪58 ליח')</option>
-                    {[...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => {
-                      const eff = getEffectiveBookPrices(b);
-                      return (
-                        <option key={b.id} value={b.id}>
-                          {b.title} (מחיר צרכן: ₪{eff.general || eff.yeshiva} | במלאי: {calculateTotalStock(b)})
-                        </option>
-                      );
-                    })}
-                  </select>
-                  {selectedSimBook && (
-                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] bg-slate-50 p-2.5 rounded-xl ring-1 ring-slate-200/70">
-                      <span>מחיר בסיס: <strong className="text-indigo-700">₪{baseSellPrice}</strong></span>
-                      <span>·</span>
-                      <span>עלות הפקה ליח': <strong className="text-rose-700">₪{baseProdCost.toFixed(2)}</strong></span>
-                      <span>·</span>
-                      <span>מלאי זמין: <strong className="text-emerald-700">{calculateTotalStock(selectedSimBook)} עותקים</strong></span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-3 bg-slate-50 p-4 rounded-2xl ring-1 ring-slate-200/70 text-xs">
-                  <div>
-                    <div className="flex justify-between font-bold mb-1">
-                      <span>כמות עותקים צפויה להימכר:</span>
-                      <span className="text-indigo-700 font-extrabold">{simulatedUnits} עותקים</span>
-                    </div>
-                    <input type="range" min="0" max="1500" step="10" value={whatIfExtraUnits} onChange={e => setWhatIfExtraUnits(Number(e.target.value))} className="w-full accent-indigo-600" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between font-bold mb-1">
-                      <span>שינוי במחיר הספר (₪):</span>
-                      <span className="text-emerald-700 font-extrabold">{whatIfPriceDelta >= 0 ? `+₪${whatIfPriceDelta}` : `-₪${Math.abs(whatIfPriceDelta)}`} (מחיר יעד: ₪{simulatedUnitPrice})</span>
-                    </div>
-                    <input type="range" min="-25" max="40" step="1" value={whatIfPriceDelta} onChange={e => setWhatIfPriceDelta(Number(e.target.value))} className="w-full accent-emerald-600" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between font-bold mb-1">
-                      <span>אחוז הנחת מבצע (%):</span>
-                      <span className="text-amber-700 font-extrabold">{whatIfDiscountPct}%</span>
-                    </div>
-                    <input type="range" min="0" max="50" step="5" value={whatIfDiscountPct} onChange={e => setWhatIfDiscountPct(Number(e.target.value))} className="w-full accent-amber-500" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 text-center">
-                  <div className="bg-indigo-50 p-4 rounded-2xl ring-1 ring-indigo-100">
-                    <span className="text-xs font-bold text-indigo-700 block">תוספת רווח מהמהלך</span>
-                    <span className={`text-2xl font-black ${simulatedExtraProfit >= 0 ? 'text-indigo-900' : 'text-rose-600'}`}>
-                      {simulatedExtraProfit >= 0 ? '+' : ''}₪{Math.round(simulatedExtraProfit).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="bg-emerald-50 p-4 rounded-2xl ring-1 ring-emerald-200">
-                    <span className="text-xs font-bold text-emerald-700 block">רווח נקי כולל צפוי</span>
-                    <span className="text-2xl font-black text-emerald-800">₪{totalProjectedProfit.toLocaleString()}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* מודאל ספירת מלאי עיוורת (Blind Stock Audit + דוח פערים) */}
-      {isBlindAuditOpen && (() => {
-        const auditRows = [...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => {
-          const countedRaw = blindCounts[b.id];
-          const hasCount = countedRaw !== undefined && countedRaw !== '';
-          const counted = hasCount ? Math.max(0, Number(countedRaw)) : null;
-          const systemStock = Number(b.publisherStock || 0);
-          const diff = hasCount ? counted - systemStock : 0;
-          return { book: b, hasCount, counted, systemStock, diff };
-        });
-
-        return (
-          <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden" dir="rtl">
-              <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
-                <div>
-                  <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><EyeOff className="w-5 h-5 text-amber-600" /> ספירת מלאי עיוורת (Blind Audit)</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">הזן את הכמות שספרת פיזית במחסן מבלי לראות את נתוני המחשב — ובסוף הצג דוח פערים</p>
-                </div>
-                <button onClick={() => setIsBlindAuditOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
-              </div>
-              <div className="p-5 overflow-y-auto space-y-2.5 flex-1">
-                {auditRows.map(({ book, hasCount, counted, systemStock, diff }) => (
-                  <div key={book.id} className="p-3 bg-slate-50/90 rounded-2xl ring-1 ring-slate-200/70 flex items-center justify-between gap-3 text-xs">
-                    <span className="font-bold text-slate-800 flex-1">{book.title}</span>
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="כמות שנספרה..."
-                      value={blindCounts[book.id] ?? ''}
-                      onChange={e => setBlindCounts(prev => ({ ...prev, [book.id]: e.target.value }))}
-                      className="w-28 p-2 border border-slate-300 rounded-xl text-center font-extrabold bg-white"
-                      dir="ltr"
-                    />
-                    {blindAuditSubmitted && hasCount && (
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-slate-500">במחשב: <strong>{systemStock}</strong></span>
-                        <span className={`px-2.5 py-1 rounded-lg font-extrabold ${
-                          diff === 0 ? 'bg-emerald-100 text-emerald-800' :
-                          diff > 0 ? 'bg-indigo-100 text-indigo-800' : 'bg-rose-100 text-rose-800'
-                        }`}>
-                          {diff === 0 ? 'תואם ✓' : diff > 0 ? `+${diff}` : diff}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div className="p-4 border-t bg-slate-50/80 flex flex-wrap justify-between items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setBlindAuditSubmitted(true)}
-                  className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold"
-                >
-                  חשוף והשווה פערים
-                </button>
-                {blindAuditSubmitted && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const now = Date.now();
-                      const updates = auditRows.filter(r => r.hasCount && r.diff !== 0);
-                      if (updates.length === 0) {
-                        showToast('אין פערים לעדכון!', 'info');
-                        return;
-                      }
-                      setInventoryList(prev => prev.map(b => {
-                        const found = updates.find(u => u.book.id === b.id);
-                        return found ? { ...b, publisherStock: found.counted, updatedAt: now } : b;
-                      }));
-                      if (db && dbConnected) {
-                        try {
-                          await Promise.all(updates.map(u => updateDoc(getDocRef('inventory', u.book.id), { publisherStock: u.counted, updatedAt: now })));
-                        } catch {}
-                      }
-                      logAuditAction('מלאי', 'עדכון מלאי מספירה עיוורת', `עודכנו ${updates.length} ספרים`);
-                      setIsBlindAuditOpen(false);
-                      showToast(`המלאי עודכן לפי הספירה (${updates.length} ספרים)!`, 'success');
-                    }}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-xs"
-                  >
-                    עדכן את המלאי במערכת לפי הספירה
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* מודאל כרטיס ביקור וקטלוג דיגיטלי חי (Public QR Card) */}
+      {/* מודאל כרטיס ביקור וקטלוג דיגיטלי חי (Public QR Card) — מפוצל לפי קטגוריה + עריכה חד פעמית + ייצוא תמונה */}
       {isPublicCardOpen && (() => {
         const creditUrl = paymentLinks.creditBit || DEFAULT_CREDIT_BIT_LINK;
         const payboxUrl = paymentLinks.paybox || DEFAULT_PAYBOX_LINK;
         const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(creditUrl)}`;
         const sortedCatalog = [...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he'));
 
-        const buildFullCardWhatsAppMessage = () => {
-          const tierTitle =
-            publicCardTier === 'yeshiva' ? 'מחירון תלמידי ובוגרי הישיבה' :
-            publicCardTier === 'supplier' ? 'מחירון ספקים וחנויות ספרים' :
-            'מחירון לצרכן';
-          const lines = sortedCatalog.map((b, idx) => {
-            const eff = getEffectiveBookPrices(b);
-            const selectedPrice =
-              publicCardTier === 'yeshiva' ? (eff.yeshiva || eff.general) :
-              publicCardTier === 'supplier' ? (eff.supplier || eff.general) :
-              (eff.general || eff.yeshiva);
-            return `${idx + 1}. *${b.title}* — ₪${selectedPrice} (צרכן: ₪${eff.general} | תלמיד: ₪${eff.yeshiva} | ספק: ₪${eff.supplier})`;
-          });
+        const getBookCardPrice = (book) => {
+          const overrideKey = `${publicCardTier}_${book.id}`;
+          if (publicCardOverrides[overrideKey] !== undefined && publicCardOverrides[overrideKey] !== '') {
+            return Math.max(0, Number(publicCardOverrides[overrideKey]));
+          }
+          const eff = getEffectiveBookPrices(book);
+          if (publicCardTier === 'yeshiva') return eff.yeshiva || eff.general;
+          if (publicCardTier === 'supplier') return eff.supplier || eff.general;
+          return eff.general || eff.yeshiva;
+        };
+
+        const tierTitle =
+          publicCardTier === 'yeshiva' ? 'מחירון תלמידי ובוגרי הישיבה' :
+          publicCardTier === 'supplier' ? 'מחירון ספקים וחנויות ספרים' :
+          'מחירון לצרכן';
+
+        const buildSingleTierCardWhatsAppMessage = () => {
+          const lines = sortedCatalog.map((b, idx) => `${idx + 1}. *${b.title}* — ₪${getBookCardPrice(b)}`);
           return (
             `📚 *כרטיס ביקור וקטלוג — הוצאת ספרי ישיבת ירוחם*\n` +
             `_${tierTitle}_\n\n` +
@@ -8319,68 +8175,157 @@ export default function App() {
           );
         };
 
+        const handleDownloadBusinessCardPng = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            const width = 900;
+            const rowHeight = 36;
+            const height = 300 + sortedCatalog.length * rowHeight;
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+
+            // רקע שמנת חם
+            ctx.fillStyle = '#FAF8F5';
+            ctx.fillRect(0, 0, width, height);
+
+            // כותרת ירוק-זית של ישיבת ירוחם
+            ctx.fillStyle = '#2D381E';
+            ctx.fillRect(0, 0, width, 155);
+
+            // פס זהב-ענבר
+            ctx.fillStyle = '#D97706';
+            ctx.fillRect(0, 155, width, 8);
+
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#FDE68A';
+            ctx.font = 'bold 20px Heebo, sans-serif';
+            ctx.fillText(tierTitle, width - 48, 52);
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '900 38px Heebo, sans-serif';
+            ctx.fillText('הוצאת ספרי ישיבת ירוחם', width - 48, 102);
+
+            ctx.fillStyle = '#E7E5E4';
+            ctx.font = '18px Heebo, sans-serif';
+            ctx.fillText('קטלוג ספרים ומחירון מעודכן', width - 48, 134);
+
+            // שורות הספרים
+            sortedCatalog.forEach((b, idx) => {
+              const y = 205 + idx * rowHeight;
+              if (idx % 2 === 0) {
+                ctx.fillStyle = '#F3EFE6';
+                ctx.fillRect(40, y - 24, width - 80, rowHeight);
+              }
+              ctx.textAlign = 'right';
+              ctx.fillStyle = '#1C1917';
+              ctx.font = 'bold 20px Heebo, sans-serif';
+              ctx.fillText(`${idx + 1}. ${b.title}`, width - 55, y);
+
+              ctx.textAlign = 'left';
+              ctx.fillStyle = '#3D4A26';
+              ctx.font = '900 22px Heebo, sans-serif';
+              ctx.fillText(`₪${getBookCardPrice(b)}`, 55, y);
+            });
+
+            // תחתית
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#57534E';
+            ctx.font = 'bold 17px Heebo, sans-serif';
+            ctx.fillText('להזמנות ורכישה מהירה באשראי, ביט או פייבוקס — פנו אלינו בוואטסאפ', width / 2, height - 36);
+
+            const link = document.createElement('a');
+            link.download = `yhy_card_${publicCardTier}_${new Date().toISOString().slice(0, 10)}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            showToast('כרטיס הביקור נשמר כתמונה (PNG) מוכנה לשליחה בוואטסאפ!', 'success');
+          } catch {
+            showToast('לא ניתן היה לייצר תמונה בדפדפן זה.', 'warning');
+          }
+        };
+
         return (
           <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
-              <div className="p-5 bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#2B3318] text-white flex justify-between items-start shrink-0">
+              <div className="p-5 bg-gradient-to-br from-[#1C2414] via-[#2D381E] to-[#3F4E29] text-white flex justify-between items-start shrink-0">
                 <div>
-                  <span className="text-[11px] text-amber-300 font-bold">כרטיס ביקור & קטלוג מחירים מלא</span>
-                  <h3 className="text-xl font-extrabold mt-0.5">הוצאת ספרי ישיבת ירוחם</h3>
-                  <p className="text-xs text-slate-300 mt-0.5">כולל מחירי צרכן, תלמיד ישיבה וספקים + ברקוד סליקה</p>
+                  <span className="text-[11px] text-amber-300 font-bold">כרטיס ביקור & קטלוג מותאם אישית</span>
+                  <h3 className="font-editorial text-xl font-extrabold mt-0.5">הוצאת ספרי ישיבת ירוחם</h3>
+                  <p className="text-xs text-stone-200 mt-0.5">שולח רק את המחירון שבחרת · ניתן לערוך מחיר חד-פעמי</p>
                 </div>
                 <button onClick={() => setIsPublicCardOpen(false)} className="p-1.5 rounded-xl bg-white/10 text-white"><X className="w-4 h-4" /></button>
               </div>
               <div className="p-5 overflow-y-auto space-y-4 flex-1 text-center">
-                <div className="bg-slate-50 p-3.5 rounded-2xl ring-1 ring-slate-200 inline-block">
-                  <img src={qrUrl} alt="QR קטלוג ותשלום" className="w-40 h-40 mx-auto rounded-xl" />
-                  <p className="text-[11px] font-bold text-slate-600 mt-1.5">סריקה ישירה לדף הרכישה והסליקה</p>
+                <div className="bg-[#FAF8F5] p-3 rounded-2xl ring-1 ring-stone-200 inline-block">
+                  <img src={qrUrl} alt="QR קטלוג ותשלום" className="w-36 h-36 mx-auto rounded-xl" />
+                  <p className="text-[11px] font-bold text-stone-600 mt-1">ברקוד סריקה לרכישה מהירה</p>
                 </div>
 
-                {/* בורר הדגשת מחירון לשליחה */}
-                <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold">
-                  <button type="button" onClick={() => setPublicCardTier('general')} className={`py-1.5 rounded-lg transition-all ${publicCardTier === 'general' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500'}`}>מחיר צרכן</button>
-                  <button type="button" onClick={() => setPublicCardTier('yeshiva')} className={`py-1.5 rounded-lg transition-all ${publicCardTier === 'yeshiva' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500'}`}>מחיר תלמיד</button>
-                  <button type="button" onClick={() => setPublicCardTier('supplier')} className={`py-1.5 rounded-lg transition-all ${publicCardTier === 'supplier' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-500'}`}>מחיר ספק</button>
+                {/* בורר קטגוריית מחירון לשליחה בלעדית */}
+                <div className="grid grid-cols-3 gap-1 bg-stone-100 p-1 rounded-xl text-xs font-bold">
+                  <button type="button" onClick={() => setPublicCardTier('general')} className={`py-2 rounded-lg transition-all ${publicCardTier === 'general' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500'}`}>מחיר צרכן</button>
+                  <button type="button" onClick={() => setPublicCardTier('yeshiva')} className={`py-2 rounded-lg transition-all ${publicCardTier === 'yeshiva' ? 'bg-white text-emerald-700 shadow-xs' : 'text-stone-500'}`}>מחיר תלמיד</button>
+                  <button type="button" onClick={() => setPublicCardTier('supplier')} className={`py-2 rounded-lg transition-all ${publicCardTier === 'supplier' ? 'bg-white text-indigo-700 shadow-xs' : 'text-stone-500'}`}>מחיר ספק</button>
                 </div>
 
-                <div className="text-right space-y-1.5 max-h-52 overflow-y-auto bg-slate-50/90 p-3.5 rounded-2xl ring-1 ring-slate-200/70">
-                  <div className="flex justify-between items-center text-[11px] font-extrabold text-slate-500 pb-1.5 border-b border-slate-200">
+                <div className="text-right space-y-1.5 max-h-56 overflow-y-auto bg-[#FAF8F5] p-3.5 rounded-2xl ring-1 ring-stone-200/80">
+                  <div className="flex justify-between items-center text-[11px] font-extrabold text-stone-500 pb-1.5 border-b border-stone-200">
                     <span>שם הספר</span>
-                    <span>צרכן / תלמיד / ספק</span>
+                    <div className="flex items-center gap-2">
+                      <span>מחיר חד-פעמי (₪)</span>
+                      {Object.keys(publicCardOverrides).length > 0 && (
+                        <button type="button" onClick={() => setPublicCardOverrides({})} className="text-rose-600 underline">איפוס הכל</button>
+                      )}
+                    </div>
                   </div>
                   {sortedCatalog.map(b => {
-                    const eff = getEffectiveBookPrices(b);
+                    const overrideKey = `${publicCardTier}_${b.id}`;
+                    const hasCustom = publicCardOverrides[overrideKey] !== undefined && publicCardOverrides[overrideKey] !== '';
                     return (
-                      <div key={b.id} className="flex justify-between items-center text-xs py-1.5 border-b border-slate-200/60 last:border-0 gap-2">
-                        <span className="font-bold text-slate-800">{b.title}</span>
-                        <div className="flex items-center gap-1.5 shrink-0 text-[11px]">
-                          <span className={`px-1.5 py-0.5 rounded font-bold ${publicCardTier === 'general' ? 'bg-slate-800 text-white' : 'bg-slate-200/70 text-slate-700'}`}>₪{eff.general}</span>
-                          <span className={`px-1.5 py-0.5 rounded font-bold ${publicCardTier === 'yeshiva' ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-800'}`}>₪{eff.yeshiva}</span>
-                          <span className={`px-1.5 py-0.5 rounded font-bold ${publicCardTier === 'supplier' ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-800'}`}>₪{eff.supplier}</span>
+                      <div key={b.id} className="flex justify-between items-center text-xs py-1.5 border-b border-stone-200/60 last:border-0 gap-2">
+                        <span className="font-bold text-stone-800">{b.title}</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-stone-400">₪</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            value={getBookCardPrice(b)}
+                            onChange={e => setPublicCardOverrides(prev => ({ ...prev, [overrideKey]: e.target.value }))}
+                            className={`w-16 p-1 border rounded-lg text-center font-extrabold bg-white ${hasCustom ? 'border-amber-400 text-amber-800' : 'border-stone-200 text-[#3D4A26]'}`}
+                            dir="ltr"
+                          />
                         </div>
                       </div>
                     );
                   })}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDownloadBusinessCardPng}
+                    className="bg-[#3D4A26] hover:bg-[#4E5E31] text-amber-50 py-3 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-xs"
+                  >
+                    <Download className="w-4 h-4" /> הורד כתמונה PNG
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
-                      navigator.clipboard?.writeText(buildFullCardWhatsAppMessage());
-                      showToast('כרטיס הביקור והקטלוג הועתקו לשיתוף!', 'success');
+                      navigator.clipboard?.writeText(buildSingleTierCardWhatsAppMessage());
+                      showToast(`מחירון (${tierTitle}) הועתק!`, 'success');
                     }}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-800 py-3 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5"
+                    className="bg-stone-100 hover:bg-stone-200 text-stone-800 py-3 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5"
                   >
-                    <Copy className="w-4 h-4" /> העתק טקסט מלא
+                    <Copy className="w-4 h-4" /> העתק טקסט
                   </button>
                   <a
-                    href={`https://wa.me/?text=${encodeURIComponent(buildFullCardWhatsAppMessage())}`}
+                    href={`https://wa.me/?text=${encodeURIComponent(buildSingleTierCardWhatsAppMessage())}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-md"
                   >
-                    <MessageCircle className="w-4 h-4" /> שלח ישירות בוואטסאפ
+                    <MessageCircle className="w-4 h-4" /> שלח בוואטסאפ
                   </a>
                 </div>
               </div>
@@ -8388,6 +8333,160 @@ export default function App() {
           </div>
         );
       })()}
+
+      {/* מודאל מחולל חבילות מתנה ומבצעי חתנים / בוגרים (Bundle Builder) */}
+      {isBundleBuilderOpen && (() => {
+        const selectedBooks = inventoryList.filter(b => bundleSelectedBookIds.includes(b.id));
+        const totalProdCost = selectedBooks.reduce((s, b) => {
+          const cat = findMatchingCatalogBook(b.title);
+          return s + Number(b.productionCost || cat?.productionCost || 0);
+        }, 0);
+        const totalRetail = selectedBooks.reduce((s, b) => s + Number(getEffectiveBookPrices(b).general || 0), 0);
+        const bundleProfit = Math.round(Number(bundleCustomPrice || 0) - totalProdCost);
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-stone-200 w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+              <div className="p-5 border-b bg-[#FAF8F5] flex justify-between items-center shrink-0">
+                <div>
+                  <h3 className="font-editorial font-extrabold text-lg text-stone-900 flex items-center gap-2"><Gift className="w-5 h-5 text-purple-600" /> מחולל חבילות מתנה וערכות חתנים / בוגרים</h3>
+                  <p className="text-xs text-stone-500 mt-0.5">הרכב מארז ספרים אישי, בדוק רווחיות והפק שובר מתנה מעוצב</p>
+                </div>
+                <button onClick={() => setIsBundleBuilderOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-stone-200 text-stone-400"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="p-5 overflow-y-auto space-y-4 flex-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                  <div>
+                    <label className="block font-bold text-stone-600 mb-1">שם המארז / החבילה:</label>
+                    <input value={bundleTitle} onChange={e => setBundleTitle(e.target.value)} className="w-full p-2.5 border border-stone-200 rounded-xl font-bold" />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-stone-600 mb-1">שם החתן / הבוגר המקבל:</label>
+                    <input placeholder="לכבוד..." value={bundleRecipient} onChange={e => setBundleRecipient(e.target.value)} className="w-full p-2.5 border border-stone-200 rounded-xl" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-600 mb-1">נוסח ברכה והקדשה:</label>
+                  <input value={bundleDedication} onChange={e => setBundleDedication(e.target.value)} className="w-full p-2.5 border border-stone-200 rounded-xl text-xs" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-stone-700">בחר את הספרים הכלולים במארז ({selectedBooks.length}):</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-44 overflow-y-auto bg-[#FAF8F5] p-2.5 rounded-2xl ring-1 ring-stone-200">
+                    {[...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => {
+                      const checked = bundleSelectedBookIds.includes(b.id);
+                      return (
+                        <label key={b.id} className={`flex items-center gap-2 p-2 rounded-xl text-xs cursor-pointer border ${checked ? 'bg-white border-purple-400 font-bold text-purple-950' : 'border-transparent text-stone-600'}`}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={e => setBundleSelectedBookIds(prev => e.target.checked ? [...prev, b.id] : prev.filter(id => id !== b.id))}
+                            className="rounded text-purple-600"
+                          />
+                          <span className="truncate">{b.title}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2.5 text-center text-xs">
+                  <div className="bg-stone-50 p-3 rounded-2xl ring-1 ring-stone-200">
+                    <span className="text-stone-500 block">שווי רגיל</span>
+                    <strong className="text-base text-stone-900">₪{totalRetail}</strong>
+                  </div>
+                  <div className="bg-purple-50 p-3 rounded-2xl ring-1 ring-purple-200">
+                    <span className="text-purple-700 block font-bold">מחיר המארז (₪)</span>
+                    <input type="number" min="0" value={bundleCustomPrice} onChange={e => setBundleCustomPrice(Number(e.target.value))} className="w-20 mt-0.5 p-1 border border-purple-300 rounded-lg text-center font-black text-purple-900 bg-white" dir="ltr" />
+                  </div>
+                  <div className="bg-emerald-50 p-3 rounded-2xl ring-1 ring-emerald-200">
+                    <span className="text-emerald-700 block">רווח נקי למארז</span>
+                    <strong className="text-base text-emerald-800">₪{bundleProfit}</strong>
+                  </div>
+                </div>
+              </div>
+              <div className="p-4 border-t bg-[#FAF8F5] flex justify-between items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsBundleBuilderOpen(false);
+                    setPrintDoc({
+                      type: 'packing_slip',
+                      docTitle: `שובר מתנה — ${bundleTitle}`,
+                      orderId: new Date().toLocaleDateString('he-IL'),
+                      date: new Date().toLocaleDateString('he-IL'),
+                      recipient: bundleRecipient || 'חתן / בוגר ישיבת ירוחם',
+                      items: selectedBooks.map(b => ({ name: b.title, quantity: 1 })),
+                      notes: bundleDedication
+                    });
+                  }}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5"
+                >
+                  <Printer className="w-4 h-4" /> הפק שובר מתנה להדפסה
+                </button>
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(
+                    `🎁 *${bundleTitle} — הוצאת ספרי ישיבת ירוחם*\n` +
+                    `${bundleRecipient ? `לכבוד: ${bundleRecipient}\n` : ''}` +
+                    `_${bundleDedication}_\n\n` +
+                    `*הספרים במארז:*\n${selectedBooks.map((b, i) => `${i + 1}. ${b.title}`).join('\n')}\n\n` +
+                    `*מחיר מיוחד למארז: ₪${bundleCustomPrice}* (במקום ₪${totalRetail})`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5"
+                >
+                  <MessageCircle className="w-4 h-4" /> שתף מארז בוואטסאפ
+                </a>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* מודאל דוח שנתי מסכם להנהלת הישיבה (Executive Board Summary) */}
+      {isBoardSummaryOpen && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-stone-200 w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+            <div className="p-6 bg-gradient-to-l from-[#1C2414] via-[#2D381E] to-[#3F4E29] text-white flex justify-between items-start shrink-0">
+              <div>
+                <span className="text-xs font-bold text-amber-300 uppercase tracking-wider">מצגת נתונים להנהלת הישיבה ולתורמים</span>
+                <h3 className="font-editorial text-2xl font-extrabold mt-0.5">הוצאת ספרי ישיבת ההסדר ירוחם — סיכום פעילות</h3>
+                <p className="text-xs text-stone-200 mt-1">נכון לתאריך {new Date().toLocaleDateString('he-IL')}</p>
+              </div>
+              <div className="flex gap-2 print:hidden">
+                <button type="button" onClick={() => window.print()} className="bg-amber-400 text-slate-950 px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5"><Printer className="w-4 h-4" /> הדפס / שמור PDF</button>
+                <button onClick={() => setIsBoardSummaryOpen(false)} className="p-2 rounded-xl bg-white/10 text-white"><X className="w-4 h-4" /></button>
+              </div>
+            </div>
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-[#FAF8F5]">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                <div className="bg-white p-4 rounded-2xl ring-1 ring-stone-200">
+                  <span className="text-xs font-bold text-stone-500 block">כותרים בקטלוג</span>
+                  <span className="text-3xl font-black text-[#3D4A26]">{inventoryList.length}</span>
+                </div>
+                <div className="bg-white p-4 rounded-2xl ring-1 ring-stone-200">
+                  <span className="text-xs font-bold text-stone-500 block">עותקים במלאי</span>
+                  <span className="text-3xl font-black text-indigo-700">{totalCopiesInSystem.toLocaleString()}</span>
+                </div>
+                <div className="bg-white p-4 rounded-2xl ring-1 ring-stone-200">
+                  <span className="text-xs font-bold text-stone-500 block">נקודות הפצה וחנויות</span>
+                  <span className="text-3xl font-black text-emerald-700">{suppliersList.length}</span>
+                </div>
+                <div className="bg-white p-4 rounded-2xl ring-1 ring-stone-200">
+                  <span className="text-xs font-bold text-stone-500 block">שווי מלאי לצרכן</span>
+                  <span className="text-2xl font-black text-amber-700">₪{totalRetailValue.toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl ring-1 ring-stone-200 space-y-2 text-xs">
+                <h4 className="font-editorial font-extrabold text-base text-stone-900">סיכום הכנסות ותרומה תורנית</h4>
+                <div className="flex justify-between py-1.5 border-b border-stone-100"><span>סה"כ הכנסות מתועדות מכלל ערוצי ההפצה:</span><strong className="text-sm text-indigo-700">₪{Math.round(salesAnalytics.totalGrossRevenue).toLocaleString()}</strong></div>
+                <div className="flex justify-between py-1.5 border-b border-stone-100"><span>רווח נקי משוער לפיתוח והוצאת ספרים חדשים:</span><strong className="text-sm text-emerald-700">₪{Math.round(salesAnalytics.netProfitEstimate).toLocaleString()}</strong></div>
+                <div className="flex justify-between py-1.5"><span>ספרים שחולקו לתורמים ורבנים:</span><strong>{giftLogs.reduce((s, g) => s + Number(g.quantity || 0), 0)} עותקים</strong></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* מודאל אישור פעולות (Confirm Dialog) */}
       {confirmDialog && (
