@@ -13,8 +13,9 @@ import {
   LogIn, LogOut, Lock, Shield, KeyRound, Sun, Moon, Sparkles,
   QrCode, Camera, BarChart3, Layers, Percent, Share2,
   Bell, Users, Calendar, Activity, Tag, MapPin,
-  Sliders, FileCheck, RotateCcw, ShieldCheck, Zap,
-  ClipboardCheck, PanelRightClose, PanelRightOpen, PackagePlus, Undo2
+  ClipboardCheck, PanelRightClose, PanelRightOpen, PackagePlus, Undo2,
+  PenTool, Volume2, VolumeX, Store, Unlock,
+  Sliders, FileCheck, RotateCcw, ShieldCheck, Zap
 } from 'lucide-react';
 
 // ==========================================
@@ -76,6 +77,18 @@ const getBookSeriesBadge = (title = '') => {
   if (t.includes('מניטו')) return { label: 'משנת מניטו', cls: 'bg-indigo-100 text-indigo-800 border-indigo-200', strip: 'border-r-4 border-r-indigo-500' };
   if (t.includes('אותך אבקש')) return { label: 'ימי התשובה', cls: 'bg-rose-100 text-rose-800 border-rose-200', strip: 'border-r-4 border-r-rose-500' };
   return null;
+};
+
+// עיצוב כריכת ספר תלת-ממדית לפי סדרה לקופה המהירה
+const getBook3DCoverStyle = (title = '') => {
+  const t = String(title || '');
+  if (t.includes('ונהר יוצא מעדן')) return { spine: 'from-cyan-700 to-cyan-900', accent: 'border-t-4 border-t-cyan-500', badge: 'bg-cyan-50 text-cyan-800' };
+  if (t.includes('להשקות את הגן')) return { spine: 'from-emerald-700 to-emerald-900', accent: 'border-t-4 border-t-emerald-500', badge: 'bg-emerald-50 text-emerald-800' };
+  if (t.includes('כעץ שתול')) return { spine: 'from-amber-600 to-amber-800', accent: 'border-t-4 border-t-amber-500', badge: 'bg-amber-50 text-amber-800' };
+  if (t.includes('והתהלכתי')) return { spine: 'from-purple-700 to-purple-900', accent: 'border-t-4 border-t-purple-500', badge: 'bg-purple-50 text-purple-800' };
+  if (t.includes('מניטו')) return { spine: 'from-indigo-700 to-indigo-900', accent: 'border-t-4 border-t-indigo-500', badge: 'bg-indigo-50 text-indigo-800' };
+  if (t.includes('אותך אבקש')) return { spine: 'from-rose-700 to-rose-900', accent: 'border-t-4 border-t-rose-500', badge: 'bg-rose-50 text-rose-800' };
+  return { spine: 'from-[#4B5320] to-[#2B3318]', accent: 'border-t-4 border-t-[#5c6628]', badge: 'bg-slate-100 text-slate-700' };
 };
 
 const findMatchingCatalogBook = (title = '') => {
@@ -388,6 +401,52 @@ export default function App() {
   const [manualBarcodeInput, setManualBarcodeInput] = useState('');
   const [scannerError, setScannerError] = useState('');
   const videoRef = useRef(null);
+
+  // --- כרטסת ספר 360°, חתימה דיגיטלית, צלילי קופה ומצב קיוסק ---
+  const [drawerBook360, setDrawerBook360] = useState(null);
+  const [isKioskMode, setIsKioskMode] = useState(false);
+  const [isKioskUnlockOpen, setIsKioskUnlockOpen] = useState(false);
+  const [kioskUnlockPass, setKioskUnlockPass] = useState('');
+  const [posSoundEnabled, setPosSoundEnabled] = useState(() => loadLocal('yhy_erp_pos_sound', true));
+  const [signatureModalTarget, setSignatureModalTarget] = useState(null); // { recipient, onSave }
+  const signatureCanvasRef = useRef(null);
+  const isDrawingSigRef = useRef(false);
+
+  useEffect(() => {
+    try { localStorage.setItem('yhy_erp_pos_sound', JSON.stringify(posSoundEnabled)); } catch {}
+  }, [posSoundEnabled]);
+
+  const playPosTone = (type = 'add') => {
+    if (!posSoundEnabled) return;
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      const now = ctx.currentTime;
+      if (type === 'sale') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(523.25, now);
+        osc.frequency.setValueAtTime(659.25, now + 0.08);
+        osc.frequency.setValueAtTime(783.99, now + 0.16);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
+        osc.start(now);
+        osc.stop(now + 0.34);
+      } else {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(680, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.07);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+        osc.start(now);
+        osc.stop(now + 0.09);
+      }
+    } catch {}
+  };
 
   useEffect(() => {
     try { localStorage.setItem('yhy_erp_decompose_sets', JSON.stringify(autoDecomposeSets)); } catch {}
@@ -1695,6 +1754,7 @@ export default function App() {
   };
 
   const handleAddToPosCart = (book) => {
+    playPosTone('add');
     setPosCart(prev => {
       const existing = prev.find(i => i.bookId === book.id);
       if (existing) return prev.map(i => i.bookId === book.id ? { ...i, qty: i.qty + 1 } : i);
@@ -1760,6 +1820,7 @@ export default function App() {
     setPosDiscountValue(0);
     setPosBuyerNote('');
     setSelectedPosCustomerId('');
+    playPosTone('sale');
     logAuditAction('קופה', `מכירה בדוכן ע"ס ₪${totalAmount.toLocaleString()}`, `${saleItems.map(i => `${i.title} ×${i.qty}`).join(', ')} (${posPaymentMethod})`);
     showToast(`מכירה הושלמה ע"ס ₪${totalAmount.toLocaleString()} והמלאי עודכן!`, 'success');
   };
@@ -2697,6 +2758,26 @@ export default function App() {
       0% { transform: translateX(100%); }
       100% { transform: translateX(-100%); }
     }
+    @keyframes drawerSlideIn {
+      from { opacity: 0; transform: translateX(-36px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .animate-drawer-slide {
+      animation: drawerSlideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .book-3d-card {
+      position: relative;
+      transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.24s ease, border-color 0.2s ease;
+      box-shadow: -5px 6px 14px rgba(15, 23, 42, 0.08), inset -7px 0 12px -6px rgba(15, 23, 42, 0.2);
+    }
+    .book-3d-card:hover {
+      transform: translateY(-5px) scale(1.015);
+      box-shadow: -8px 12px 26px rgba(15, 23, 42, 0.14), inset -9px 0 14px -6px rgba(15, 23, 42, 0.25);
+    }
+    .glass-panel {
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
     .premium-card {
       position: relative;
       overflow: hidden;
@@ -3001,6 +3082,7 @@ export default function App() {
       )}
 
       {/* Sidebar (Desktop) */}
+      {!isKioskMode && (
       <aside className={`hidden lg:flex lg:flex-col ${isSidebarCollapsed ? 'w-20' : 'w-68'} bg-gradient-to-b from-[#0B1120] via-[#0F172A] to-[#0B1120] text-white shrink-0 border-l border-slate-800/80 transition-all duration-200 print:hidden`}>
         <div className="p-4 border-b border-slate-800/80 flex items-center justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">
@@ -3109,8 +3191,10 @@ export default function App() {
           </button>
         </div>
       </aside>
+      )}
 
       {/* Mobile Header */}
+      {!isKioskMode && (
       <header className="lg:hidden bg-[#0F172A] text-white px-4 py-3.5 flex items-center justify-between sticky top-0 z-30 shadow-md print:hidden">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-[#4B5320] flex items-center justify-center">
@@ -3144,9 +3228,10 @@ export default function App() {
           </button>
         </div>
       </header>
+      )}
 
       {/* Mobile Drawer */}
-      {mobileMenuOpen && (
+      {!isKioskMode && mobileMenuOpen && (
         <div className="lg:hidden fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-xs print:hidden" onClick={() => setMobileMenuOpen(false)}>
           <div className="bg-[#0F172A] text-white w-72 h-full p-4 space-y-1.5 overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center pb-3.5 mb-2 border-b border-slate-800">
@@ -3199,6 +3284,7 @@ export default function App() {
         )}
 
         {/* Desktop Top Utility Header */}
+        {!isKioskMode && (
         <div className={`hidden lg:flex items-center justify-between px-8 py-4 backdrop-blur-xl border-b sticky top-0 z-20 print:hidden transition-colors ${darkMode ? 'bg-[#0B1120]/85 border-slate-800/80' : 'bg-white/80 border-slate-200/80'}`}>
           <div className="flex items-center gap-3">
             {activeNavItem && (() => {
@@ -3356,6 +3442,29 @@ export default function App() {
             </button>
           </div>
         </div>
+        )}
+
+        {/* סרגל נעילת קיוסק לתלמידים בדוכן */}
+        {isKioskMode && (
+          <div className="bg-gradient-to-l from-indigo-900 via-slate-900 to-indigo-950 text-white px-4 py-3 flex items-center justify-between gap-3 shadow-lg sticky top-0 z-30 print:hidden">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-400/20 text-amber-300 flex items-center justify-center ring-1 ring-amber-300/30">
+                <Store className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="font-extrabold text-sm block leading-tight">מצב דוכן עצמאי (קיוסק) — הוצאת ספרי ישיבת ירוחם</span>
+                <span className="text-[11px] text-indigo-200">גישה מוגבלת לקופה המהירה בלבד (נתוני הנהלה ועלויות מוסתרים)</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setKioskUnlockPass(''); setIsKioskUnlockOpen(true); }}
+              className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-sm shrink-0"
+            >
+              <Unlock className="w-3.5 h-3.5" /> שחרר מצב ניהול
+            </button>
+          </div>
+        )}
 
         {/* Main Content Area */}
         <main className="flex-1 p-4 pb-28 md:p-6 lg:p-8 lg:pb-10 max-w-[1600px] w-full mx-auto overflow-x-hidden">
@@ -3706,29 +3815,62 @@ export default function App() {
                 </h2>
                 <p className="text-slate-500 text-xs mt-1">בחר ספרים להוספה לסל — המלאי יופחת אוטומטית מהמחסן הראשי</p>
               </div>
-              <div className="bg-slate-100 p-1.5 rounded-xl grid grid-cols-3 gap-1 ring-1 ring-slate-200/80 w-full xl:w-auto shrink-0 overflow-hidden">
-                <button onClick={() => setPosPriceMode('yeshiva')} className={`px-2.5 sm:px-3.5 py-2 rounded-lg text-xs font-bold whitespace-nowrap text-center transition-all ${posPriceMode === 'yeshiva' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>תלמיד ראשון</button>
-                <button onClick={() => setPosPriceMode('yeshivaGuest')} className={`px-2.5 sm:px-3.5 py-2 rounded-lg text-xs font-bold whitespace-nowrap text-center transition-all ${posPriceMode === 'yeshivaGuest' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>שני / אורח</button>
-                <button onClick={() => setPosPriceMode('general')} className={`px-2.5 sm:px-3.5 py-2 rounded-lg text-xs font-bold whitespace-nowrap text-center transition-all ${posPriceMode === 'general' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>צרכן (אתר)</button>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setPosSoundEnabled(prev => !prev)}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 transition-all ${
+                    posSoundEnabled ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-slate-100 text-slate-500 ring-slate-200'
+                  }`}
+                  title="צלילי משוב בקופה"
+                >
+                  {posSoundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+                  <span className="hidden sm:inline">{posSoundEnabled ? 'צלילים פעילים' : 'מושתק'}</span>
+                </button>
+                {!isKioskMode && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsKioskMode(true);
+                      showToast('המערכת ננעלה למצב דוכן עצמאי (קיוסק)!', 'info');
+                    }}
+                    className="bg-slate-900 hover:bg-slate-800 text-amber-300 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                    title="נעל את המסך לקופה בלבד עבור תורן בדוכן"
+                  >
+                    <Store className="w-3.5 h-3.5" /> מצב קיוסק לתלמידים
+                  </button>
+                )}
+                <div className="bg-slate-100 p-1.5 rounded-xl grid grid-cols-3 gap-1 ring-1 ring-slate-200/80 w-full sm:w-auto overflow-hidden">
+                  <button onClick={() => setPosPriceMode('yeshiva')} className={`px-2.5 sm:px-3.5 py-2 rounded-lg text-xs font-bold whitespace-nowrap text-center transition-all ${posPriceMode === 'yeshiva' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>תלמיד ראשון</button>
+                  <button onClick={() => setPosPriceMode('yeshivaGuest')} className={`px-2.5 sm:px-3.5 py-2 rounded-lg text-xs font-bold whitespace-nowrap text-center transition-all ${posPriceMode === 'yeshivaGuest' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>שני / אורח</button>
+                  <button onClick={() => setPosPriceMode('general')} className={`px-2.5 sm:px-3.5 py-2 rounded-lg text-xs font-bold whitespace-nowrap text-center transition-all ${posPriceMode === 'general' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}>צרכן (אתר)</button>
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* עמודת בחירת ספרים (7 עמודות) */}
+              <div className="lg:col-span-7 space-y-4">
                 <div className="flex gap-2">
                   <div className="relative flex-1">
                     <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
-                    <input type="text" value={posSearch} onChange={e => setPosSearch(e.target.value)} placeholder="חפש ספר מהיר בדוכן או סרוק ברקוד..." className="w-full pr-10 pl-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm shadow-xs outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all" />
+                    <input
+                      type="text"
+                      value={posSearch}
+                      onChange={e => setPosSearch(e.target.value)}
+                      placeholder="חפש ספר בדוכן..."
+                      className="w-full pr-10 pl-3 py-3 border border-slate-200 rounded-2xl bg-white text-sm outline-none focus:ring-2 focus:ring-indigo-500/30 shadow-2xs"
+                    />
                   </div>
                   <button
                     type="button"
                     onClick={() => { setScannerError(''); setManualBarcodeInput(''); setScannerTarget('pos'); }}
                     className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 rounded-2xl text-xs font-bold flex items-center gap-1.5 shadow-xs shrink-0"
-                    title="סרוק ברקוד / דאנאק ממצלמת הטלפון"
                   >
-                    <Camera className="w-4 h-4" /> <span className="hidden sm:inline">סרוק ברקוד</span>
+                    <Camera className="w-4 h-4" /> סרוק ברקוד
                   </button>
                 </div>
+
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
                   {inventoryList
                     .filter(b => (b.title || '').includes(posSearch))
@@ -3736,21 +3878,29 @@ export default function App() {
                     .map(book => {
                       const price = getPosBookPrice(book, posPriceMode);
                       const inCart = posCart.find(c => c.bookId === book.id)?.qty || 0;
+                      const cover3D = getBook3DCoverStyle(book.title);
+                      const seriesBadge = getBookSeriesBadge(book.title);
                       return (
                         <button
                           key={book.id}
                           type="button"
                           onClick={() => handleAddToPosCart(book)}
-                          className={`text-right p-4 rounded-2xl transition-all duration-150 active:scale-[0.98] flex flex-col justify-between min-h-[120px] relative ${
+                          className={`book-3d-card text-right p-4 pr-5 rounded-2xl rounded-r-lg transition-all duration-150 active:scale-[0.98] flex flex-col justify-between min-h-[136px] relative overflow-hidden ${cover3D.accent} ${
                             inCart > 0
-                              ? 'bg-indigo-50/80 ring-2 ring-indigo-500 shadow-sm'
-                              : 'bg-white ring-1 ring-slate-200/80 hover:ring-indigo-300 hover:shadow-md'
+                              ? 'bg-indigo-50/90 ring-2 ring-indigo-500'
+                              : 'bg-white ring-1 ring-slate-200/80 hover:ring-indigo-300'
                           }`}
                         >
-                          {inCart > 0 && <span className="absolute -top-2 -left-2 bg-indigo-600 text-white text-xs font-extrabold w-7 h-7 rounded-full flex items-center justify-center shadow-md ring-2 ring-white">{inCart}</span>}
+                          <span className={`pointer-events-none absolute inset-y-0 right-0 w-2.5 bg-gradient-to-b ${cover3D.spine}`} />
+                          {inCart > 0 && <span className="absolute top-2 left-2 bg-indigo-600 text-white text-xs font-extrabold w-7 h-7 rounded-full flex items-center justify-center shadow-md ring-2 ring-white">{inCart}</span>}
                           <div>
-                            <h4 className="font-bold text-slate-800 text-sm leading-snug line-clamp-2">{book.title}</h4>
-                            <span className="inline-block text-[11px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md mt-1.5">במחסן: {book.publisherStock}</span>
+                            {seriesBadge && (
+                              <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-md mb-1 ${cover3D.badge}`}>
+                                {seriesBadge.label}
+                              </span>
+                            )}
+                            <h4 className="font-extrabold text-slate-800 text-sm leading-snug line-clamp-2">{book.title}</h4>
+                            <span className="inline-block text-[11px] text-slate-500 bg-slate-100/90 px-2 py-0.5 rounded-md mt-1.5">במחסן: {book.publisherStock}</span>
                           </div>
                           <div className="mt-3 pt-2.5 border-t border-slate-100 flex justify-between items-center">
                             <span className="text-lg font-extrabold text-emerald-600">₪{price}</span>
@@ -3762,199 +3912,215 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200/80 p-5 flex flex-col h-fit sticky top-24 space-y-4">
-                <div className="flex justify-between items-center border-b border-slate-100 pb-3.5">
-                  <h4 className="font-extrabold text-slate-800 flex items-center gap-2"><ShoppingCart className="w-5 h-5 text-indigo-600" /> סל קנייה נוכחי</h4>
-                  {posCart.length > 0 && <button onClick={() => setPosCart([])} className="text-xs font-bold text-rose-500 hover:text-rose-700">רוקן סל</button>}
-                </div>
-                {posCart.length === 0 ? (
-                  <div className="py-12 text-center space-y-2">
-                    <ShoppingCart className="w-10 h-10 text-slate-200 mx-auto" />
-                    <p className="text-slate-400 text-sm">לחץ על הספרים מימין להוספה לסל</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2.5 max-h-72 overflow-y-auto pl-1">
-                    {posCart.map(item => {
-                      const book = inventoryList.find(b => b.id === item.bookId);
-                      const defaultPrice = book ? getPosBookPrice(book, posPriceMode) : 0;
-                      const unitPrice = getPosCartItemPrice(item, posPriceMode);
-                      const isCustomPrice = item.customPrice !== undefined && item.customPrice !== '';
-                      return (
-                        <div key={item.bookId} className="flex flex-col gap-2 bg-slate-50/90 p-3 rounded-xl ring-1 ring-slate-200/60">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="font-bold text-xs text-slate-800 truncate flex-1">{item.title}</p>
-                            <span className="font-extrabold text-xs text-emerald-700 shrink-0">₪{(unitPrice * item.qty).toLocaleString()}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1" title="מחיר ליחידה למכירה זו בלבד (לא משנה מחירון קבוע)">
-                              <span className="text-[11px] text-slate-500">מחיר ליח' ₪:</span>
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.5"
-                                value={isCustomPrice ? item.customPrice : defaultPrice}
-                                onChange={e => handleUpdatePosCartPrice(item.bookId, e.target.value)}
-                                className={`w-16 px-1.5 py-1 border rounded-lg text-xs text-center font-bold bg-white outline-none ${isCustomPrice ? 'border-amber-400 text-amber-800 ring-1 ring-amber-200' : 'border-slate-200 text-slate-800'}`}
-                                dir="ltr"
-                              />
-                              {isCustomPrice && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdatePosCartPrice(item.bookId, '')}
-                                  className="text-[10px] text-slate-400 hover:text-indigo-600 underline"
-                                  title="החזר למחיר מחירון"
-                                >
-                                  איפוס
-                                </button>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <button onClick={() => handleUpdatePosCartQty(item.bookId, -1)} className="w-7 h-7 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center transition-colors"><Minus className="w-3.5 h-3.5" /></button>
-                              <span className="font-extrabold text-sm w-6 text-center">{item.qty}</span>
-                              <button onClick={() => handleUpdatePosCartQty(item.bookId, 1)} className="w-7 h-7 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center transition-colors"><Plus className="w-3.5 h-3.5" /></button>
-                            </div>
-                          </div>
+              {/* עמודת סל הקופה ועסקאות אחרונות (5 עמודות) */}
+              <div className="lg:col-span-5 space-y-5 lg:sticky lg:top-24">
+                {(() => {
+                  const subtotal = posCart.reduce((s, item) => s + getPosCartItemPrice(item, posPriceMode) * item.qty, 0);
+                  const rawDisc = Math.max(0, Number(posDiscountValue || 0));
+                  const discountAmt = posDiscountType === 'pct'
+                    ? Math.round((subtotal * Math.min(100, rawDisc)) / 100)
+                    : Math.min(subtotal, rawDisc);
+                  const finalPosTotal = Math.max(0, subtotal - discountAmt);
+
+                  return (
+                    <div className="bg-white rounded-3xl shadow-lg ring-1 ring-slate-200/80 overflow-hidden">
+                      <div className="p-5 border-b bg-gradient-to-l from-slate-900 to-indigo-950 text-white flex justify-between items-center">
+                        <div>
+                          <h3 className="font-extrabold text-base flex items-center gap-2"><ShoppingCart className="w-4 h-4 text-emerald-400" /> סל קנייה נוכחי</h3>
+                          <p className="text-[11px] text-slate-300 mt-0.5">{posCart.reduce((s, i) => s + i.qty, 0)} פריטים בסל</p>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                <div className="space-y-3 pt-3 border-t border-slate-100">
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {['מזומן', 'ביט', 'פייבוקס', 'אשראי'].map(m => (
-                      <button key={m} type="button" onClick={() => setPosPaymentMethod(m)} className={`py-2 rounded-xl text-xs font-bold border transition-all ${posPaymentMethod === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>{m}</button>
-                    ))}
-                  </div>
-                  {customersList.length > 0 && (
-                    <select
-                      value={selectedPosCustomerId}
-                      onChange={e => {
-                        const cid = e.target.value;
-                        setSelectedPosCustomerId(cid);
-                        const found = customersList.find(c => c.id === cid);
-                        if (found) setPosBuyerNote(`${found.name}${found.phone ? ` (${found.phone})` : ''}`);
-                      }}
-                      className="w-full p-2 border border-sky-200 rounded-xl text-xs bg-sky-50/50 text-slate-700 font-medium outline-none"
-                    >
-                      <option value="">בחר לקוח / בוגר שמור (אופציונלי)...</option>
-                      {customersList.map(c => (
-                        <option key={c.id} value={c.id}>{c.name} — {c.category}</option>
-                      ))}
-                    </select>
-                  )}
-                  <input type="text" value={posBuyerNote} onChange={e => setPosBuyerNote(e.target.value)} placeholder="שם קונה / הערה (אופציונלי)" className="w-full p-2.5 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white outline-none transition-colors" />
-
-                  {/* הנחה / מבצע מהיר על הסל */}
-                  <div className="flex items-center justify-between gap-2 bg-amber-50/70 border border-amber-200/70 p-2.5 rounded-xl">
-                    <span className="text-xs font-bold text-amber-900 flex items-center gap-1"><Tag className="w-3.5 h-3.5 text-amber-600" /> הנחת מבצע:</span>
-                    <div className="flex items-center gap-1.5">
-                      <select
-                        value={posDiscountType}
-                        onChange={e => setPosDiscountType(e.target.value)}
-                        className="p-1.5 border border-amber-200 rounded-lg text-xs font-bold bg-white text-slate-700"
-                      >
-                        <option value="pct">אחוז (%)</option>
-                        <option value="fixed">סכום (₪)</option>
-                      </select>
-                      <input
-                        type="number"
-                        min="0"
-                        value={posDiscountValue || ''}
-                        onChange={e => setPosDiscountValue(e.target.value)}
-                        placeholder="0"
-                        className="w-16 p-1.5 border border-amber-200 rounded-lg text-xs text-center font-bold bg-white"
-                        dir="ltr"
-                      />
-                    </div>
-                  </div>
-
-                  {(() => {
-                    const sub = posCart.reduce((s, item) => s + getPosCartItemPrice(item, posPriceMode) * item.qty, 0);
-                    const rawD = Math.max(0, Number(posDiscountValue || 0));
-                    const disc = posDiscountType === 'pct' ? Math.round((sub * Math.min(100, rawD)) / 100) : Math.min(sub, rawD);
-                    const finalPay = Math.max(0, sub - disc);
-                    return (
-                      <div className="bg-gradient-to-l from-emerald-50 to-teal-50/70 border border-emerald-200/80 p-4 rounded-2xl space-y-1">
-                        {disc > 0 && (
-                          <div className="flex justify-between text-xs text-amber-800 font-bold">
-                            <span>לפני הנחה: ₪{sub.toLocaleString()}</span>
-                            <span>הנחה: -₪{disc.toLocaleString()}</span>
-                          </div>
-                        )}
-                        <div className="flex justify-between items-center">
-                          <span className="font-bold text-emerald-900 text-sm">סה"כ לתשלום:</span>
-                          <span className="text-2xl font-extrabold text-emerald-700">₪{finalPay.toLocaleString()}</span>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      disabled={posCart.length === 0}
-                      onClick={() => {
-                        const sub = posCart.reduce((s, item) => s + getPosCartItemPrice(item, posPriceMode) * item.qty, 0);
-                        const rawD = Math.max(0, Number(posDiscountValue || 0));
-                        const disc = posDiscountType === 'pct' ? Math.round((sub * Math.min(100, rawD)) / 100) : Math.min(sub, rawD);
-                        const total = Math.max(0, sub - disc);
-                        const itemsSummary = posCart.map(item => {
-                          const p = getPosCartItemPrice(item, posPriceMode);
-                          return `${item.title} (×${item.qty}) — ₪${(p * item.qty).toLocaleString()}`;
-                        });
-                        if (disc > 0) itemsSummary.push(`הנחת מבצע: -₪${disc.toLocaleString()}`);
-                        setPaymentModalData({ title: 'תשלום בדוכן הספרים', total, items: itemsSummary, buyer: posBuyerNote.trim() });
-                      }}
-                      className="bg-indigo-50 hover:bg-indigo-100 disabled:opacity-40 text-indigo-700 ring-1 ring-indigo-200 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all"
-                    >
-                      <QrCode className="w-4 h-4" /> קישור / QR לתשלום
-                    </button>
-                    <button type="button" disabled={posCart.length === 0} onClick={handleCompletePosSale} className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white py-3 rounded-xl font-bold text-xs shadow-md shadow-emerald-600/20 disabled:shadow-none flex items-center justify-center gap-1.5 transition-all">
-                      <CheckCircle className="w-4 h-4" /> אשר מכירה והפחת
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* היסטוריית עסקאות אחרונות בקופה + אפשרות ביטול / זיכוי */}
-            {posSales.length > 0 && (
-              <div className="bg-white rounded-2xl shadow-xs ring-1 ring-slate-200/70 p-5 space-y-3">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
-                    <History className="w-4 h-4 text-indigo-600" /> עסקאות אחרונות בקופה ({posSales.length})
-                  </h3>
-                  <span className="text-xs text-slate-400">ניתן לבטל עסקה ולהחזיר ספרים למלאי</span>
-                </div>
-                <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
-                  {posSales.slice(0, 10).map(sale => (
-                    <div key={sale.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                      <div>
-                        <p className="font-bold text-slate-800">
-                          {(sale.items || []).map(i => `${i.title} (×${i.qty})`).join(', ')}
-                        </p>
-                        <p className="text-slate-500 mt-0.5">
-                          {sale.date} · {sale.paymentMethod} {sale.buyerNote ? `· ${sale.buyerNote}` : ''}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2.5 shrink-0">
-                        <span className="font-extrabold text-emerald-700 text-sm">₪{Number(sale.totalAmount || 0).toLocaleString()}</span>
-                        {userRole === 'admin' && (
-                          <button
-                            type="button"
-                            onClick={() => handleRefundPosSale(sale)}
-                            className="bg-rose-50 hover:bg-rose-100 text-rose-700 ring-1 ring-rose-200 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1"
-                            title="בטל עסקה והחזר ספרים למלאי"
-                          >
-                            <Undo2 className="w-3 h-3" /> בטל / זכה
+                        {posCart.length > 0 && (
+                          <button type="button" onClick={() => { setPosCart([]); setPosDiscountValue(0); }} className="text-xs bg-white/10 hover:bg-rose-500/80 px-3 py-1.5 rounded-xl font-bold transition-colors">
+                            רוקן סל
                           </button>
                         )}
                       </div>
+
+                      <div className="p-5 space-y-4">
+                        {posCart.length === 0 ? (
+                          <div className="py-10 text-center space-y-2 border-2 border-dashed border-slate-200 rounded-2xl">
+                            <BookOpen className="w-8 h-8 text-slate-300 mx-auto" />
+                            <p className="text-xs font-bold text-slate-400">הסל ריק — לחץ על ספרים מימין להוספה</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2.5 max-h-72 overflow-y-auto pl-1">
+                            {posCart.map(item => {
+                              const book = inventoryList.find(b => b.id === item.bookId);
+                              const defaultPrice = book ? getPosBookPrice(book, posPriceMode) : 0;
+                              const unitPrice = getPosCartItemPrice(item, posPriceMode);
+                              const isCustom = item.customPrice !== undefined && item.customPrice !== '';
+                              return (
+                                <div key={item.bookId} className="p-3 bg-slate-50/90 rounded-2xl ring-1 ring-slate-200/70 space-y-2">
+                                  <div className="flex justify-between items-start gap-2">
+                                    <span className="font-bold text-slate-800 text-xs leading-snug">{item.title}</span>
+                                    <span className="font-extrabold text-emerald-700 text-sm shrink-0">₪{(unitPrice * item.qty).toLocaleString()}</span>
+                                  </div>
+                                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/60">
+                                    <div className="flex items-center gap-1.5">
+                                      <button type="button" onClick={() => handleUpdatePosCartQty(item.bookId, -1)} className="w-7 h-7 rounded-lg bg-white ring-1 ring-slate-200 flex items-center justify-center font-bold text-slate-700 hover:bg-rose-50"><Minus className="w-3.5 h-3.5" /></button>
+                                      <span className="w-7 text-center font-extrabold text-xs">{item.qty}</span>
+                                      <button type="button" onClick={() => handleUpdatePosCartQty(item.bookId, 1)} className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold hover:bg-indigo-700"><Plus className="w-3.5 h-3.5" /></button>
+                                    </div>
+                                    <div className="flex items-center gap-1 text-[11px]" title="עריכת מחיר ליחידה למכירה זו בלבד">
+                                      <span className="text-slate-400">מחיר ליח' ₪:</span>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="0.5"
+                                        value={isCustom ? item.customPrice : defaultPrice}
+                                        onChange={e => handleUpdatePosCartPrice(item.bookId, e.target.value)}
+                                        className={`w-16 p-1 border rounded-lg text-center font-bold bg-white ${isCustom ? 'border-amber-400 text-amber-800' : 'border-slate-200 text-indigo-700'}`}
+                                        dir="ltr"
+                                      />
+                                      {isCustom && (
+                                        <button type="button" onClick={() => handleUpdatePosCartPrice(item.bookId, '')} className="text-[10px] text-slate-400 hover:text-indigo-600 underline">איפוס</button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* הנחה / מבצע מהיר */}
+                        <div className="bg-amber-50/70 border border-amber-200/80 p-3 rounded-2xl flex items-center justify-between gap-2 text-xs">
+                          <span className="font-bold text-amber-900">הנחה / מבצע:</span>
+                          <div className="flex items-center gap-1.5">
+                            <select
+                              value={posDiscountType}
+                              onChange={e => setPosDiscountType(e.target.value)}
+                              className="p-1.5 border border-amber-200 rounded-xl bg-white font-bold text-xs"
+                            >
+                              <option value="pct">אחוזים (%)</option>
+                              <option value="fixed">סכום (₪)</option>
+                            </select>
+                            <input
+                              type="number"
+                              min="0"
+                              value={posDiscountValue}
+                              onChange={e => setPosDiscountValue(e.target.value)}
+                              className="w-16 p-1.5 border border-amber-200 rounded-xl text-center font-bold bg-white"
+                              dir="ltr"
+                            />
+                          </div>
+                        </div>
+
+                        {/* אמצעי תשלום + בחירת לקוח / הערה */}
+                        <div className="space-y-2.5">
+                          <div className="grid grid-cols-4 gap-1.5">
+                            {['מזומן', 'ביט', 'פייבוקס', 'אשראי'].map(method => (
+                              <button
+                                key={method}
+                                type="button"
+                                onClick={() => setPosPaymentMethod(method)}
+                                className={`py-2 rounded-xl text-xs font-bold border transition-all ${
+                                  posPaymentMethod === method
+                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                }`}
+                              >
+                                {method}
+                              </button>
+                            ))}
+                          </div>
+                          {customersList.length > 0 && (
+                            <select
+                              value={selectedPosCustomerId}
+                              onChange={e => {
+                                setSelectedPosCustomerId(e.target.value);
+                                const c = customersList.find(x => x.id === e.target.value);
+                                if (c) setPosBuyerNote(`${c.name}${c.phone ? ` (${c.phone})` : ''}`);
+                              }}
+                              className="w-full p-2.5 border border-slate-200 rounded-xl text-xs bg-slate-50 font-medium"
+                            >
+                              <option value="">בחר מרשימת לקוחות / בוגרים שמורים (אופציונלי)...</option>
+                              {customersList.map(c => <option key={c.id} value={c.id}>{c.name} — {c.category}</option>)}
+                            </select>
+                          )}
+                          <input
+                            type="text"
+                            value={posBuyerNote}
+                            onChange={e => setPosBuyerNote(e.target.value)}
+                            placeholder="שם קונה / הערה לעסקה (אופציונלי)..."
+                            className="w-full p-2.5 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white outline-none"
+                          />
+                        </div>
+
+                        {/* סיכום סכום וכפתורי ביצוע */}
+                        <div className="bg-emerald-50 ring-1 ring-emerald-200 p-4 rounded-2xl space-y-1">
+                          {discountAmt > 0 && (
+                            <div className="flex justify-between text-xs text-emerald-800">
+                              <span>סכום ביניים: ₪{subtotal.toLocaleString()}</span>
+                              <span>הנחה: -₪{discountAmt.toLocaleString()}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between items-center">
+                            <span className="font-extrabold text-emerald-950 text-sm">סה"כ לתשלום:</span>
+                            <span className="text-3xl font-black text-emerald-700">₪{finalPosTotal.toLocaleString()}</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            disabled={posCart.length === 0}
+                            onClick={() => {
+                              const itemsSummary = posCart.map(item => `${item.title} (×${item.qty}) — ₪${(getPosCartItemPrice(item, posPriceMode) * item.qty).toLocaleString()}`);
+                              setPaymentModalData({ title: 'תשלום בדוכן הספרים', total: finalPosTotal, items: itemsSummary, buyer: posBuyerNote });
+                            }}
+                            className="bg-indigo-50 hover:bg-indigo-100 disabled:opacity-40 text-indigo-700 ring-1 ring-indigo-200 py-3 rounded-2xl font-extrabold text-xs flex items-center justify-center gap-1.5"
+                          >
+                            <QrCode className="w-4 h-4" /> קישור / QR לתשלום
+                          </button>
+                          <button
+                            type="button"
+                            disabled={posCart.length === 0}
+                            onClick={handleCompletePosSale}
+                            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white py-3 rounded-2xl font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20"
+                          >
+                            <CheckCircle className="w-4 h-4" /> אשר מכירה והפחת מלאי
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                  );
+                })()}
+
+                {/* עסקאות אחרונות בקופה + ביטול/זיכוי */}
+                {!isKioskMode && posSales.length > 0 && (
+                  <div className="bg-white rounded-3xl shadow-xs ring-1 ring-slate-200/70 p-5 space-y-3">
+                    <h4 className="font-extrabold text-slate-800 text-xs flex items-center justify-between">
+                      <span>עסקאות אחרונות בקופה ({posSales.length})</span>
+                      <span className="text-slate-400 font-normal">ניתן לבטל ולהחזיר למלאי</span>
+                    </h4>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {[...posSales].sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0)).slice(0, 8).map(sale => (
+                        <div key={sale.id} className="p-3 bg-slate-50/90 rounded-xl ring-1 ring-slate-200/70 flex justify-between items-center gap-2 text-xs">
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-800 truncate">
+                              ₪{Number(sale.totalAmount || 0).toLocaleString()} · <span className="text-indigo-700">{sale.paymentMethod}</span>
+                            </p>
+                            <p className="text-[11px] text-slate-500 truncate">{(sale.items || []).map(i => `${i.title} ×${i.qty}`).join(', ')}</p>
+                            <p className="text-[10px] text-slate-400">{sale.date} {sale.buyerNote ? `· ${sale.buyerNote}` : ''}</p>
+                          </div>
+                          {userRole === 'admin' && (
+                            <button
+                              type="button"
+                              onClick={() => handleRefundPosSale(sale)}
+                              className="bg-rose-50 hover:bg-rose-100 text-rose-700 px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 shrink-0"
+                              title="בטל עסקה והחזר ספרים למלאי"
+                            >
+                              <Undo2 className="w-3 h-3" /> זיכוי
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -4258,8 +4424,8 @@ export default function App() {
                     return (
                       <div key={book.id} className={`bg-white p-4 rounded-2xl ring-1 ring-slate-200/80 shadow-2xs space-y-3 ${seriesBadge?.strip || ''}`}>
                         <div className="flex justify-between items-start gap-2">
-                          <div>
-                            <h4 className="font-extrabold text-slate-900 text-sm leading-snug">{book.title}</h4>
+                          <div onClick={() => setDrawerBook360(book)} className="cursor-pointer">
+                            <h4 className="font-extrabold text-slate-900 text-sm leading-snug hover:text-indigo-600">{book.title}</h4>
                             <div className="flex flex-wrap gap-1 mt-1">
                               {seriesBadge && <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${seriesBadge.cls}`}>{seriesBadge.label}</span>}
                               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isLow ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}>
@@ -4347,7 +4513,15 @@ export default function App() {
                         return (
                           <tr key={book.id} className={`hover:bg-slate-50/80 transition-colors ${seriesBadge?.strip || ''}`}>
                             <td className="py-4 px-4">
-                              <div className="font-extrabold text-slate-900">{book.title}</div>
+                              <button
+                                type="button"
+                                onClick={() => setDrawerBook360(book)}
+                                className="font-extrabold text-slate-900 hover:text-indigo-600 text-right transition-colors flex items-center gap-1.5 group"
+                                title="פתח כרטסת ספר 360° (נתוני מכירה, ספקים ותחזית מלאי)"
+                              >
+                                <span>{book.title}</span>
+                                <Eye className="w-3.5 h-3.5 text-slate-300 group-hover:text-indigo-500 transition-colors" />
+                              </button>
                               <div className="flex flex-wrap items-center gap-1.5 mt-1">
                                 {seriesBadge && (
                                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${seriesBadge.cls}`}>
@@ -5155,6 +5329,7 @@ export default function App() {
         </main>
 
         {/* Mobile Native-Style Bottom Navigation Bar — דאשבורד במרכז */}
+        {!isKioskMode && (
         <nav className={`lg:hidden fixed bottom-0 inset-x-0 z-30 border-t backdrop-blur-xl px-2 py-1.5 flex items-center justify-around print:hidden ${darkMode ? 'bg-[#0B1120]/95 border-slate-800' : 'bg-white/95 border-slate-200/90 shadow-[0_-4px_20px_rgba(15,23,42,0.06)]'}`}>
           {[
             { id: 'pos', label: 'קופה', icon: CreditCard },
@@ -5190,6 +5365,7 @@ export default function App() {
             );
           })}
         </nav>
+        )}
       </div>
 
       {/* ===================================================================== */}
@@ -6477,6 +6653,20 @@ export default function App() {
             <div className="p-4 border-b bg-slate-50/80 flex justify-between items-center print:hidden">
               <h3 className="font-extrabold text-slate-900">{printDoc.docTitle}</h3>
               <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSignatureModalTarget({
+                    recipient: printDoc.recipient,
+                    onSave: (sigDataUrl, signerName) => {
+                      setPrintDoc(prev => prev ? { ...prev, signatureData: sigDataUrl, signerName, signedAt: new Date().toLocaleString('he-IL') } : prev);
+                      logAuditAction('משלוחים', `חתימת ספק על ${printDoc.docTitle}`, `נחתם ע"י: ${signerName || printDoc.recipient}`);
+                      showToast('החתימה הדיגיטלית הוטמעה במסמך!', 'success');
+                    }
+                  })}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5"
+                >
+                  <PenTool className="w-4 h-4" /> החתם ספק / שליח
+                </button>
                 <button onClick={() => window.print()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5"><Printer className="w-4 h-4" /> הדפס / שמור PDF</button>
                 <button onClick={() => setPrintDoc(null)} className="p-1.5 bg-white ring-1 ring-slate-200 rounded-xl"><X className="w-4 h-4 text-slate-500" /></button>
               </div>
@@ -6554,408 +6744,16 @@ export default function App() {
                   <span>₪{Number(printDoc.totalAmount).toLocaleString()}</span>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit User Modal */}
-      {editingUser && (
-        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md overflow-hidden" dir="rtl">
-            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
-              <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><KeyRound className="w-5 h-5 text-indigo-600" /> עריכת משתמש: {editingUser.name}</h3>
-              <button onClick={() => setEditingUser(null)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
-            </div>
-            <form onSubmit={handleSaveEditUser} className="p-5 space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">שם מלא</label>
-                <input required type="text" value={editingUser.name} onChange={e => setEditingUser({ ...editingUser, name: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">שם משתמש</label>
-                <input required type="text" value={editingUser.username} onChange={e => setEditingUser({ ...editingUser, username: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
-              </div>
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">אימייל</label>
-                  <input type="email" value={editingUser.email || ''} onChange={e => setEditingUser({ ...editingUser, email: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">טלפון לוואטסאפ</label>
-                  <input type="tel" value={editingUser.phone || ''} onChange={e => setEditingUser({ ...editingUser, phone: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">סיסמה חדשה (השאר ריק כדי לא לשנות)</label>
-                <input type="password" placeholder="••••••••" value={editingUser.newPassword || ''} onChange={e => setEditingUser({ ...editingUser, newPassword: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">רמת הרשאה</label>
-                <select value={editingUser.role} onChange={e => setEditingUser({ ...editingUser, role: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50">
-                  <option value="viewer">צופה בלבד</option>
-                  <option value="admin">מנהל מערכת</option>
-                </select>
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setEditingUser(null)} className="px-4 py-2 text-sm text-slate-600">ביטול</button>
-                <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-xs">שמור שינויים</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Confirm Dialog Modal */}
-      {confirmDialog && (
-        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-[90] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 max-w-md w-full p-6 space-y-4" dir="rtl">
-            <div className="flex items-center gap-3.5">
-              <div className={`p-3 rounded-2xl ${confirmDialog.iconStyle || 'bg-red-100 text-red-600'}`}>{confirmDialog.icon}</div>
-              <div>
-                <h3 className="font-extrabold text-slate-900 text-base">{confirmDialog.title}</h3>
-                <p className="text-sm text-slate-600 mt-0.5">{confirmDialog.message}</p>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setConfirmDialog(null)} className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100">ביטול</button>
-              <button
-                onClick={async () => {
-                  const fn = confirmDialog.onConfirm;
-                  setConfirmDialog(null);
-                  if (fn) await fn();
-                }}
-                className={`px-5 py-2 rounded-xl text-sm font-bold text-white shadow-sm ${confirmDialog.confirmStyle || 'bg-red-600 hover:bg-red-700'}`}
-              >
-                {confirmDialog.confirmText || 'אשר'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Barcode / Danacode Scanner Modal */}
-      {scannerTarget && (
-        <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-xs z-[95] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md overflow-hidden" dir="rtl">
-            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
-              <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Camera className="w-5 h-5 text-indigo-600" /> סריקת ברקוד / דאנאק</h3>
-              <button onClick={() => setScannerTarget(null)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="relative rounded-2xl overflow-hidden bg-slate-900 aspect-video flex items-center justify-center">
-                <video ref={videoRef} playsInline muted className="w-full h-full object-cover" />
-                <div className="pointer-events-none absolute inset-6 border-2 border-emerald-400/80 rounded-xl shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
-              </div>
-              {scannerError && (
-                <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 p-2.5 rounded-xl font-medium">{scannerError}</p>
-              )}
-              <form
-                onSubmit={e => {
-                  e.preventDefault();
-                  handleBarcodeDetected(manualBarcodeInput);
-                }}
-                className="flex gap-2"
-              >
-                <input
-                  type="text"
-                  value={manualBarcodeInput}
-                  onChange={e => setManualBarcodeInput(e.target.value)}
-                  placeholder="או הקלד מספר דאנאק / ברקוד..."
-                  className="flex-1 p-2.5 border border-slate-200 rounded-xl text-sm"
-                  dir="ltr"
-                />
-                <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold">אתר</button>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Payment Link & QR Code Modal */}
-      {paymentModalData && (() => {
-        const activeUrl = selectedPaymentChannel === 'paybox'
-          ? (paymentLinks.paybox || DEFAULT_PAYBOX_LINK)
-          : (paymentLinks.creditBit || DEFAULT_CREDIT_BIT_LINK);
-
-        const payText = `📚 *${paymentModalData.title} — הוצאת ספרי ישיבת ירוחם*\n` +
-          (paymentModalData.buyer ? `לכבוד: ${paymentModalData.buyer}\n` : '') +
-          `\n${paymentModalData.items.map((x, i) => `${i + 1}. ${x}`).join('\n')}\n\n` +
-          `*סה"כ לתשלום: ₪${Number(paymentModalData.total).toLocaleString()}*\n\n` +
-          `💳 *לתשלום באשראי / ביט:*\n${paymentLinks.creditBit || DEFAULT_CREDIT_BIT_LINK}\n\n` +
-          `📱 *לתשלום בפייבוקס (PayBox):*\n${paymentLinks.paybox || DEFAULT_PAYBOX_LINK}`;
-
-        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(activeUrl)}`;
-
-        return (
-          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[95] flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md overflow-hidden" dir="rtl">
-              <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
-                <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><QrCode className="w-5 h-5 text-indigo-600" /> קישורי תשלום וברקוד QR</h3>
-                <button onClick={() => setPaymentModalData(null)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
-              </div>
-              <div className="p-5 space-y-4 text-center">
-                <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-2xl">
-                  <span className="text-xs text-emerald-800 font-bold block">סכום לגבייה</span>
-                  <span className="text-3xl font-extrabold text-emerald-700">₪{Number(paymentModalData.total).toLocaleString()}</span>
-                </div>
-
-                {/* בחירת אמצעי תשלום להצגת ברקוד QR */}
-                <div className="grid grid-cols-2 gap-1.5 bg-slate-100 p-1 rounded-xl">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPaymentChannel('creditBit')}
-                    className={`py-2 rounded-lg text-xs font-bold transition-all ${selectedPaymentChannel === 'creditBit' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'}`}
-                  >
-                    💳 סליקת אשראי / ביט
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPaymentChannel('paybox')}
-                    className={`py-2 rounded-lg text-xs font-bold transition-all ${selectedPaymentChannel === 'paybox' ? 'bg-white text-sky-700 shadow-xs' : 'text-slate-600'}`}
-                  >
-                    📱 פייבוקס (PayBox)
-                  </button>
-                </div>
-
-                <div className="bg-white p-3 rounded-2xl ring-1 ring-slate-200 inline-block mx-auto">
-                  <img src={qrUrl} alt="QR לתשלום" className="w-40 h-40 mx-auto rounded-lg" />
-                  <p className="text-[11px] font-bold text-slate-500 mt-1.5">
-                    {selectedPaymentChannel === 'creditBit' ? 'סרוק לתשלום באשראי או בביט' : 'סרוק לתשלום בפייבוקס'}
-                  </p>
-                </div>
-
-                <div className="text-right space-y-2 bg-slate-50/90 p-3 rounded-2xl ring-1 ring-slate-200/70">
-                  <div>
-                    <label className="block text-[11px] font-bold text-indigo-700 mb-0.5">קישור סליקת אשראי / ביט:</label>
-                    <input
-                      type="url"
-                      value={paymentLinks.creditBit}
-                      onChange={e => setPaymentLinks(prev => ({ ...prev, creditBit: e.target.value }))}
-                      className="w-full p-2 border border-slate-200 rounded-xl text-xs bg-white"
-                      dir="ltr"
-                    />
+              {printDoc.signatureData && (
+                <div className="border-t pt-4 mt-4 flex items-center justify-between gap-4">
+                  <div className="text-xs text-slate-600">
+                    <p className="font-extrabold text-slate-900">אישור קבלת סחורה בחתימה דיגיטלית</p>
+                    <p>שם החותם: <strong>{printDoc.signerName || printDoc.recipient}</strong></p>
+                    <p>תאריך ושעה: {printDoc.signedAt}</p>
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-sky-700 mb-0.5">קישור פייבוקס (PayBox):</label>
-                    <input
-                      type="url"
-                      value={paymentLinks.paybox}
-                      onChange={e => setPaymentLinks(prev => ({ ...prev, paybox: e.target.value }))}
-                      className="w-full p-2 border border-slate-200 rounded-xl text-xs bg-white"
-                      dir="ltr"
-                    />
+                  <div className="border border-slate-300 rounded-xl p-2 bg-white">
+                    <img src={printDoc.signatureData} alt="חתימת ספק" className="h-16 object-contain" />
                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <a
-                    href={`https://wa.me/?text=${encodeURIComponent(payText)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
-                  >
-                    <Share2 className="w-4 h-4" /> שלח קישורים בוואטסאפ
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard?.writeText(payText);
-                      showToast('פרטי התשלום ושני הקישורים הועתקו!', 'success');
-                    }}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
-                  >
-                    <Copy className="w-4 h-4" /> העתק הודעה
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Daily Summary Report Modal */}
-      {isDailyReportOpen && (() => {
-        const summaryText =
-          `📊 *דוח סיכום מכירות יומי — הוצאת ספרי ישיבת ירוחם*\n` +
-          `תאריך: ${dailySummaryData.dateLabel}\n\n` +
-          `• מכירות בדוכן (קופה): ${dailySummaryData.posCount} עסקאות — ₪${dailySummaryData.posTotal.toLocaleString()}\n` +
-          `  (מזומן: ₪${dailySummaryData.byPayment['מזומן'].toLocaleString()} | ביט: ₪${dailySummaryData.byPayment['ביט'].toLocaleString()} | פייבוקס: ₪${dailySummaryData.byPayment['פייבוקס'].toLocaleString()} | אשראי: ₪${dailySummaryData.byPayment['אשראי'].toLocaleString()})\n` +
-          `• הזמנות מהאתר היום: ${dailySummaryData.ordersCount} הזמנות — ₪${dailySummaryData.webTotal.toLocaleString()}\n` +
-          `\n*סה"כ פדיון יומי: ₪${dailySummaryData.grandTotal.toLocaleString()}*\n` +
-          (dailySummaryData.booksSold.length > 0
-            ? `\n📚 *ספרים שיצאו היום:*\n${dailySummaryData.booksSold.map(b => `- ${b.title}: ${b.qty} עותקים`).join('\n')}`
-            : '\nלא נרשמו מכירות ספרים היום.');
-
-        return (
-          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[95] flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-lg overflow-hidden" dir="rtl">
-              <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
-                <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><FileText className="w-5 h-5 text-indigo-600" /> דוח סיכום יומי ({dailySummaryData.dateLabel})</h3>
-                <button onClick={() => setIsDailyReportOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
-              </div>
-              <div className="p-5 space-y-4">
-                <div className="grid grid-cols-3 gap-2.5 text-center">
-                  <div className="bg-indigo-50 p-3 rounded-2xl">
-                    <span className="text-[11px] text-indigo-700 font-bold block">קופת דוכן</span>
-                    <span className="text-lg font-extrabold text-indigo-900">₪{dailySummaryData.posTotal.toLocaleString()}</span>
-                  </div>
-                  <div className="bg-purple-50 p-3 rounded-2xl">
-                    <span className="text-[11px] text-purple-700 font-bold block">אתר הישיבה</span>
-                    <span className="text-lg font-extrabold text-purple-900">₪{dailySummaryData.webTotal.toLocaleString()}</span>
-                  </div>
-                  <div className="bg-emerald-50 p-3 rounded-2xl">
-                    <span className="text-[11px] text-emerald-700 font-bold block">סה"כ יומי</span>
-                    <span className="text-lg font-extrabold text-emerald-700">₪{dailySummaryData.grandTotal.toLocaleString()}</span>
-                  </div>
-                </div>
-                <textarea readOnly rows="9" value={summaryText} className="w-full p-3.5 border border-slate-200 rounded-2xl bg-slate-50 text-xs leading-relaxed" />
-                <div className="grid grid-cols-2 gap-2">
-                  <a
-                    href={`https://wa.me/?text=${encodeURIComponent(summaryText)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
-                  >
-                    <MessageCircle className="w-4 h-4" /> שלח דוח בוואטסאפ
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard?.writeText(summaryText);
-                      showToast('דוח הסיכום היומי הועתק!', 'success');
-                    }}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
-                  >
-                    <Copy className="w-4 h-4" /> העתק דוח
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Authors Royalties Modal */}
-      {isRoyaltiesModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[95] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-xl overflow-hidden" dir="rtl">
-            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
-              <div>
-                <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Percent className="w-5 h-5 text-purple-600" /> חישוב תמלוגים וחשבונות מחברים</h3>
-                <p className="text-xs text-slate-500 mt-0.5">הגדר אחוז תמלוג לכל ספר בעריכת הספר שבמלאי</p>
-              </div>
-              <button onClick={() => setIsRoyaltiesModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="p-5 max-h-[65vh] overflow-y-auto space-y-4">
-              {salesAnalytics.royaltyRows.length === 0 ? (
-                <div className="bg-slate-50 rounded-2xl p-6 text-center text-xs text-slate-500 space-y-1">
-                  <p className="font-bold text-slate-700">אין עדיין ספרים עם אחוז תמלוג פעיל שנמכרו.</p>
-                  <p>כדי להפעיל חישוב תמלוגים, ערוך ספר בלשונית "ניהול מלאי" והזן ערך בשדה "תמלוג למחבר (%)".</p>
-                </div>
-              ) : (
-                <>
-                  <table className="w-full text-right text-xs">
-                    <thead className="bg-slate-50 border-b text-slate-500">
-                      <tr>
-                        <th className="p-2.5">ספר / מחבר</th>
-                        <th className="p-2.5 text-center">נמכרו</th>
-                        <th className="p-2.5 text-center">הכנסה</th>
-                        <th className="p-2.5 text-center">תמלוג</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {salesAnalytics.royaltyRows.map(r => (
-                        <tr key={r.id}>
-                          <td className="p-2.5">
-                            <span className="font-bold text-slate-800 block">{r.title}</span>
-                            <span className="text-slate-400">{r.author} ({r.royaltyPct}%)</span>
-                          </td>
-                          <td className="p-2.5 text-center font-bold">{r.units}</td>
-                          <td className="p-2.5 text-center">₪{Math.round(r.revenue).toLocaleString()}</td>
-                          <td className="p-2.5 text-center font-extrabold text-purple-700">₪{r.royaltyDue.toLocaleString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className="bg-purple-50 ring-1 ring-purple-200 p-3.5 rounded-2xl flex justify-between items-center font-extrabold text-purple-900 text-sm">
-                    <span>סה"כ תמלוגים לתשלום:</span>
-                    <span>₪{salesAnalytics.totalRoyaltiesDue.toLocaleString()}</span>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Customers & Alumni CRM + Shipping Labels Modal */}
-      {isCustomersModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[95] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
-            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
-              <div>
-                <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Users className="w-5 h-5 text-sky-600" /> לקוחות קבועים, בוגרים ומדבקות משלוח</h3>
-                <p className="text-xs text-slate-500 mt-0.5">שמור פרטי קונים חוזרים והדפס מדבקות כתובת למשלוחים בלחיצה</p>
-              </div>
-              <button onClick={() => setIsCustomersModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="p-5 overflow-y-auto space-y-4 flex-1">
-              {userRole === 'admin' && (
-                <form onSubmit={handleAddCustomer} className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-sky-50/60 p-4 rounded-2xl ring-1 ring-sky-200/80">
-                  <input required placeholder="שם מלא *" value={customerForm.name} onChange={e => setCustomerForm({ ...customerForm, name: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white font-bold" />
-                  <input placeholder="טלפון לוואטסאפ" value={customerForm.phone} onChange={e => setCustomerForm({ ...customerForm, phone: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white" dir="ltr" />
-                  <input placeholder="כתובת מלאה למשלוח (עיר, רחוב, מיקוד)" value={customerForm.address} onChange={e => setCustomerForm({ ...customerForm, address: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white sm:col-span-2" />
-                  <select value={customerForm.category} onChange={e => setCustomerForm({ ...customerForm, category: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white">
-                    <option value="בוגר ישיבה">בוגר ישיבה</option>
-                    <option value="תלמיד / אברך">תלמיד / אברך</option>
-                    <option value="מנוי קבוע">מנוי קבוע</option>
-                    <option value="ידיד / תורם">ידיד / תורם</option>
-                  </select>
-                  <button type="submit" className="bg-sky-600 hover:bg-sky-700 text-white py-2.5 px-4 rounded-xl text-xs font-bold">+ הוסף לרשימה</button>
-                </form>
-              )}
-
-              {customersList.length === 0 ? (
-                <p className="text-center text-slate-400 text-xs py-8">עדיין לא נשמרו לקוחות ברשימה.</p>
-              ) : (
-                <div className="space-y-2">
-                  {customersList.map(cust => (
-                    <div key={cust.id} className="p-3.5 bg-slate-50/90 rounded-2xl ring-1 ring-slate-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-extrabold text-slate-900 text-sm">{cust.name}</span>
-                          <span className="text-[10px] font-bold bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full">{cust.category}</span>
-                        </div>
-                        <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-3">
-                          {cust.phone && <span>📞 {cust.phone}</span>}
-                          {cust.address && <span>📍 {cust.address}</span>}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsCustomersModalOpen(false);
-                            setPrintDoc({
-                              type: 'packing_slip',
-                              docTitle: 'מדבקת משלוח לנמען',
-                              orderId: String(Date.now()).slice(-4),
-                              date: new Date().toLocaleDateString('he-IL'),
-                              recipient: `${cust.name}${cust.phone ? ` | טל': ${cust.phone}` : ''}${cust.address ? ` | כתובת: ${cust.address}` : ''}`,
-                              items: [{ name: 'משלוח ספרי הוצאת ישיבת ירוחם', quantity: 1 }]
-                            });
-                          }}
-                          className="bg-white hover:bg-slate-100 text-slate-700 ring-1 ring-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1"
-                        >
-                          <Printer className="w-3.5 h-3.5" /> מדבקת משלוח
-                        </button>
-                        {userRole === 'admin' && (
-                          <button type="button" onClick={() => handleDeleteCustomer(cust)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded-xl"><Trash2 className="w-4 h-4" /></button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
                 </div>
               )}
             </div>
@@ -7208,6 +7006,635 @@ export default function App() {
           </div>
         );
       })()}
+
+      {/* כרטסת ספר 360° — מגירה צדדית (Slide-Over Drawer) */}
+      {drawerBook360 && (() => {
+        const liveBook = inventoryList.find(b => b.id === drawerBook360.id) || drawerBook360;
+        const totalStock = calculateTotalStock(liveBook);
+        const effPrices = getEffectiveBookPrices(liveBook);
+        const seriesBadge = getBookSeriesBadge(liveBook.title);
+        const normTarget = normalizeBookTitle(liveBook.title);
+
+        let soldPos = 0;
+        posSales.forEach(s => (s.items || []).forEach(it => {
+          if (it.bookId === liveBook.id || normalizeBookTitle(it.title) === normTarget) soldPos += Number(it.qty || 0);
+        }));
+        let soldWeb = 0;
+        ordersList.filter(o => !o.isTest).forEach(o => (o.items || []).forEach(it => {
+          if (normalizeBookTitle(it.name) === normTarget) soldWeb += Number(it.quantity || 0);
+        }));
+        let soldSuppliers = 0;
+        supplierLogs.filter(l => l.type !== 'return').forEach(log => {
+          String(log.details || '').split('\n').forEach(line => {
+            const m = line.match(/^\d+\.\s*(.+?)\s*[—–-]\s*(\d+)\s*עותקים/);
+            if (m && normalizeBookTitle(m[1]) === normTarget) soldSuppliers += Number(m[2] || 0);
+          });
+        });
+
+        const totalSoldAllChannels = soldPos + soldWeb + soldSuppliers;
+        const estimatedDailyRate = totalSoldAllChannels > 0 ? Math.max(0.1, totalSoldAllChannels / 60) : 0;
+        const estimatedDaysLeft = estimatedDailyRate > 0 ? Math.round(totalStock / estimatedDailyRate) : null;
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-[95] flex justify-end" onClick={() => setDrawerBook360(null)}>
+            <div className="animate-drawer-slide bg-white w-full max-w-lg h-full shadow-2xl flex flex-col overflow-hidden" dir="rtl" onClick={e => e.stopPropagation()}>
+              <div className="p-5 border-b bg-gradient-to-l from-indigo-900 to-slate-900 text-white flex justify-between items-start shrink-0">
+                <div>
+                  <span className="text-[11px] font-bold text-indigo-300 uppercase tracking-wider">כרטסת ספר 360°</span>
+                  <h3 className="text-xl font-extrabold mt-0.5 leading-snug">{liveBook.title}</h3>
+                  <p className="text-xs text-slate-300 mt-1">{liveBook.author || 'הוצאת ישיבת ירוחם'} {seriesBadge ? `· סדרת ${seriesBadge.label}` : ''}</p>
+                </div>
+                <button onClick={() => setDrawerBook360(null)} className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white"><X className="w-4 h-4" /></button>
+              </div>
+
+              <div className="p-5 overflow-y-auto space-y-5 flex-1">
+                <div className="grid grid-cols-3 gap-2.5 text-center">
+                  <div className="bg-indigo-50 p-3 rounded-2xl ring-1 ring-indigo-100">
+                    <span className="text-[11px] font-bold text-indigo-700 block">במחסן הראשי</span>
+                    <span className="text-2xl font-extrabold text-indigo-900">{Number(liveBook.publisherStock || 0).toLocaleString()}</span>
+                  </div>
+                  <div className="bg-emerald-50 p-3 rounded-2xl ring-1 ring-emerald-100">
+                    <span className="text-[11px] font-bold text-emerald-700 block">אצל ספקים</span>
+                    <span className="text-2xl font-extrabold text-emerald-900">{calculateSuppliersStock(liveBook).toLocaleString()}</span>
+                  </div>
+                  <div className="bg-purple-50 p-3 rounded-2xl ring-1 ring-purple-100">
+                    <span className="text-[11px] font-bold text-purple-700 block">סה"כ נמכרו</span>
+                    <span className="text-2xl font-extrabold text-purple-900">{totalSoldAllChannels.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {/* תחזית אזילת מלאי אוטומטית */}
+                <div className="bg-amber-50/80 border border-amber-200 p-4 rounded-2xl space-y-1">
+                  <h4 className="font-extrabold text-amber-900 text-xs flex items-center gap-1.5">
+                    <TrendingUp className="w-4 h-4 text-amber-600" /> תחזית קצב מכירה ואזילת מלאי
+                  </h4>
+                  {estimatedDaysLeft !== null ? (
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      לפי קצב המכירה הנוכחי (~{estimatedDailyRate.toFixed(1)} עותקים ליום), המלאי הקיים יספיק לכ-<strong>{estimatedDaysLeft} ימים</strong>.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-amber-800">עדיין אין מספיק נתוני מכירה לחישוב תחזית ימים עד אזילה.</p>
+                  )}
+                </div>
+
+                {/* התפלגות מכירות לפי ערוצים */}
+                <div className="bg-slate-50/90 p-4 rounded-2xl ring-1 ring-slate-200/70 space-y-2 text-xs">
+                  <h4 className="font-extrabold text-slate-800">התפלגות מכירות מתועדות</h4>
+                  <div className="flex justify-between"><span>מכירות בדוכן (קופה):</span><strong>{soldPos} עותקים</strong></div>
+                  <div className="flex justify-between"><span>הזמנות מהאתר:</span><strong>{soldWeb} עותקים</strong></div>
+                  <div className="flex justify-between"><span>אספקה ומכירות ספקים:</span><strong>{soldSuppliers} עותקים</strong></div>
+                  <div className="border-t pt-2 mt-2 flex justify-between text-slate-600">
+                    <span>עלות הפקה לעותק: <strong>₪{Number(liveBook.productionCost || 0).toFixed(2)}</strong></span>
+                    <span>מחירון: <strong>₪{effPrices.general} / ₪{effPrices.supplier} / ₪{effPrices.yeshiva}</strong></span>
+                  </div>
+                </div>
+
+                {/* מלאי אצל ספקים */}
+                <div className="space-y-2">
+                  <h4 className="font-extrabold text-slate-800 text-xs">פירוט מלאי אצל ספקים וחנויות</h4>
+                  {(liveBook.breakdown || []).filter(r => Number(r.amount) > 0).length === 0 ? (
+                    <p className="text-xs text-slate-400 bg-slate-50 p-3 rounded-xl">אין עותקים אצל ספקים כרגע.</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {(liveBook.breakdown || []).filter(r => Number(r.amount) > 0).map((r, i) => (
+                        <div key={i} className="flex justify-between items-center p-2.5 bg-slate-50 rounded-xl text-xs">
+                          <span className="font-bold text-slate-700">{r.location}</span>
+                          <span className="bg-indigo-100 text-indigo-800 font-extrabold px-2.5 py-0.5 rounded-lg">{r.amount} עותקים</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* היסטוריית מהדורות */}
+                <div className="space-y-2">
+                  <h4 className="font-extrabold text-slate-800 text-xs">היסטוריית הדפסות ומהדורות</h4>
+                  <div className="space-y-1.5">
+                    {(liveBook.editions || []).map((ed, i) => (
+                      <div key={i} className="flex justify-between items-center p-2.5 bg-slate-50 rounded-xl text-xs">
+                        <span className="font-bold text-slate-700">{ed.name}</span>
+                        <span className="text-slate-500">{ed.printRun ? `${Number(ed.printRun).toLocaleString()} עותקים` : 'מהדורה קיימת'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {userRole === 'admin' && (
+                <div className="p-4 border-t bg-slate-50/80 flex gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = liveBook;
+                      setDrawerBook360(null);
+                      setEditingBook({
+                        ...target,
+                        prices: { catalog: 0, general: 0, supplier: 0, yeshiva: 0, yeshivaGuest: target.prices?.yeshiva || 0, ...(target.prices || {}) },
+                        editions: target.editions?.length ? target.editions : [{ name: 'מהדורה 1', printRun: 0 }],
+                        breakdown: target.breakdown || []
+                      });
+                    }}
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
+                  >
+                    <Edit className="w-4 h-4" /> ערוך פרטי ספר ומחירים
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* מודאל חתימה דיגיטלית של ספק על תעודת משלוח */}
+      {signatureModalTarget && (
+        <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
+              <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><PenTool className="w-5 h-5 text-emerald-600" /> חתימה דיגיטלית על קבלת משלוח</h3>
+              <button onClick={() => setSignatureModalTarget(null)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-5 space-y-3.5">
+              <p className="text-xs text-slate-500">חתום באצבע או בעכבר בתוך המסגרת לאישור קבלת הספרים ({signatureModalTarget.recipient}):</p>
+              <div className="border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50 overflow-hidden touch-none">
+                <canvas
+                  ref={signatureCanvasRef}
+                  width={380}
+                  height={160}
+                  className="w-full h-40 block cursor-crosshair"
+                  onMouseDown={e => {
+                    const canvas = signatureCanvasRef.current;
+                    if (!canvas) return;
+                    const rect = canvas.getBoundingClientRect();
+                    const ctx = canvas.getContext('2d');
+                    ctx.lineWidth = 2.5;
+                    ctx.lineCap = 'round';
+                    ctx.strokeStyle = '#0F172A';
+                    ctx.beginPath();
+                    ctx.moveTo(((e.clientX - rect.left) / rect.width) * canvas.width, ((e.clientY - rect.top) / rect.height) * canvas.height);
+                    isDrawingSigRef.current = true;
+                  }}
+                  onMouseMove={e => {
+                    if (!isDrawingSigRef.current || !signatureCanvasRef.current) return;
+                    const canvas = signatureCanvasRef.current;
+                    const rect = canvas.getBoundingClientRect();
+                    const ctx = canvas.getContext('2d');
+                    ctx.lineTo(((e.clientX - rect.left) / rect.width) * canvas.width, ((e.clientY - rect.top) / rect.height) * canvas.height);
+                    ctx.stroke();
+                  }}
+                  onMouseUp={() => { isDrawingSigRef.current = false; }}
+                  onMouseLeave={() => { isDrawingSigRef.current = false; }}
+                  onTouchStart={e => {
+                    const canvas = signatureCanvasRef.current;
+                    const touch = e.touches?.[0];
+                    if (!canvas || !touch) return;
+                    const rect = canvas.getBoundingClientRect();
+                    const ctx = canvas.getContext('2d');
+                    ctx.lineWidth = 2.5;
+                    ctx.lineCap = 'round';
+                    ctx.strokeStyle = '#0F172A';
+                    ctx.beginPath();
+                    ctx.moveTo(((touch.clientX - rect.left) / rect.width) * canvas.width, ((touch.clientY - rect.top) / rect.height) * canvas.height);
+                    isDrawingSigRef.current = true;
+                  }}
+                  onTouchMove={e => {
+                    const touch = e.touches?.[0];
+                    if (!isDrawingSigRef.current || !signatureCanvasRef.current || !touch) return;
+                    const canvas = signatureCanvasRef.current;
+                    const rect = canvas.getBoundingClientRect();
+                    const ctx = canvas.getContext('2d');
+                    ctx.lineTo(((touch.clientX - rect.left) / rect.width) * canvas.width, ((touch.clientY - rect.top) / rect.height) * canvas.height);
+                    ctx.stroke();
+                  }}
+                  onTouchEnd={() => { isDrawingSigRef.current = false; }}
+                />
+              </div>
+              <div className="flex justify-between items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const canvas = signatureCanvasRef.current;
+                    if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+                  }}
+                  className="text-xs font-bold text-slate-500 hover:text-rose-600 px-3 py-2"
+                >
+                  נקה חתימה
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const canvas = signatureCanvasRef.current;
+                    if (!canvas) return;
+                    const dataUrl = canvas.toDataURL('image/png');
+                    signatureModalTarget.onSave(dataUrl, signatureModalTarget.recipient);
+                    setSignatureModalTarget(null);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-xs"
+                >
+                  אשר והטמע חתימה
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* מודאל שחרור מצב קיוסק (סיסמת מנהל/משתמש) */}
+      {isKioskUnlockOpen && (
+        <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-sm overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
+              <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Unlock className="w-5 h-5 text-amber-600" /> שחרור נעילת דוכן (קיוסק)</h3>
+              <button onClick={() => setIsKioskUnlockOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
+            </div>
+            <form
+              onSubmit={e => {
+                e.preventDefault();
+                if (kioskUnlockPass === currentUser?.password || usersList.some(u => u.role === 'admin' && u.password === kioskUnlockPass)) {
+                  setIsKioskMode(false);
+                  setIsKioskUnlockOpen(false);
+                  setKioskUnlockPass('');
+                  showToast('מצב הניהול שוחרר בהצלחה!', 'success');
+                } else {
+                  showToast('סיסמה שגויה — לא ניתן לשחרר נעילה.', 'error');
+                }
+              }}
+              className="p-5 space-y-3.5"
+            >
+              <p className="text-xs text-slate-600">הזן את סיסמת המשתמש שלך כדי לחזור למערכת הניהול המלאה:</p>
+              <input
+                required
+                type="password"
+                autoFocus
+                value={kioskUnlockPass}
+                onChange={e => setKioskUnlockPass(e.target.value)}
+                placeholder="סיסמת מנהל / משתמש..."
+                className="w-full p-3 border border-slate-200 rounded-xl text-sm"
+                dir="ltr"
+              />
+              <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl text-xs font-bold">שחרר נעילה</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* מודאל קישור וברקוד QR לתשלום (פייבוקס + סליקת אשראי/ביט) */}
+      {paymentModalData && (() => {
+        const activeLink = selectedPaymentChannel === 'paybox'
+          ? (paymentLinks.paybox || DEFAULT_PAYBOX_LINK)
+          : (paymentLinks.creditBit || DEFAULT_CREDIT_BIT_LINK);
+        const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(activeLink)}`;
+        const whatsappMsg =
+          `📚 *${paymentModalData.title} — הוצאת ספרי ישיבת ירוחם*\n` +
+          `${paymentModalData.buyer ? `לכבוד: ${paymentModalData.buyer}\n` : ''}` +
+          `\n${(paymentModalData.items || []).join('\n')}\n\n` +
+          `*סה"כ לתשלום: ₪${Number(paymentModalData.total || 0).toLocaleString()}*\n\n` +
+          `💳 *לתשלום באשראי / ביט:*\n${paymentLinks.creditBit || DEFAULT_CREDIT_BIT_LINK}\n\n` +
+          `📱 *לתשלום בפייבוקס (PayBox):*\n${paymentLinks.paybox || DEFAULT_PAYBOX_LINK}`;
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+              <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
+                <div>
+                  <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><QrCode className="w-5 h-5 text-indigo-600" /> קישור וברקוד QR לתשלום</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">סרוק במקום או שלח ללקוח בוואטסאפ</p>
+                </div>
+                <button onClick={() => setPaymentModalData(null)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="p-5 overflow-y-auto space-y-4 flex-1 text-center">
+                <div className="bg-emerald-50 ring-1 ring-emerald-200 p-3.5 rounded-2xl">
+                  <span className="text-xs font-bold text-emerald-800 block">סכום לתשלום</span>
+                  <span className="text-3xl font-black text-emerald-700">₪{Number(paymentModalData.total || 0).toLocaleString()}</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5 bg-slate-100 p-1.5 rounded-2xl">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentChannel('creditBit')}
+                    className={`py-2 rounded-xl text-xs font-extrabold transition-all ${selectedPaymentChannel === 'creditBit' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'}`}
+                  >
+                    סליקת אשראי / ביט
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentChannel('paybox')}
+                    className={`py-2 rounded-xl text-xs font-extrabold transition-all ${selectedPaymentChannel === 'paybox' ? 'bg-white text-sky-700 shadow-xs' : 'text-slate-600'}`}
+                  >
+                    פייבוקס (PayBox)
+                  </button>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl ring-1 ring-slate-200 inline-block shadow-xs">
+                  <img src={qrImgUrl} alt="QR לתשלום" className="w-48 h-48 mx-auto rounded-xl" />
+                  <p className="text-[11px] font-bold text-slate-500 mt-2">
+                    {selectedPaymentChannel === 'paybox' ? 'סריקה לתשלום מהיר בפייבוקס' : 'סריקה לתשלום באשראי או ביט'}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 bg-slate-50 p-2.5 rounded-xl ring-1 ring-slate-200 text-right">
+                  <input readOnly value={activeLink} className="flex-1 bg-transparent text-xs font-mono text-indigo-700 outline-none" dir="ltr" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(activeLink);
+                      showToast('קישור התשלום הועתק!', 'success');
+                    }}
+                    className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold shrink-0"
+                  >
+                    העתק
+                  </button>
+                </div>
+
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(whatsappMsg)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-2xl font-extrabold text-xs flex items-center justify-center gap-2 shadow-md"
+                >
+                  <Share2 className="w-4 h-4" /> שלח פירוט + שני קישורי תשלום בוואטסאפ
+                </a>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* מודאל דוח סיכום יומי אוטומטי */}
+      {isDailyReportOpen && (() => {
+        const reportText =
+          `📊 *דוח סיכום מכירות יומי — הוצאת ספרי ישיבת ירוחם*\n` +
+          `תאריך: ${dailySummaryData.dateLabel}\n\n` +
+          `💰 *סה"כ פדיון יומי: ₪${dailySummaryData.grandTotal.toLocaleString()}*\n` +
+          `• מכירות בדוכן (${dailySummaryData.posCount} עסקאות): ₪${dailySummaryData.posTotal.toLocaleString()}\n` +
+          `• הזמנות מהאתר (${dailySummaryData.ordersCount} הזמנות): ₪${dailySummaryData.webTotal.toLocaleString()}\n\n` +
+          `💳 *פירוט אמצעי תשלום בדוכן:*\n` +
+          Object.entries(dailySummaryData.byPayment).map(([k, v]) => `• ${k}: ₪${Number(v).toLocaleString()}`).join('\n') +
+          `\n\n📚 *ספרים שיצאו היום:*\n` +
+          (dailySummaryData.booksSold.length > 0
+            ? dailySummaryData.booksSold.map(b => `• ${b.title} — ${b.qty} עותקים`).join('\n')
+            : '• לא נרשמו מכירות ספרים היום');
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[95] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-lg overflow-hidden" dir="rtl">
+              <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
+                <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><FileText className="w-5 h-5 text-sky-600" /> דוח סיכום יומי ({dailySummaryData.dateLabel})</h3>
+                <button onClick={() => setIsDailyReportOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="p-5 space-y-4">
+                <div className="grid grid-cols-3 gap-2.5 text-center">
+                  <div className="bg-emerald-50 p-3 rounded-2xl ring-1 ring-emerald-200">
+                    <span className="text-[11px] font-bold text-emerald-700 block">סה"כ יומי</span>
+                    <span className="text-xl font-black text-emerald-900">₪{dailySummaryData.grandTotal.toLocaleString()}</span>
+                  </div>
+                  <div className="bg-indigo-50 p-3 rounded-2xl ring-1 ring-indigo-200">
+                    <span className="text-[11px] font-bold text-indigo-700 block">דוכן ({dailySummaryData.posCount})</span>
+                    <span className="text-xl font-black text-indigo-900">₪{dailySummaryData.posTotal.toLocaleString()}</span>
+                  </div>
+                  <div className="bg-purple-50 p-3 rounded-2xl ring-1 ring-purple-200">
+                    <span className="text-[11px] font-bold text-purple-700 block">אתר ({dailySummaryData.ordersCount})</span>
+                    <span className="text-xl font-black text-purple-900">₪{dailySummaryData.webTotal.toLocaleString()}</span>
+                  </div>
+                </div>
+                <textarea readOnly rows="9" value={reportText} className="w-full p-3.5 border border-slate-200 rounded-2xl bg-slate-50 text-xs leading-relaxed" />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(reportText);
+                      showToast('הדוח היומי הועתק לוואטסאפ!', 'success');
+                    }}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
+                  >
+                    <Copy className="w-4 h-4" /> העתק לוואטסאפ
+                  </button>
+                  <a
+                    href={`https://wa.me/?text=${encodeURIComponent(reportText)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
+                  >
+                    <Send className="w-4 h-4" /> שלח בוואטסאפ
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* מודאל ניהול תמלוגי מחברים */}
+      {isRoyaltiesModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[95] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Percent className="w-5 h-5 text-purple-600" /> חישוב תמלוגי מחברים</h3>
+                <p className="text-xs text-slate-500 mt-0.5">מחושב אוטומטית לפי אחוז התמלוג שהוגדר לכל ספר והמכירות בפועל</p>
+              </div>
+              <button onClick={() => setIsRoyaltiesModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-5 overflow-y-auto space-y-4 flex-1">
+              {salesAnalytics.royaltyRows.length === 0 ? (
+                <div className="bg-slate-50 p-8 rounded-2xl text-center text-xs text-slate-500 space-y-1">
+                  <p className="font-bold text-slate-700">אין כרגע תמלוגים לתשלום</p>
+                  <p>כדי להפעיל חישוב תמלוגים, ערוך ספר במלאי והזן לו אחוז תמלוג למחבר.</p>
+                </div>
+              ) : (
+                <table className="w-full text-right text-xs ring-1 ring-slate-200 rounded-2xl overflow-hidden">
+                  <thead className="bg-slate-50 border-b text-slate-600">
+                    <tr>
+                      <th className="p-3">ספר</th>
+                      <th className="p-3">מחבר</th>
+                      <th className="p-3 text-center">נמכרו</th>
+                      <th className="p-3 text-center">הכנסות</th>
+                      <th className="p-3 text-center">% תמלוג</th>
+                      <th className="p-3 text-center">לתשלום</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {salesAnalytics.royaltyRows.map(r => (
+                      <tr key={r.id}>
+                        <td className="p-3 font-bold text-slate-800">{r.title}</td>
+                        <td className="p-3 text-slate-600">{r.author}</td>
+                        <td className="p-3 text-center">{r.units}</td>
+                        <td className="p-3 text-center">₪{Math.round(r.revenue).toLocaleString()}</td>
+                        <td className="p-3 text-center font-bold text-purple-700">{r.royaltyPct}%</td>
+                        <td className="p-3 text-center font-extrabold text-emerald-700">₪{r.royaltyDue.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <div className="bg-purple-50 ring-1 ring-purple-200 p-4 rounded-2xl flex justify-between items-center font-extrabold text-purple-900">
+                <span>סה"כ תמלוגים צבורים:</span>
+                <span className="text-xl">₪{salesAnalytics.totalRoyaltiesDue.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* מודאל סורק ברקוד / דאנאק */}
+      {scannerTarget && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
+              <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Camera className="w-5 h-5 text-indigo-600" /> סריקת ברקוד / דאנאק</h3>
+              <button onClick={() => setScannerTarget(null)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="bg-slate-950 rounded-2xl overflow-hidden aspect-video flex items-center justify-center relative">
+                <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+              </div>
+              {scannerError && <p className="text-xs text-amber-700 bg-amber-50 p-3 rounded-xl font-bold">{scannerError}</p>}
+              <form
+                onSubmit={e => {
+                  e.preventDefault();
+                  handleBarcodeDetected(manualBarcodeInput);
+                }}
+                className="flex gap-2"
+              >
+                <input
+                  type="text"
+                  value={manualBarcodeInput}
+                  onChange={e => setManualBarcodeInput(e.target.value)}
+                  placeholder="או הקלד מספר דאנאק / שם ספר..."
+                  className="flex-1 p-2.5 border border-slate-200 rounded-xl text-sm"
+                />
+                <button type="submit" className="bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold">אתר</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* מודאל ניהול לקוחות קבועים ובוגרים (CRM) */}
+      {isCustomersModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[95] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Users className="w-5 h-5 text-sky-600" /> לקוחות קבועים ובוגרים ({customersList.length})</h3>
+                <p className="text-xs text-slate-500 mt-0.5">שמירת פרטי בוגרים וקונים קבועים לבחירה מהירה בקופה ולהדפסת מדבקות משלוח</p>
+              </div>
+              <button onClick={() => setIsCustomersModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-5 overflow-y-auto space-y-4 flex-1">
+              {userRole === 'admin' && (
+                <form onSubmit={handleAddCustomer} className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-slate-50/90 p-4 rounded-2xl ring-1 ring-slate-200/70">
+                  <input required placeholder="שם מלא *" value={customerForm.name} onChange={e => setCustomerForm({ ...customerForm, name: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white" />
+                  <input placeholder="טלפון" value={customerForm.phone} onChange={e => setCustomerForm({ ...customerForm, phone: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white" dir="ltr" />
+                  <input placeholder="כתובת למשלוח" value={customerForm.address} onChange={e => setCustomerForm({ ...customerForm, address: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white" />
+                  <select value={customerForm.category} onChange={e => setCustomerForm({ ...customerForm, category: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white font-bold">
+                    <option value="בוגר ישיבה">בוגר ישיבה</option>
+                    <option value="תלמיד">תלמיד</option>
+                    <option value="ידיד / תורם">ידיד / תורם</option>
+                    <option value="מוסד / ישיבה">מוסד / ישיבה</option>
+                  </select>
+                  <button type="submit" className="bg-sky-600 hover:bg-sky-700 text-white py-2.5 rounded-xl text-xs font-bold sm:col-span-2">+ הוסף לקוח לרשימה</button>
+                </form>
+              )}
+              <div className="space-y-2">
+                {customersList.length === 0 ? (
+                  <p className="text-center text-slate-400 text-xs py-8">עדיין לא נשמרו לקוחות ברשימה.</p>
+                ) : (
+                  customersList.map(cust => (
+                    <div key={cust.id} className="p-3.5 bg-slate-50/90 rounded-2xl ring-1 ring-slate-200/70 flex flex-wrap justify-between items-center gap-2 text-xs">
+                      <div>
+                        <p className="font-extrabold text-slate-900">{cust.name} <span className="bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full text-[10px] mr-1">{cust.category}</span></p>
+                        <p className="text-slate-500 mt-0.5">{[cust.phone, cust.address].filter(Boolean).join(' · ') || 'ללא פרטים נוספים'}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsCustomersModalOpen(false);
+                            setPrintDoc({
+                              type: 'packing_slip',
+                              docTitle: 'מדבקת כתובת למשלוח',
+                              orderId: new Date().toLocaleDateString('he-IL'),
+                              date: new Date().toLocaleDateString('he-IL'),
+                              recipient: `${cust.name}${cust.phone ? ` | טל׳: ${cust.phone}` : ''}${cust.address ? ` | כתובת: ${cust.address}` : ''}`,
+                              items: []
+                            });
+                          }}
+                          className="bg-white ring-1 ring-slate-200 hover:bg-slate-100 px-3 py-1.5 rounded-xl font-bold text-slate-700 flex items-center gap-1"
+                        >
+                          <MapPin className="w-3.5 h-3.5 text-sky-600" /> מדבקת משלוח
+                        </button>
+                        {userRole === 'admin' && (
+                          <button type="button" onClick={() => handleDeleteCustomer(cust)} className="p-1.5 text-slate-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* מודאל עריכת משתמש */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
+              <h3 className="font-extrabold text-slate-900">עריכת משתמש: {editingUser.name}</h3>
+              <button onClick={() => setEditingUser(null)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
+            </div>
+            <form onSubmit={handleSaveEditUser} className="p-5 space-y-3">
+              <input required placeholder="שם מלא" value={editingUser.name} onChange={e => setEditingUser({ ...editingUser, name: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" />
+              <input required placeholder="שם משתמש" value={editingUser.username} onChange={e => setEditingUser({ ...editingUser, username: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+              <input type="password" placeholder="סיסמה חדשה (השאר ריק ללא שינוי)" value={editingUser.newPassword || ''} onChange={e => setEditingUser({ ...editingUser, newPassword: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+              <input placeholder="טלפון לוואטסאפ" value={editingUser.phone || ''} onChange={e => setEditingUser({ ...editingUser, phone: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+              <select value={editingUser.role} onChange={e => setEditingUser({ ...editingUser, role: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold">
+                <option value="viewer">צופה בלבד</option>
+                <option value="admin">מנהל מערכת</option>
+              </select>
+              <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl text-xs font-bold">שמור שינויים</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* מודאל אישור פעולות (Confirm Dialog) */}
+      {confirmDialog && (
+        <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-xs z-[110] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md p-6 space-y-4" dir="rtl">
+            <div className="flex items-start gap-3">
+              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${confirmDialog.iconStyle || 'bg-rose-100 text-rose-600'}`}>
+                {confirmDialog.icon || <AlertTriangle className="w-6 h-6" />}
+              </div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-base">{confirmDialog.title}</h3>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">{confirmDialog.message}</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const fn = confirmDialog.onConfirm;
+                  setConfirmDialog(null);
+                  if (fn) await fn();
+                }}
+                className={`px-5 py-2 rounded-xl text-xs font-bold text-white shadow-xs ${confirmDialog.confirmStyle || 'bg-rose-600 hover:bg-rose-700'}`}
+              >
+                {confirmDialog.confirmText || 'אישור'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
