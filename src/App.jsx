@@ -144,6 +144,7 @@ const emptySupplierForm = {
 const defaultDashboardAdjustments = {
   extraCopies: 0,
   extraWarehouseCopies: 0,
+  extraSuppliersCopies: 0,
   extraRetailValue: 0,
   extraProductionValue: 0,
   extraStoreRevenue: 0,
@@ -410,7 +411,20 @@ export default function App() {
       }, handleDbError));
       unsubs.push(onSnapshot(getCollRef('suppliers'), snap => setSuppliersList(snap.docs.map(d => ({ id: d.id, ...d.data() }))), handleDbError));
       unsubs.push(onSnapshot(getCollRef('tasks'), snap => setTasksList(snap.docs.map(d => ({ id: d.id, ...d.data() }))), handleDbError));
-      unsubs.push(onSnapshot(getCollRef('orders'), snap => setOrdersList(snap.docs.map(d => ({ id: d.id, ...d.data() }))), handleDbError));
+      unsubs.push(onSnapshot(getCollRef('orders'), snap => {
+        const cleanOrders = [];
+        snap.docs.forEach(d => {
+          const data = d.data();
+          const cName = String(data.customerName || '').trim();
+          // סינון ומחיקה אוטומטית של הזמנות דמה חוזרות מ"ישראל ישראלי"
+          if (cName.includes('ישראל ישראלי')) {
+            try { deleteDoc(getDocRef('orders', d.id)); } catch {}
+            return;
+          }
+          cleanOrders.push({ id: d.id, ...data });
+        });
+        setOrdersList(cleanOrders);
+      }, handleDbError));
       unsubs.push(onSnapshot(getCollRef('notes'), snap => setNotesList(snap.docs.map(d => ({ id: d.id, ...d.data() }))), handleDbError));
       unsubs.push(onSnapshot(getCollRef('supplier_logs'), snap => setSupplierLogs(snap.docs.map(d => ({ id: d.id, ...d.data() }))), handleDbError));
       unsubs.push(onSnapshot(getCollRef('gift_logs'), snap => setGiftLogs(snap.docs.map(d => ({ id: d.id, ...d.data() }))), handleDbError));
@@ -649,6 +663,7 @@ export default function App() {
     const cleaned = {
       extraCopies: Number(dashboardAdjustments.extraCopies || 0),
       extraWarehouseCopies: Number(dashboardAdjustments.extraWarehouseCopies || 0),
+      extraSuppliersCopies: Number(dashboardAdjustments.extraSuppliersCopies || 0),
       extraRetailValue: Number(dashboardAdjustments.extraRetailValue || 0),
       extraProductionValue: Number(dashboardAdjustments.extraProductionValue || 0),
       extraStoreRevenue: Number(dashboardAdjustments.extraStoreRevenue || 0),
@@ -663,6 +678,23 @@ export default function App() {
     }
     setIsDashboardEditOpen(false);
     showToast('נתוני הדאשבורד הידניים נשמרו בהצלחה!', 'success');
+  };
+
+  // ניקוי חובות ורשומות של ספקים שכבר נמחקו מהמערכת
+  const handlePurgeOrphanSupplierDebts = async () => {
+    const activeSupplierNames = new Set(suppliersList.map(s => (s.name || '').trim()));
+    const orphanLogs = supplierLogs.filter(l => !activeSupplierNames.has((l.supplierName || '').trim()));
+    if (orphanLogs.length === 0) {
+      showToast('אין חובות פתוחים של ספקים שנמחקו.', 'info');
+      return;
+    }
+    setSupplierLogs(prev => prev.filter(l => activeSupplierNames.has((l.supplierName || '').trim())));
+    if (db && dbConnected) {
+      try {
+        await Promise.all(orphanLogs.filter(l => l.id).map(l => deleteDoc(getDocRef('supplier_logs', l.id))));
+      } catch {}
+    }
+    showToast(`נוקו ${orphanLogs.length} רשומות חוב של ספקים שנמחקו!`, 'success');
   };
 
   // ==========================================
@@ -914,18 +946,38 @@ export default function App() {
 
   const handleDeleteSupplier = (supplier) => {
     setConfirmDialog({
-      title: 'מחיקת ספק',
-      message: `האם למחוק את הספק "${supplier.name}" מרשימת הספקים?`,
-      confirmText: 'מחק ספק',
+      title: 'מחיקת ספק וניקוי חובותיו',
+      message: `האם למחוק את הספק "${supplier.name}" כולל כל יתרות החוב וההיסטוריה שלו?`,
+      confirmText: 'מחק ספק וחובותיו',
       confirmStyle: 'bg-red-600 hover:bg-red-700',
       icon: <Trash2 className="w-6 h-6" />,
       iconStyle: 'bg-red-100 text-red-600',
       onConfirm: async () => {
+        const supName = supplier.name;
         setSuppliersList(prev => prev.filter(s => s.id !== supplier.id));
-        if (db && dbConnected && supplier.id) {
-          try { await deleteDoc(getDocRef('suppliers', supplier.id)); } catch {}
+
+        // מחיקת כל החובות וההיסטוריה של הספק שנמחק כדי שלא יישאר חוב פתוח
+        const logsToDelete = supplierLogs.filter(l => l.supplierName === supName);
+        setSupplierLogs(prev => prev.filter(l => l.supplierName !== supName));
+
+        // ניקוי מלאי הספרים המשויך לספק שנמחק
+        const updatedBooks = [];
+        setInventoryList(prev => prev.map(b => {
+          if (!(b.breakdown || []).some(r => r.location === supName)) return b;
+          const nextBreakdown = (b.breakdown || []).filter(r => r.location !== supName);
+          const updated = { ...b, breakdown: nextBreakdown, updatedAt: Date.now() };
+          updatedBooks.push(updated);
+          return updated;
+        }));
+
+        if (db && dbConnected) {
+          try {
+            if (supplier.id) await deleteDoc(getDocRef('suppliers', supplier.id));
+            await Promise.all(logsToDelete.filter(l => l.id).map(l => deleteDoc(getDocRef('supplier_logs', l.id))));
+            await Promise.all(updatedBooks.map(b => updateDoc(getDocRef('inventory', b.id), { breakdown: b.breakdown, updatedAt: b.updatedAt })));
+          } catch {}
         }
-        showToast('הספק נמחק.', 'info');
+        showToast(`הספק "${supName}" וכל חובותיו נמחקו מהמערכת.`, 'info');
       }
     });
   };
@@ -2065,13 +2117,17 @@ export default function App() {
   );
 
   // --- מדדי דאשבורד חיים + התאמות ידניות ---
-  const totalCopiesInSystem = useMemo(
-    () => Math.max(0, inventoryList.reduce((sum, b) => sum + calculateTotalStock(b), 0) + Number(dashboardAdjustments.extraCopies || 0)),
-    [inventoryList, dashboardAdjustments.extraCopies]
-  );
   const totalWarehouseCopies = useMemo(
     () => Math.max(0, inventoryList.reduce((sum, b) => sum + Number(b.publisherStock || 0), 0) + Number(dashboardAdjustments.extraWarehouseCopies || 0)),
     [inventoryList, dashboardAdjustments.extraWarehouseCopies]
+  );
+  const totalSuppliersCopies = useMemo(
+    () => Math.max(0, inventoryList.reduce((sum, b) => sum + calculateSuppliersStock(b), 0) + Number(dashboardAdjustments.extraSuppliersCopies || 0)),
+    [inventoryList, dashboardAdjustments.extraSuppliersCopies]
+  );
+  const totalCopiesInSystem = useMemo(
+    () => Math.max(0, totalWarehouseCopies + totalSuppliersCopies + Number(dashboardAdjustments.extraCopies || 0)),
+    [totalWarehouseCopies, totalSuppliersCopies, dashboardAdjustments.extraCopies]
   );
   const totalRetailValue = useMemo(
     () => Math.max(0, inventoryList.reduce((sum, b) => sum + calculateTotalStock(b) * Number(b.prices?.general || 0), 0) + Number(dashboardAdjustments.extraRetailValue || 0)),
@@ -2100,7 +2156,7 @@ export default function App() {
   const lowStockBooks = useMemo(() => inventoryList.filter(b => calculateTotalStock(b) < Number(b.threshold || 30)), [inventoryList]);
 
   const hasAnyDashboardAdjustment = useMemo(() => {
-    const keys = ['extraCopies', 'extraWarehouseCopies', 'extraRetailValue', 'extraProductionValue', 'extraStoreRevenue', 'extraSupplierRevenue', 'extraPosRevenue', 'extraOpenDebt'];
+    const keys = ['extraCopies', 'extraWarehouseCopies', 'extraSuppliersCopies', 'extraRetailValue', 'extraProductionValue', 'extraStoreRevenue', 'extraSupplierRevenue', 'extraPosRevenue', 'extraOpenDebt'];
     return keys.some(k => Number(dashboardAdjustments[k] || 0) !== 0);
   }, [dashboardAdjustments]);
 
@@ -2735,7 +2791,7 @@ export default function App() {
                 <p className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">{totalCopiesInSystem.toLocaleString()}</p>
                 <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
                   <span>במחסן: <strong className="text-indigo-700">{totalWarehouseCopies.toLocaleString()}</strong></span>
-                  <span>ספקים: <strong className="text-slate-700">{Math.max(0, totalCopiesInSystem - totalWarehouseCopies).toLocaleString()}</strong></span>
+                  <span>ספקים: <strong className="text-emerald-700">{totalSuppliersCopies.toLocaleString()}</strong></span>
                 </div>
               </div>
 
@@ -2772,8 +2828,8 @@ export default function App() {
               <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
                 <span className="font-extrabold text-slate-800 text-sm">התפלגות המלאי: מחסן ראשי מול ספקים וחנויות</span>
                 <div className="flex items-center gap-4">
-                  <span className="flex items-center gap-1.5 font-bold text-indigo-600"><span className="w-2.5 h-2.5 rounded-full bg-indigo-500" /> מחסן ראשי ({totalCopiesInSystem > 0 ? Math.round((totalWarehouseCopies / totalCopiesInSystem) * 100) : 0}%)</span>
-                  <span className="flex items-center gap-1.5 font-bold text-emerald-600"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> אצל ספקים ({totalCopiesInSystem > 0 ? Math.round((Math.max(0, totalCopiesInSystem - totalWarehouseCopies) / totalCopiesInSystem) * 100) : 0}%)</span>
+                  <span className="flex items-center gap-1.5 font-bold text-indigo-600"><span className="w-2.5 h-2.5 rounded-full bg-indigo-500" /> מחסן ראשי: {totalWarehouseCopies.toLocaleString()} ({totalCopiesInSystem > 0 ? Math.round((totalWarehouseCopies / totalCopiesInSystem) * 100) : 0}%)</span>
+                  <span className="flex items-center gap-1.5 font-bold text-emerald-600"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> אצל ספקים: {totalSuppliersCopies.toLocaleString()} ({totalCopiesInSystem > 0 ? Math.round((totalSuppliersCopies / totalCopiesInSystem) * 100) : 0}%)</span>
                 </div>
               </div>
               <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
@@ -2783,7 +2839,7 @@ export default function App() {
                 />
                 <div
                   className="bg-gradient-to-l from-emerald-400 to-teal-500 h-full transition-all duration-500"
-                  style={{ width: `${totalCopiesInSystem > 0 ? Math.max(0, ((totalCopiesInSystem - totalWarehouseCopies) / totalCopiesInSystem) * 100) : 0}%` }}
+                  style={{ width: `${totalCopiesInSystem > 0 ? Math.min(100, (totalSuppliersCopies / totalCopiesInSystem) * 100) : 0}%` }}
                 />
               </div>
             </div>
@@ -4215,12 +4271,16 @@ export default function App() {
               <div className="p-5 overflow-y-auto space-y-3.5 flex-1">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1">התאמת סה"כ עותקים במערכת (+/-)</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">התאמת סה"כ עותקים כללית (+/-)</label>
                     <input type="number" value={dashboardAdjustments.extraCopies} onChange={e => setDashboardAdjustments({ ...dashboardAdjustments, extraCopies: Number(e.target.value) })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold" dir="ltr" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-600 mb-1">התאמת עותקים במחסן הראשי (+/-)</label>
                     <input type="number" value={dashboardAdjustments.extraWarehouseCopies} onChange={e => setDashboardAdjustments({ ...dashboardAdjustments, extraWarehouseCopies: Number(e.target.value) })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold" dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-emerald-700 mb-1">התאמת עותקים אצל ספקים (+/-)</label>
+                    <input type="number" value={dashboardAdjustments.extraSuppliersCopies} onChange={e => setDashboardAdjustments({ ...dashboardAdjustments, extraSuppliersCopies: Number(e.target.value) })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold" dir="ltr" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-emerald-700 mb-1">התאמת שווי מלאי לצרכן ₪ (+/-)</label>
@@ -4242,23 +4302,33 @@ export default function App() {
                     <label className="block text-xs font-bold text-purple-700 mb-1">התאמת הכנסות דוכן/קופה ₪ (+/-)</label>
                     <input type="number" value={dashboardAdjustments.extraPosRevenue} onChange={e => setDashboardAdjustments({ ...dashboardAdjustments, extraPosRevenue: Number(e.target.value) })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold" dir="ltr" />
                   </div>
-                  <div>
+                  <div className="sm:col-span-2">
                     <label className="block text-xs font-bold text-rose-700 mb-1">התאמת יתרת חוב פתוחה ₪ (+/-)</label>
                     <input type="number" value={dashboardAdjustments.extraOpenDebt} onChange={e => setDashboardAdjustments({ ...dashboardAdjustments, extraOpenDebt: Number(e.target.value) })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold" dir="ltr" />
                   </div>
                 </div>
+                <div className="bg-rose-50/80 border border-rose-200 p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-rose-800">נשאר חוב מספקים שכבר מחקת?</span>
+                  <button
+                    type="button"
+                    onClick={handlePurgeOrphanSupplierDebts}
+                    className="bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold shrink-0"
+                  >
+                    נקה חובות של ספקים שנמחקו
+                  </button>
+                </div>
               </div>
-              <div className="p-4 border-t bg-slate-50/80 flex justify-between items-center gap-2 shrink-0">
+              <div className="p-4 border-t bg-slate-50/80 flex justify-between items-center shrink-0">
                 <button
                   type="button"
                   onClick={() => setDashboardAdjustments(defaultDashboardAdjustments)}
-                  className="text-xs font-bold text-rose-600 hover:underline px-2 py-1.5"
+                  className="text-xs font-bold text-rose-600 hover:underline"
                 >
                   אפס את כל ההתאמות ל-0
                 </button>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setIsDashboardEditOpen(false)} className="px-4 py-2 text-sm text-slate-600">ביטול</button>
-                  <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-xs">שמור נתונים</button>
+                  <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl font-bold text-sm shadow-xs">שמור נתונים</button>
                 </div>
               </div>
             </form>
@@ -4266,70 +4336,73 @@ export default function App() {
         </div>
       )}
 
-      {/* Quick Book Purchase Calculator Modal (Without Issuing Order) */}
+      {/* Quick Purchase Calculator Modal (ללא הוצאת הזמנה) */}
       {isPurchaseCalcOpen && (() => {
         const getTierPrice = (book) => {
+          if (!book) return 0;
           const eff = getEffectiveBookPrices(book);
           if (calcPriceTier === 'supplier') return eff.supplier;
           if (calcPriceTier === 'yeshiva') return eff.yeshiva;
           if (calcPriceTier === 'yeshivaGuest') return eff.yeshivaGuest;
           return eff.general;
         };
-
-        const rawSubtotal = calcItems.reduce((sum, row) => {
+        const subtotal = calcItems.reduce((sum, row) => {
           const b = inventoryList.find(x => x.id === row.bookId);
-          return sum + (b ? getTierPrice(b) * Math.max(0, Number(row.quantity || 0)) : 0);
+          return sum + getTierPrice(b) * Math.max(0, Number(row.quantity || 0));
         }, 0);
-        const totalCopies = calcItems.reduce((sum, row) => sum + (row.bookId ? Math.max(0, Number(row.quantity || 0)) : 0), 0);
-        const discountAmount = Math.round((rawSubtotal * Math.max(0, Math.min(100, Number(calcDiscountPct || 0)))) / 100);
-        const finalTotal = Math.max(0, rawSubtotal - discountAmount);
-
-        const copyCalcSummary = () => {
-          const lines = calcItems
-            .filter(r => r.bookId && Number(r.quantity) > 0)
-            .map((r, idx) => {
-              const b = inventoryList.find(x => x.id === r.bookId);
-              const p = b ? getTierPrice(b) : 0;
-              return `${idx + 1}. ${b?.title} — ${r.quantity} עותקים × ₪${p} = ₪${(p * r.quantity).toLocaleString()}`;
-            });
-          const msg =
-            `📚 *חישוב הצעת מחיר — הוצאת ספרי ישיבת ירוחם*\n\n` +
-            `${lines.join('\n')}\n\n` +
-            `סה"כ עותקים: ${totalCopies}\n` +
-            (discountAmount > 0 ? `הנחה (${calcDiscountPct}%): -₪${discountAmount.toLocaleString()}\n` : '') +
-            `*סה"כ לתשלום: ₪${finalTotal.toLocaleString()}*`;
-          navigator.clipboard?.writeText(msg);
-          showToast('החישוב הועתק להדבקה בוואטסאפ / מייל!', 'success');
-        };
+        const discountAmount = Math.round(subtotal * (Math.max(0, Math.min(100, Number(calcDiscountPct || 0))) / 100));
+        const finalTotal = Math.max(0, subtotal - discountAmount);
+        const totalQty = calcItems.reduce((s, r) => s + (r.bookId ? Math.max(0, Number(r.quantity || 0)) : 0), 0);
 
         return (
           <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
               <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
                 <div>
-                  <h3 className="font-extrabold text-lg text-slate-900 flex items-center gap-2"><Calculator className="w-5 h-5 text-amber-600" /> מחשבון קניית ספרים מהיר</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">חישוב מהיר של סל ספרים והנחות מבלי להוציא הזמנה או לשנות מלאי</p>
+                  <h3 className="font-extrabold text-lg text-slate-900 flex items-center gap-2"><Calculator className="w-5 h-5 text-amber-600" /> מחשבון קניית ספרים (הצעת מחיר מהירה)</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">חישוב סל ספרים והנחות מבלי להוציא הזמנה או לשנות מלאי</p>
                 </div>
                 <button onClick={() => setIsPurchaseCalcOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
               </div>
               <div className="p-5 overflow-y-auto space-y-4 flex-1">
-                <div className="grid grid-cols-4 gap-1.5 bg-slate-100 p-1.5 rounded-xl text-xs font-bold">
-                  {[
-                    { id: 'supplier', label: 'ספקים' },
-                    { id: 'yeshiva', label: 'תלמיד ראשון' },
-                    { id: 'yeshivaGuest', label: 'שני / אורח' },
-                    { id: 'general', label: 'צרכן (אתר)' }
-                  ].map(t => (
-                    <button key={t.id} type="button" onClick={() => setCalcPriceTier(t.id)} className={`py-2 rounded-lg transition-all ${calcPriceTier === t.id ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'}`}>{t.label}</button>
-                  ))}
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-100 p-2 rounded-2xl">
+                  <div className="flex flex-wrap gap-1">
+                    {[
+                      { id: 'supplier', label: 'מחירון ספקים' },
+                      { id: 'general', label: 'צרכן (אתר)' },
+                      { id: 'yeshiva', label: 'תלמיד ראשון' },
+                      { id: 'yeshivaGuest', label: 'שני / אורח' }
+                    ].map(t => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setCalcPriceTier(t.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${calcPriceTier === t.id ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'}`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 px-2">
+                    <span>הנחה (%):</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={calcDiscountPct}
+                      onChange={e => setCalcDiscountPct(e.target.value)}
+                      className="w-16 p-1.5 border border-slate-200 rounded-xl text-center bg-white"
+                      dir="ltr"
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-2.5">
+                <div className="space-y-2">
                   {calcItems.map((row, idx) => {
-                    const b = inventoryList.find(x => x.id === row.bookId);
-                    const price = b ? getTierPrice(b) : 0;
+                    const book = inventoryList.find(b => b.id === row.bookId);
+                    const price = getTierPrice(book);
                     return (
-                      <div key={idx} className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-slate-50/90 p-2.5 rounded-xl ring-1 ring-slate-200/70">
+                      <div key={idx} className="flex items-center gap-2 bg-slate-50/90 p-2.5 rounded-xl ring-1 ring-slate-200/70">
                         <select
                           value={row.bookId}
                           onChange={e => {
@@ -4340,8 +4413,8 @@ export default function App() {
                           className="flex-1 p-2 border border-slate-200 rounded-xl text-sm bg-white"
                         >
                           <option value="">בחר ספר...</option>
-                          {[...inventoryList].sort((a, z) => a.title.localeCompare(z.title, 'he')).map(book => (
-                            <option key={book.id} value={book.id}>{book.title} (₪{getTierPrice(book)})</option>
+                          {[...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => (
+                            <option key={b.id} value={b.id}>{b.title} (₪{getTierPrice(b)})</option>
                           ))}
                         </select>
                         <input
@@ -4353,7 +4426,7 @@ export default function App() {
                             next[idx] = { ...next[idx], quantity: e.target.value };
                             setCalcItems(next);
                           }}
-                          className="w-20 p-2 border border-slate-200 rounded-xl text-sm text-center bg-white font-bold"
+                          className="w-20 p-2 border border-slate-200 rounded-xl text-sm text-center font-bold bg-white"
                           dir="ltr"
                         />
                         <span className="text-xs font-extrabold text-indigo-700 w-24 text-center">₪{(price * Number(row.quantity || 0)).toLocaleString()}</span>
@@ -4363,53 +4436,49 @@ export default function App() {
                       </div>
                     );
                   })}
-                  <button type="button" onClick={() => setCalcItems([...calcItems, { bookId: '', quantity: 5 }])} className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
+                  <button type="button" onClick={() => setCalcItems([...calcItems, { bookId: '', quantity: 10 }])} className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
                     <Plus className="w-3.5 h-3.5" /> הוסף ספר נוסף לחישוב
                   </button>
                 </div>
 
-                <div className="flex items-center justify-between gap-3 bg-slate-50 p-3.5 rounded-2xl ring-1 ring-slate-200/70">
-                  <span className="text-xs font-bold text-slate-700">הנחה נוספת באחוזים (%):</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={calcDiscountPct}
-                    onChange={e => setCalcDiscountPct(Number(e.target.value))}
-                    className="w-24 p-2 border border-slate-200 rounded-xl text-sm text-center font-bold bg-white"
-                    dir="ltr"
-                  />
-                </div>
-
                 <div className="bg-emerald-50 ring-1 ring-emerald-200/80 p-4 rounded-2xl space-y-1.5">
                   <div className="flex justify-between text-xs text-emerald-800">
-                    <span>סה"כ עותקים בחישוב:</span>
-                    <strong>{totalCopies.toLocaleString()} עותקים</strong>
+                    <span>סה"כ עותקים: <strong>{totalQty}</strong></span>
+                    {discountAmount > 0 && <span>הנחה ({calcDiscountPct}%): <strong>-₪{discountAmount.toLocaleString()}</strong></span>}
                   </div>
-                  {discountAmount > 0 && (
-                    <div className="flex justify-between text-xs text-rose-700">
-                      <span>הנחה ({calcDiscountPct}%):</span>
-                      <strong>-₪{discountAmount.toLocaleString()}</strong>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center pt-1.5 border-t border-emerald-200/60">
-                    <span className="font-bold text-emerald-900">סה"כ לתשלום:</span>
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-emerald-900">סה"כ משוקלל:</span>
                     <span className="text-2xl font-extrabold text-emerald-700">₪{finalTotal.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
-              <div className="p-4 border-t bg-slate-50/80 flex justify-between gap-2 shrink-0">
-                <button type="button" onClick={copyCalcSummary} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs">
-                  <Copy className="w-4 h-4" /> העתק פירוט לוואטסאפ
+              <div className="p-4 border-t bg-slate-50/80 flex justify-between items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const lines = calcItems
+                      .filter(r => r.bookId && Number(r.quantity) > 0)
+                      .map((r, i) => {
+                        const b = inventoryList.find(x => x.id === r.bookId);
+                        const p = getTierPrice(b);
+                        return `${i + 1}. ${b?.title} — ${r.quantity} עותקים × ₪${p} = ₪${(p * Number(r.quantity)).toLocaleString()}`;
+                      });
+                    const txt = `📚 *הצעת מחיר — הוצאת ספרי ישיבת ירוחם*\n\n${lines.join('\n')}\n\n*סה"כ לתשלום: ₪${finalTotal.toLocaleString()}*`;
+                    navigator.clipboard?.writeText(txt);
+                    showToast('סיכום הצעת המחיר הועתק להדבקה!', 'success');
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5"
+                >
+                  <Copy className="w-4 h-4" /> העתק סיכום לוואטסאפ
                 </button>
-                <button type="button" onClick={() => setIsPurchaseCalcOpen(false)} className="px-4 py-2.5 text-sm text-slate-600 font-medium">סגור</button>
+                <button type="button" onClick={() => setIsPurchaseCalcOpen(false)} className="px-4 py-2 text-sm text-slate-600">סגור</button>
               </div>
             </div>
           </div>
         );
       })()}
 
-      {/* Smart Parse Order & Auto-Receipt From Supplier Message Modal */}
+      {/* Smart Parse Supplier Message Modal (הזמנה וקבלה אוטומטית מהודעה) */}
       {isParseOrderModalOpen && (() => {
         const parsedTotal = parsedItems.reduce((s, i) => s + Number(i.quantity || 0) * Number(i.unitPrice || 0), 0);
         return (
@@ -4417,148 +4486,123 @@ export default function App() {
             <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
               <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
                 <div>
-                  <h3 className="font-extrabold text-lg text-slate-900 flex items-center gap-2"><FileCheck className="w-5 h-5 text-emerald-600" /> הפקת הזמנה וקבלה אוטומטית מהודעת ספק</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">הדבק הודעת וואטסאפ או מייל מספק — המערכת תזהה ספרים, כמויות ומחירים אוטומטית</p>
+                  <h3 className="font-extrabold text-lg text-slate-900 flex items-center gap-2"><FileCheck className="w-5 h-5 text-emerald-600" /> יצירת הזמנה וקבלה אוטומטית מהודעת ספק</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">הדבק הודעה מוואטסאפ או מייל — המערכת תזהה ספרים, כמויות ומחירים ותפיק קבלה</p>
                 </div>
                 <button onClick={() => setIsParseOrderModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
               </div>
-
               <div className="p-5 overflow-y-auto space-y-4 flex-1">
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">הדבק כאן את הודעת ההזמנה מהספק:</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">הדבק כאן את הודעת ההזמנה מהספק / חנות:</label>
                   <textarea
                     rows="3"
                     value={rawOrderMessage}
                     onChange={e => handleParseSupplierMessageText(e.target.value)}
-                    placeholder={'לדוגמה:\nשלום, נשמח להזמין:\n10 אותך אבקש\n5 ונהר יוצא מעדן סט'}
-                    className="w-full p-3 border border-slate-200 rounded-2xl text-sm bg-slate-50/80 focus:bg-white outline-none focus:border-indigo-500"
+                    placeholder="לדוגמה: שלום, נשמח להזמין 10 אותך אבקש, 5 ונהר יוצא מעדן סט ו-8 שמיטה"
+                    className="w-full p-3 border border-slate-200 rounded-2xl text-sm bg-slate-50 focus:bg-white outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">שם הספק / החנות המזמינה *</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">שם הספק / החנות:</label>
                   <input
                     type="text"
-                    list="parse-suppliers-list"
+                    list="suppliers-datalist-parse"
                     value={parsedSupplierName}
                     onChange={e => setParsedSupplierName(e.target.value)}
-                    placeholder="הזן או בחר שם ספק..."
+                    placeholder="בחר או הקלד שם ספק..."
                     className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold"
                   />
-                  <datalist id="parse-suppliers-list">
+                  <datalist id="suppliers-datalist-parse">
                     {suppliersList.map(s => <option key={s.id} value={s.name} />)}
                   </datalist>
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-700">ספרים שזוהו (ניתן לערוך כמות ומחיר):</span>
+                    <span className="text-xs font-bold text-slate-700">פריטים שזוהו (ניתן לערוך כמות ומחיר):</span>
                     <button
                       type="button"
-                      onClick={() => {
-                        const first = inventoryList[0];
-                        setParsedItems(prev => [...prev, {
-                          bookId: first?.id || '',
-                          title: first?.title || '',
-                          quantity: 5,
-                          unitPrice: Number(first?.prices?.supplier || 0)
-                        }]);
-                      }}
-                      className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                      onClick={() => setParsedItems([...parsedItems, { bookId: inventoryList[0]?.id || '', title: inventoryList[0]?.title || '', quantity: 1, unitPrice: Number(inventoryList[0]?.prices?.supplier || 0) }])}
+                      className="text-xs font-bold text-indigo-600 hover:underline"
                     >
-                      <Plus className="w-3.5 h-3.5" /> הוסף ספר ידנית
+                      + הוסף שורה
                     </button>
                   </div>
-
                   {parsedItems.length === 0 ? (
-                    <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl p-5 text-center text-xs text-slate-400">
-                      הדבק הודעה למעלה כדי לזהות ספרים אוטומטית, או לחץ "הוסף ספר ידנית".
-                    </div>
+                    <p className="text-xs text-slate-400 bg-slate-50 p-4 rounded-xl text-center">הדבק הודעה למעלה כדי לזהות ספרים אוטומטית, או לחץ "+ הוסף שורה".</p>
                   ) : (
-                    <div className="space-y-2">
-                      {parsedItems.map((row, idx) => (
-                        <div key={idx} className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-slate-50/90 p-2.5 rounded-xl ring-1 ring-slate-200/70">
-                          <select
-                            value={row.bookId}
+                    parsedItems.map((row, idx) => (
+                      <div key={idx} className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-slate-50/90 p-2.5 rounded-xl ring-1 ring-slate-200/70">
+                        <select
+                          value={row.bookId}
+                          onChange={e => {
+                            const b = inventoryList.find(x => x.id === e.target.value);
+                            const next = [...parsedItems];
+                            next[idx] = { ...next[idx], bookId: e.target.value, title: b?.title || '', unitPrice: Number(b?.prices?.supplier || 0) };
+                            setParsedItems(next);
+                          }}
+                          className="flex-1 p-2 border border-slate-200 rounded-xl text-xs bg-white font-bold"
+                        >
+                          {inventoryList.map(b => <option key={b.id} value={b.id}>{b.title}</option>)}
+                        </select>
+                        <input
+                          type="number"
+                          min="1"
+                          value={row.quantity}
+                          onChange={e => {
+                            const next = [...parsedItems];
+                            next[idx] = { ...next[idx], quantity: Number(e.target.value) };
+                            setParsedItems(next);
+                          }}
+                          className="w-16 p-2 border border-slate-200 rounded-xl text-xs text-center font-bold bg-white"
+                          title="כמות"
+                          dir="ltr"
+                        />
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-slate-400">₪</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            value={row.unitPrice}
                             onChange={e => {
-                              const b = inventoryList.find(x => x.id === e.target.value);
                               const next = [...parsedItems];
-                              next[idx] = {
-                                ...next[idx],
-                                bookId: e.target.value,
-                                title: b?.title || '',
-                                unitPrice: Number(b?.prices?.supplier || 0)
-                              };
+                              next[idx] = { ...next[idx], unitPrice: Number(e.target.value) };
                               setParsedItems(next);
                             }}
-                            className="flex-1 p-2 border border-slate-200 rounded-xl text-xs bg-white font-bold"
-                          >
-                            {inventoryList.map(b => <option key={b.id} value={b.id}>{b.title}</option>)}
-                          </select>
-                          <div className="flex items-center gap-1">
-                            <span className="text-[11px] text-slate-500">כמות:</span>
-                            <input
-                              type="number"
-                              min="1"
-                              value={row.quantity}
-                              onChange={e => {
-                                const next = [...parsedItems];
-                                next[idx] = { ...next[idx], quantity: Number(e.target.value) };
-                                setParsedItems(next);
-                              }}
-                              className="w-16 p-1.5 border border-slate-200 rounded-lg text-xs text-center font-bold bg-white"
-                              dir="ltr"
-                            />
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className="text-[11px] text-slate-500">₪ ליח':</span>
-                            <input
-                              type="number"
-                              min="0"
-                              value={row.unitPrice}
-                              onChange={e => {
-                                const next = [...parsedItems];
-                                next[idx] = { ...next[idx], unitPrice: Number(e.target.value) };
-                                setParsedItems(next);
-                              }}
-                              className="w-20 p-1.5 border border-indigo-200 rounded-lg text-xs text-center font-bold bg-white"
-                              dir="ltr"
-                            />
-                          </div>
-                          <button type="button" onClick={() => setParsedItems(parsedItems.filter((_, i) => i !== idx))} className="text-slate-400 hover:text-rose-500 p-1">
-                            <X className="w-4 h-4" />
-                          </button>
+                            className="w-20 p-2 border border-indigo-200 rounded-xl text-xs text-center font-bold bg-white"
+                            title="מחיר ליחידה"
+                            dir="ltr"
+                          />
                         </div>
-                      ))}
-                    </div>
+                        <span className="text-xs font-extrabold text-emerald-700 w-20 text-center">₪{(Number(row.quantity || 0) * Number(row.unitPrice || 0)).toLocaleString()}</span>
+                        <button type="button" onClick={() => setParsedItems(parsedItems.filter((_, i) => i !== idx))} className="text-slate-400 hover:text-rose-500 p-1"><X className="w-4 h-4" /></button>
+                      </div>
+                    ))
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700 bg-indigo-50/70 p-3 rounded-xl ring-1 ring-indigo-100 cursor-pointer">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                  <label className="flex items-center gap-2 font-bold text-slate-700 bg-slate-50 p-3 rounded-xl ring-1 ring-slate-200/70 cursor-pointer">
                     <input type="checkbox" checked={parsedDeductWarehouse} onChange={e => setParsedDeductWarehouse(e.target.checked)} className="w-4 h-4 rounded" />
-                    הפחת מהמחסן והוסף למלאי הספק
+                    הפחת מהמחסן הראשי והעבר לספק
                   </label>
-                  <label className="flex items-center gap-2 text-xs font-bold text-emerald-800 bg-emerald-50/70 p-3 rounded-xl ring-1 ring-emerald-200 cursor-pointer">
+                  <label className="flex items-center gap-2 font-bold text-emerald-800 bg-emerald-50/70 p-3 rounded-xl ring-1 ring-emerald-200/70 cursor-pointer">
                     <input type="checkbox" checked={parsedMarkAsPaid} onChange={e => setParsedMarkAsPaid(e.target.checked)} className="w-4 h-4 rounded" />
-                    סמן כשולם והפק קבלה אוטומטית
+                    סמן כקבלה ששולמה (ללא חוב פתוח)
                   </label>
                 </div>
 
-                <div className="bg-emerald-50 ring-1 ring-emerald-200/80 p-4 rounded-2xl flex justify-between items-center">
-                  <span className="font-bold text-emerald-900">סיכום אוטומטי להזמנה ולקבלה:</span>
-                  <span className="text-2xl font-extrabold text-emerald-700">₪{parsedTotal.toLocaleString()}</span>
+                <div className="bg-indigo-50 ring-1 ring-indigo-100 p-4 rounded-2xl flex justify-between items-center">
+                  <span className="font-bold text-indigo-900">סה"כ להזמנה ולקבלה:</span>
+                  <span className="text-2xl font-extrabold text-indigo-700">₪{parsedTotal.toLocaleString()}</span>
                 </div>
               </div>
-
               <div className="p-4 border-t bg-slate-50/80 flex justify-end gap-2 shrink-0">
                 <button type="button" onClick={() => setIsParseOrderModalOpen(false)} className="px-4 py-2 text-sm text-slate-600">ביטול</button>
-                <button
-                  type="button"
-                  onClick={handleConfirmParsedOrderAndReceipt}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-xs flex items-center gap-2"
-                >
-                  <CheckCircle className="w-4 h-4" /> הפק הזמנה וקבלה אוטומטית
+                <button type="button" onClick={handleConfirmParsedOrderAndReceipt} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-xs flex items-center gap-1.5">
+                  <CheckCircle className="w-4 h-4" /> אשר, עדכן מלאי והפק קבלה
                 </button>
               </div>
             </div>
@@ -4718,142 +4762,125 @@ export default function App() {
         </div>
       )}
 
-      {/* View & Edit Supplier Stock Modal (עריכת מלאי אצל כל ספק בפני עצמו) */}
-      {viewingSupplierStock && (
-        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
-            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
-              <div>
-                <h3 className="font-extrabold text-slate-900">ניהול ועריכת מלאי אצל: {viewingSupplierStock.name}</h3>
-                <p className="text-xs text-slate-500">עדכן ישירות את כמות העותקים שנמצאת אצל ספק זה או הוסף ספר</p>
+      {/* View & Edit Specific Supplier Stock Modal */}
+      {viewingSupplierStock && (() => {
+        const draftEntries = Object.entries(supplierStockDraft)
+          .map(([bookId, amount]) => {
+            const book = inventoryList.find(b => b.id === bookId);
+            return book ? { bookId, title: book.title, amount: Number(amount || 0), supplierPrice: Number(book.prices?.supplier || 0) } : null;
+          })
+          .filter(Boolean)
+          .sort((a, b) => a.title.localeCompare(b.title, 'he'));
+        const totalQty = draftEntries.reduce((s, i) => s + Math.max(0, i.amount), 0);
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+              <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
+                <div>
+                  <h3 className="font-extrabold text-slate-900">מלאי ועריכת כמויות אצל: {viewingSupplierStock.name}</h3>
+                  <p className="text-xs text-slate-500">ערוך ישירות את כמות הספרים אצל ספק זה או הוסף ספר חדש למלאי שלו</p>
+                </div>
+                <button onClick={() => setViewingSupplierStock(null)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
               </div>
-              <button onClick={() => setViewingSupplierStock(null)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
-            </div>
+              <div className="p-5 overflow-y-auto space-y-4 flex-1">
+                {userRole === 'admin' && (
+                  <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-indigo-50/70 p-3 rounded-2xl ring-1 ring-indigo-100">
+                    <select
+                      value={newBookForSupplier.bookId}
+                      onChange={e => setNewBookForSupplier({ ...newBookForSupplier, bookId: e.target.value })}
+                      className="flex-1 p-2 border border-slate-200 rounded-xl text-xs bg-white font-bold"
+                    >
+                      {[...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => (
+                        <option key={b.id} value={b.id}>{b.title}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min="1"
+                      value={newBookForSupplier.amount}
+                      onChange={e => setNewBookForSupplier({ ...newBookForSupplier, amount: Number(e.target.value) })}
+                      className="w-20 p-2 border border-slate-200 rounded-xl text-xs text-center font-bold bg-white"
+                      dir="ltr"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!newBookForSupplier.bookId) return;
+                        setSupplierStockDraft(prev => ({
+                          ...prev,
+                          [newBookForSupplier.bookId]: Math.max(0, Number(prev[newBookForSupplier.bookId] || 0)) + Math.max(1, Number(newBookForSupplier.amount || 1))
+                        }));
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold shrink-0"
+                    >
+                      + הוסף לספק
+                    </button>
+                  </div>
+                )}
 
-            <div className="p-5 overflow-y-auto space-y-4 flex-1">
-              {(() => {
-                const draftEntries = Object.entries(supplierStockDraft)
-                  .map(([bookId, amount]) => {
-                    const book = inventoryList.find(b => b.id === bookId);
-                    return book ? { book, amount: Number(amount || 0) } : null;
-                  })
-                  .filter(Boolean)
-                  .sort((a, b) => a.book.title.localeCompare(b.book.title, 'he'));
-
-                const totalQty = draftEntries.reduce((s, e) => s + e.amount, 0);
-
-                return (
-                  <>
-                    {draftEntries.length === 0 ? (
-                      <p className="text-center text-slate-400 py-6 text-sm">אין כרגע ספרים משויכים לספק זה. הוסף ספר למטה.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {draftEntries.map(({ book, amount }) => (
-                          <div key={book.id} className="flex items-center justify-between gap-2 bg-slate-50/90 p-3 rounded-xl ring-1 ring-slate-200/70">
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-slate-800 text-sm truncate">{book.title}</p>
-                              <p className="text-[11px] text-slate-500">מחיר ספק: ₪{book.prices?.supplier || 0} · שווי: ₪{(amount * Number(book.prices?.supplier || 0)).toLocaleString()}</p>
-                            </div>
+                {draftEntries.length === 0 ? (
+                  <p className="text-center text-slate-400 py-8 text-sm">אין כרגע ספרים משויכים לספק זה.</p>
+                ) : (
+                  <table className="w-full text-right text-sm">
+                    <thead className="bg-slate-50 text-xs text-slate-500 border-b">
+                      <tr>
+                        <th className="p-2.5">שם הספר</th>
+                        <th className="p-2.5 text-center">כמות אצל הספק</th>
+                        <th className="p-2.5 text-center">שווי (ספק)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {draftEntries.map(it => (
+                        <tr key={it.bookId}>
+                          <td className="p-2.5 font-medium">{it.title}</td>
+                          <td className="p-2.5 text-center">
                             {userRole === 'admin' ? (
-                              <div className="flex items-center gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => setSupplierStockDraft(prev => ({ ...prev, [book.id]: Math.max(0, Number(prev[book.id] || 0) - 1) }))}
-                                  className="w-7 h-7 bg-white border border-slate-200 rounded-lg flex items-center justify-center"
-                                >
-                                  <Minus className="w-3.5 h-3.5" />
-                                </button>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={amount}
-                                  onChange={e => setSupplierStockDraft(prev => ({ ...prev, [book.id]: Math.max(0, Number(e.target.value)) }))}
-                                  className="w-16 p-1.5 border border-indigo-200 rounded-lg text-sm font-extrabold text-center bg-white text-indigo-700"
-                                  dir="ltr"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => setSupplierStockDraft(prev => ({ ...prev, [book.id]: Number(prev[book.id] || 0) + 1 }))}
-                                  className="w-7 h-7 bg-white border border-slate-200 rounded-lg flex items-center justify-center"
-                                >
-                                  <Plus className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
+                              <input
+                                type="number"
+                                min="0"
+                                value={it.amount}
+                                onChange={e => setSupplierStockDraft(prev => ({ ...prev, [it.bookId]: Math.max(0, Number(e.target.value || 0)) }))}
+                                className="w-20 p-1.5 border border-indigo-200 rounded-xl text-center font-extrabold text-indigo-700 bg-white"
+                                dir="ltr"
+                              />
                             ) : (
-                              <span className="font-extrabold text-indigo-700 text-base">{amount}</span>
+                              <span className="font-bold text-indigo-700">{it.amount}</span>
                             )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                          </td>
+                          <td className="p-2.5 text-center font-bold">₪{(Math.max(0, it.amount) * it.supplierPrice).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
 
-                    {userRole === 'admin' && (
-                      <div className="bg-indigo-50/60 p-3.5 rounded-2xl ring-1 ring-indigo-100 space-y-2">
-                        <p className="text-xs font-bold text-indigo-900">+ הוסף ספר נוסף למלאי הספק:</p>
-                        <div className="flex gap-2">
-                          <select
-                            value={newBookForSupplier.bookId}
-                            onChange={e => setNewBookForSupplier(prev => ({ ...prev, bookId: e.target.value }))}
-                            className="flex-1 p-2 border border-slate-200 rounded-xl text-xs bg-white"
-                          >
-                            {[...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => (
-                              <option key={b.id} value={b.id}>{b.title}</option>
-                            ))}
-                          </select>
-                          <input
-                            type="number"
-                            min="1"
-                            value={newBookForSupplier.amount}
-                            onChange={e => setNewBookForSupplier(prev => ({ ...prev, amount: Number(e.target.value) }))}
-                            className="w-20 p-2 border border-slate-200 rounded-xl text-xs text-center font-bold bg-white"
-                            dir="ltr"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!newBookForSupplier.bookId) return;
-                              setSupplierStockDraft(prev => ({
-                                ...prev,
-                                [newBookForSupplier.bookId]: Number(prev[newBookForSupplier.bookId] || 0) + Math.max(1, Number(newBookForSupplier.amount || 1))
-                              }));
-                            }}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold"
-                          >
-                            הוסף
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="bg-indigo-50 ring-1 ring-indigo-100 p-3.5 rounded-xl flex justify-between font-bold text-indigo-900 text-sm">
-                      <span>סה"כ עותקים אצל הספק:</span>
-                      <span>{totalQty.toLocaleString()} עותקים</span>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-
-            <div className="p-4 border-t bg-slate-50/80 flex justify-end gap-2 shrink-0">
-              <button type="button" onClick={() => setViewingSupplierStock(null)} className="px-4 py-2 text-sm text-slate-600">סגור</button>
+                <div className="bg-indigo-50 ring-1 ring-indigo-100 p-3.5 rounded-xl flex justify-between font-bold text-indigo-900 text-sm">
+                  <span>סה"כ עותקים אצל הספק:</span>
+                  <span>{totalQty.toLocaleString()} עותקים</span>
+                </div>
+              </div>
               {userRole === 'admin' && (
-                <button type="button" onClick={handleSaveSupplierStockChanges} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-xs flex items-center gap-1.5">
-                  <Check className="w-4 h-4" /> שמור מלאי ספק
-                </button>
+                <div className="p-4 border-t bg-slate-50/80 flex justify-end gap-2 shrink-0">
+                  <button type="button" onClick={() => setViewingSupplierStock(null)} className="px-4 py-2 text-sm text-slate-600">ביטול</button>
+                  <button type="button" onClick={handleSaveSupplierStockChanges} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-xs flex items-center gap-1.5">
+                    <Check className="w-4 h-4" /> שמור מלאי ספק
+                  </button>
+                </div>
               )}
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
-      {/* Supplier Order / Invoice Modal (כולל עריכת מחיר לכל ספר בהזמנה) */}
+      {/* Supplier Order / Invoice Modal (כולל עריכת מחיר לכל ספר) */}
       {isSupplierInvoiceModalOpen && invoiceSupplier && (() => {
         const orderTotal = invoiceItems.reduce((sum, item) => {
           const b = inventoryList.find(x => x.id === item.bookId);
-          const price = item.customPrice !== undefined && item.customPrice !== ''
-            ? Number(item.customPrice)
+          const unitPrice = item.customPrice !== undefined && item.customPrice !== ''
+            ? Math.max(0, Number(item.customPrice))
             : Number(b?.prices?.supplier || 0);
-          return sum + (price * Number(item.quantity || 0));
+          return sum + (unitPrice * Number(item.quantity || 0));
         }, 0);
 
         return (
@@ -4862,7 +4889,7 @@ export default function App() {
               <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
                 <div>
                   <h3 className="font-extrabold text-lg text-slate-900">הפקת הזמנה לספק: {invoiceSupplier.name}</h3>
-                  <p className="text-xs text-slate-500">ניתן לערוך ידנית את המחיר ליחידה עבור כל ספר בהזמנה זו</p>
+                  <p className="text-xs text-slate-500">ניתן לערוך מחיר ליחידה לכל ספר בהזמנה זו בנפרד</p>
                 </div>
                 <button onClick={() => setIsSupplierInvoiceModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
               </div>
@@ -4871,47 +4898,44 @@ export default function App() {
                   {invoiceItems.map((row, idx) => {
                     const book = inventoryList.find(b => b.id === row.bookId);
                     const unitPrice = row.customPrice !== undefined && row.customPrice !== ''
-                      ? Number(row.customPrice)
+                      ? Math.max(0, Number(row.customPrice))
                       : Number(book?.prices?.supplier || 0);
-
                     return (
                       <div key={idx} className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-slate-50/90 p-2.5 rounded-xl ring-1 ring-slate-200/70">
                         <select
                           value={row.bookId}
                           onChange={e => {
-                            const selectedB = inventoryList.find(x => x.id === e.target.value);
+                            const selectedBook = inventoryList.find(x => x.id === e.target.value);
                             const next = [...invoiceItems];
                             next[idx] = {
                               ...next[idx],
                               bookId: e.target.value,
-                              customPrice: Number(selectedB?.prices?.supplier || 0)
+                              customPrice: Number(selectedBook?.prices?.supplier || 0)
                             };
                             setInvoiceItems(next);
                           }}
-                          className="flex-1 p-2 border border-slate-200 rounded-xl text-sm bg-white min-w-[160px]"
+                          className="flex-1 p-2 border border-slate-200 rounded-xl text-sm bg-white"
                         >
                           <option value="">בחר ספר...</option>
                           {[...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => (
                             <option key={b.id} value={b.id}>{b.title} (במחסן: {b.publisherStock})</option>
                           ))}
                         </select>
-                        <div className="flex items-center gap-1">
-                          <span className="text-[11px] text-slate-500">כמות:</span>
-                          <input
-                            type="number"
-                            min="1"
-                            value={row.quantity}
-                            onChange={e => {
-                              const next = [...invoiceItems];
-                              next[idx] = { ...next[idx], quantity: e.target.value };
-                              setInvoiceItems(next);
-                            }}
-                            className="w-16 p-2 border border-slate-200 rounded-xl text-sm text-center bg-white font-bold"
-                            dir="ltr"
-                          />
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <span className="text-[11px] text-indigo-700 font-bold">₪ ליח':</span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={row.quantity}
+                          onChange={e => {
+                            const next = [...invoiceItems];
+                            next[idx] = { ...next[idx], quantity: e.target.value };
+                            setInvoiceItems(next);
+                          }}
+                          className="w-16 p-2 border border-slate-200 rounded-xl text-sm text-center bg-white font-bold"
+                          title="כמות"
+                          dir="ltr"
+                        />
+                        <div className="flex items-center gap-1" title="מחיר ליחידה להזמנה זו">
+                          <span className="text-xs text-slate-400">₪</span>
                           <input
                             type="number"
                             min="0"
@@ -4922,23 +4946,18 @@ export default function App() {
                               next[idx] = { ...next[idx], customPrice: e.target.value };
                               setInvoiceItems(next);
                             }}
-                            className="w-20 p-2 border border-indigo-200 rounded-xl text-sm text-center bg-white font-extrabold text-indigo-700"
+                            className="w-20 p-2 border border-indigo-200 rounded-xl text-sm text-center bg-white font-bold text-indigo-700"
                             dir="ltr"
-                            title="ערוך מחיר לספק זה"
                           />
                         </div>
-                        <span className="text-xs font-extrabold text-slate-800 w-20 text-center">₪{(unitPrice * Number(row.quantity || 0)).toLocaleString()}</span>
+                        <span className="text-xs font-extrabold text-emerald-700 w-20 text-center">₪{(unitPrice * Number(row.quantity || 0)).toLocaleString()}</span>
                         {invoiceItems.length > 1 && (
                           <button onClick={() => setInvoiceItems(invoiceItems.filter((_, i) => i !== idx))} className="text-slate-400 hover:text-rose-500 p-1"><X className="w-4 h-4" /></button>
                         )}
                       </div>
                     );
                   })}
-                  <button
-                    type="button"
-                    onClick={() => setInvoiceItems([...invoiceItems, { bookId: '', quantity: 10, customPrice: 0 }])}
-                    className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1"
-                  >
+                  <button type="button" onClick={() => setInvoiceItems([...invoiceItems, { bookId: '', quantity: 10, customPrice: 0 }])} className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
                     <Plus className="w-3.5 h-3.5" /> הוסף ספר נוסף להזמנה
                   </button>
                 </div>
@@ -5653,12 +5672,6 @@ export default function App() {
 
                 <div className="space-y-1 pt-2 border-t border-slate-100">
                   <p className="px-3 text-[11px] font-bold text-slate-400">פעולות מהירות</p>
-                  <button
-                    onClick={() => { setCalcItems([{ bookId: inventoryList[0]?.id || '', quantity: 10 }]); setCalcDiscountPct(0); setIsPurchaseCalcOpen(true); setIsCommandOpen(false); }}
-                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl hover:bg-amber-50 text-sm font-bold text-amber-800 transition-colors"
-                  >
-                    <Calculator className="w-4 h-4" /> פתח מחשבון קניית ספרים מהיר
-                  </button>
                   <button
                     onClick={() => { createAutoSnapshot('נקודת שחזור מהירה', false); setIsCommandOpen(false); }}
                     className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl hover:bg-emerald-50 text-sm font-bold text-emerald-700 transition-colors"
