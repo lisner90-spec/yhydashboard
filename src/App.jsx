@@ -15,7 +15,8 @@ import {
   Bell, Users, Calendar, Activity, Tag, MapPin,
   ClipboardCheck, PanelRightClose, PanelRightOpen, PackagePlus, Undo2,
   PenTool, Volume2, VolumeX, Store, Unlock,
-  Sliders, FileCheck, RotateCcw, ShieldCheck, Zap
+  Sliders, FileCheck, RotateCcw, ShieldCheck, Zap,
+  Mic, MicOff, Maximize2, Minimize2, Flame, Trophy, EyeOff, Bot
 } from 'lucide-react';
 
 // ==========================================
@@ -411,6 +412,30 @@ export default function App() {
   const [signatureModalTarget, setSignatureModalTarget] = useState(null); // { recipient, onSave }
   const signatureCanvasRef = useRef(null);
   const isDrawingSigRef = useRef(false);
+
+  // --- פיצ'רי על חדשים: עוזר AI קולי, סימולטור רווחים, מפת חום, ספירה עיוורת, מובילים, מצב מיקוד וקבלה ---
+  const [isZenFocusMode, setIsZenFocusMode] = useState(false);
+  const [lastPosSaleReceipt, setLastPosSaleReceipt] = useState(null);
+  const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
+  const [aiQueryText, setAiQueryText] = useState('');
+  const [aiHistory, setAiHistory] = useState([
+    { role: 'bot', text: 'שלום! אני העוזר החכם של הוצאת ישיבת ירוחם. אפשר לשאול אותי למשל: "כמה עותקים של מניטו יש במלאי?", "מה הרווח שלנו?", או "מי הספקים עם חוב פתוח?"' }
+  ]);
+  const [isListeningVoice, setIsListeningVoice] = useState(false);
+
+  // סימולטור "מה אם?" (What-If)
+  const [isWhatIfOpen, setIsWhatIfOpen] = useState(false);
+  const [whatIfPriceDelta, setWhatIfPriceDelta] = useState(5);
+  const [whatIfExtraUnits, setWhatIfExtraUnits] = useState(250);
+  const [whatIfDiscountPct, setWhatIfDiscountPct] = useState(0);
+
+  // ספירת מלאי עיוורת (Blind Audit)
+  const [isBlindAuditOpen, setIsBlindAuditOpen] = useState(false);
+  const [blindCounts, setBlindCounts] = useState({});
+  const [blindAuditSubmitted, setBlindAuditSubmitted] = useState(false);
+
+  // כרטיס ביקור וקטלוג דיגיטלי חיצוני (QR Public Card)
+  const [isPublicCardOpen, setIsPublicCardOpen] = useState(false);
 
   useEffect(() => {
     try { localStorage.setItem('yhy_erp_pos_sound', JSON.stringify(posSoundEnabled)); } catch {}
@@ -1868,43 +1893,76 @@ export default function App() {
     setPosDiscountValue(0);
     setPosBuyerNote('');
     setSelectedPosCustomerId('');
+    setLastPosSaleReceipt(saleObj);
     playPosTone('sale');
     logAuditAction('קופה', `מכירה בדוכן ע"ס ₪${totalAmount.toLocaleString()}`, `${saleItems.map(i => `${i.title} ×${i.qty}`).join(', ')} (${posPaymentMethod})`);
     showToast(`מכירה הושלמה ע"ס ₪${totalAmount.toLocaleString()} והמלאי עודכן!`, 'success');
   };
 
-  // ==========================================
-  // פעולות הפקת ספרים (קנבן)
-  // ==========================================
-  const handleAddTask = async (e) => {
-    e.preventDefault();
-    if (!newTaskForm.title.trim()) return;
-    const taskObj = {
-      title: newTaskForm.title.trim(),
-      author: newTaskForm.author.trim(),
-      status: newTaskForm.status,
-      notes: newTaskForm.notes.trim(),
-      invoices: [],
-      addedToInventory: false,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-    if (db && dbConnected) {
-      try { await addDoc(getCollRef('tasks'), taskObj); } catch { setTasksList(prev => [...prev, { ...taskObj, id: 'task_' + Date.now() }]); }
+  // --- מנוע עוזר AI בשפה חופשית ופקודות קוליות ---
+  const handleAskAiAssistant = (rawQuestion) => {
+    const q = String(rawQuestion || aiQueryText || '').trim();
+    if (!q) return;
+    setAiQueryText('');
+    const normQ = q.toLowerCase();
+    let answer = '';
+
+    // 1. שאלות על ספר ספציפי (מלאי / מחיר / ספקים)
+    const matchedBook = inventoryList.find(b => {
+      const words = normalizeBookTitle(b.title).split(' ').filter(w => w.length >= 3);
+      return words.some(w => normQ.includes(w.toLowerCase()));
+    });
+
+    if (matchedBook && (normQ.includes('כמה') || normQ.includes('מלאי') || normQ.includes('עותק') || normQ.includes('מחיר') || normQ.includes('ספק'))) {
+      const total = calculateTotalStock(matchedBook);
+      const supStock = calculateSuppliersStock(matchedBook);
+      const eff = getEffectiveBookPrices(matchedBook);
+      const supListStr = (matchedBook.breakdown || []).filter(r => Number(r.amount) > 0).map(r => `${r.location} (${r.amount})`).join(', ');
+      answer = `📚 "${matchedBook.title}":\n• במחסן הראשי: ${matchedBook.publisherStock} עותקים\n• אצל ספקים: ${supStock} עותקים${supListStr ? ` (${supListStr})` : ''}\n• סה"כ במערכת: ${total} עותקים\n• מחירים: צרכן ₪${eff.general} | ישיבה ₪${eff.yeshiva} | ספק ₪${eff.supplier}`;
+    } else if (normQ.includes('רווח') || normQ.includes('הכנס') || normQ.includes('מכיר')) {
+      answer = `💰 תמונת הכנסות ורווחיות:\n• סה"כ הכנסות ברוטו: ₪${Math.round(salesAnalytics.totalGrossRevenue).toLocaleString()}\n• עלויות הפקה ושיווק: ₪${Math.round(salesAnalytics.totalAllExpenses).toLocaleString()}\n• רווח נקי משוער: ₪${Math.round(salesAnalytics.netProfitEstimate).toLocaleString()}`;
+    } else if (normQ.includes('חוב') || normQ.includes('גבייה') || normQ.includes('ספק')) {
+      const debtors = suppliersList
+        .map(s => ({ name: s.name, debt: getSupplierOpenDebt(s.name) }))
+        .filter(x => x.debt > 0)
+        .sort((a, b) => b.debt - a.debt);
+      answer = debtors.length === 0
+        ? '✅ אין כרגע חובות פתוחים מספקים!'
+        : `🚚 יתרת חוב פתוחה כוללת: ₪${totalOpenSupplierDebt.toLocaleString()}\nהספקים עם יתרה פתוחה:\n${debtors.map(d => `• ${d.name}: ₪${d.debt.toLocaleString()}`).join('\n')}`;
+    } else if (normQ.includes('מלאי נמוך') || normQ.includes('חסר') || normQ.includes('להדפיס')) {
+      answer = lowStockBooks.length === 0
+        ? '✅ כל הספרים מעל רף המלאי המינימלי!'
+        : `⚠️ ${lowStockBooks.length} ספרים מתחת לרף ההתראה:\n${lowStockBooks.map(b => `• ${b.title} (${calculateTotalStock(b)} / רף ${b.threshold || 30})`).join('\n')}`;
+    } else if (normQ.includes('הזמנ')) {
+      answer = `📦 יש כרגע ${pendingOrders.length} הזמנות פתוחות מהאתר ו-${shippedOrders.length} הזמנות שנשלחו.`;
     } else {
-      setTasksList(prev => [...prev, { ...taskObj, id: 'task_' + Date.now() }]);
+      answer = `📊 סיכום מהיר: במערכת יש ${totalCopiesInSystem.toLocaleString()} עותקים (שווי צרכן ₪${totalRetailValue.toLocaleString()}), ${pendingOrders.length} הזמנות פתוחות, ויתרת גבייה מספקים ע"ס ₪${totalOpenSupplierDebt.toLocaleString()}. נסה לשאול על שם ספר מסוים, רווחיות, חובות ספקים או מלאי נמוך!`;
     }
-    setNewTaskForm({ title: '', author: '', status: 'planned', notes: '' });
-    setIsAddTaskModalOpen(false);
-    showToast(`הפרויקט "${taskObj.title}" נוסף ללוח ההפקה!`, 'success');
+
+    setAiHistory(prev => [...prev, { role: 'user', text: q }, { role: 'bot', text: answer }]);
   };
 
-  const handleUpdateTaskStatus = async (task, newStatus) => {
-    const updated = { ...task, status: newStatus, updatedAt: Date.now() };
-    setTasksList(prev => prev.map(t => t.id === task.id ? updated : t));
-    if (selectedTask?.id === task.id) setSelectedTask(updated);
-    if (db && dbConnected && task.id) {
-      try { await updateDoc(getDocRef('tasks', task.id), { status: newStatus, updatedAt: Date.now() }); } catch {}
+  const handleStartVoiceRecognition = () => {
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRec) {
+      showToast('הדפדפן שלך אינו תומך בזיהוי דיבור קולי — ניתן להקליד שאלה חופשית.', 'warning');
+      return;
+    }
+    try {
+      const rec = new SpeechRec();
+      rec.lang = 'he-IL';
+      rec.interimResults = false;
+      setIsListeningVoice(true);
+      rec.onresult = (ev) => {
+        const transcript = ev.results?.[0]?.[0]?.transcript || '';
+        setIsListeningVoice(false);
+        if (transcript) handleAskAiAssistant(transcript);
+      };
+      rec.onerror = () => setIsListeningVoice(false);
+      rec.onend = () => setIsListeningVoice(false);
+      rec.start();
+    } catch {
+      setIsListeningVoice(false);
     }
   };
 
@@ -3445,6 +3503,15 @@ export default function App() {
 
             <button
               type="button"
+              onClick={() => setIsAiAssistantOpen(true)}
+              className="bg-gradient-to-l from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition-all"
+              title="עוזר AI חכם בשפה חופשית ופקודות קוליות"
+            >
+              <Bot className="w-3.5 h-3.5" /> עוזר AI
+            </button>
+
+            <button
+              type="button"
               onClick={() => setActiveTab('integrations')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 transition-all ${
                 autoBackupSettings.enabled
@@ -3533,6 +3600,15 @@ export default function App() {
                   <p className="text-xs md:text-sm text-indigo-100/80">סקירה בזמן אמת של מלאי הספרים, שווי ההדפסה, הכנסות המכירות ויתרות הגבייה</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <button onClick={() => setIsAiAssistantOpen(true)} className="bg-gradient-to-l from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md transition-all">
+                    <Bot className="w-4 h-4" /> שאל את המערכת (AI)
+                  </button>
+                  <button onClick={() => setIsWhatIfOpen(true)} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
+                    <Sliders className="w-4 h-4 text-emerald-300" /> סימולטור "מה אם?"
+                  </button>
+                  <button onClick={() => setIsPublicCardOpen(true)} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
+                    <QrCode className="w-4 h-4 text-sky-300" /> כרטיס ביקור & קטלוג QR
+                  </button>
                   <button onClick={() => setActiveTab('pos')} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
                     <CreditCard className="w-4 h-4 text-emerald-300" /> מכירה בדוכן
                   </button>
@@ -3545,15 +3621,9 @@ export default function App() {
                   <button onClick={() => { setCalcItems([{ bookId: inventoryList[0]?.id || '', quantity: 10, customPrice: '' }]); setCalcDiscountPct(0); setIsPurchaseCalcOpen(true); }} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
                     <Calculator className="w-4 h-4 text-amber-300" /> מחשבון ספרים
                   </button>
-                  <button onClick={() => setIsCustomersModalOpen(true)} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
-                    <Users className="w-4 h-4 text-sky-300" /> לקוחות ({customersList.length})
-                  </button>
-                  <button onClick={() => setIsAuditModalOpen(true)} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
-                    <Activity className="w-4 h-4 text-rose-300" /> יומן פעולות
-                  </button>
                   {userRole === 'admin' && (
-                    <button onClick={() => setIsDashboardEditOpen(true)} className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-md transition-all">
-                      <Sliders className="w-4 h-4" /> ערוך נתוני דאשבורד
+                    <button onClick={() => setIsDashboardEditOpen(true)} className="bg-white/15 hover:bg-white/25 text-amber-200 px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 ring-1 ring-amber-300/30 transition-all">
+                      <Edit className="w-4 h-4" /> ערוך מדדים
                     </button>
                   )}
                 </div>
@@ -3672,7 +3742,12 @@ export default function App() {
                   <p className="text-xs font-bold text-slate-500">סה"כ עותקים במערכת</p>
                   <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><BookOpen className="w-4 h-4" /></div>
                 </div>
-                <p className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">{totalCopiesInSystem.toLocaleString()}</p>
+                <div className="flex items-end justify-between gap-2 mt-2">
+                  <p className="text-3xl font-extrabold text-slate-900 tracking-tight">{totalCopiesInSystem.toLocaleString()}</p>
+                  <svg className="w-20 h-8 text-indigo-500 shrink-0" viewBox="0 0 80 30" fill="none">
+                    <path d="M2 24 L16 19 L30 22 L46 12 L62 15 L78 5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
                 <div className="mt-3 pt-2.5 border-t border-slate-100 flex justify-between text-xs text-slate-500">
                   <span>במחסן: <strong className="text-indigo-700">{totalWarehouseCopies.toLocaleString()}</strong></span>
                   <span>אצל ספקים: <strong className="text-emerald-700">{totalSuppliersCopies.toLocaleString()}</strong></span>
@@ -3681,12 +3756,26 @@ export default function App() {
 
               <div className="premium-card bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-slate-500">שווי מלאי (צרכן / הדפסה)</p>
-                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><DollarSign className="w-4 h-4" /></div>
+                  <p className="text-xs font-bold text-slate-500">שווי מלאי & בריאות קטלוג</p>
+                  {(() => {
+                    const healthyCount = Math.max(0, inventoryList.length - lowStockBooks.length);
+                    const healthPct = inventoryList.length > 0 ? Math.round((healthyCount / inventoryList.length) * 100) : 100;
+                    const dashOffset = 100 - healthPct;
+                    return (
+                      <div className="relative w-10 h-10 flex items-center justify-center" title={`${healthPct}% מהספרים במלאי תקין`}>
+                        <svg className="w-10 h-10 -rotate-90" viewBox="0 0 36 36">
+                          <circle cx="18" cy="18" r="14" fill="none" stroke="#E2E8F0" strokeWidth="3.5" />
+                          <circle cx="18" cy="18" r="14" fill="none" stroke="#10B981" strokeWidth="3.5" strokeDasharray="100" strokeDashoffset={dashOffset} strokeLinecap="round" />
+                        </svg>
+                        <span className="absolute text-[9px] font-black text-emerald-700">{healthPct}%</span>
+                      </div>
+                    );
+                  })()}
                 </div>
-                <p className="text-3xl font-extrabold text-emerald-700 mt-2 tracking-tight">₪{totalRetailValue.toLocaleString()}</p>
-                <div className="mt-3 pt-2.5 border-t border-slate-100 text-xs text-slate-500">
-                  שווי לפי עלות הדפסה: <strong className="text-rose-700">₪{totalProductionValue.toLocaleString()}</strong>
+                <p className="text-3xl font-extrabold text-emerald-700 mt-1 tracking-tight">₪{totalRetailValue.toLocaleString()}</p>
+                <div className="mt-3 pt-2.5 border-t border-slate-100 text-xs text-slate-500 flex justify-between">
+                  <span>הדפסה: <strong className="text-rose-700">₪{totalProductionValue.toLocaleString()}</strong></span>
+                  <span className="text-emerald-700 font-bold">{inventoryList.length - lowStockBooks.length}/{inventoryList.length} תקינים</span>
                 </div>
               </div>
 
@@ -3695,7 +3784,12 @@ export default function App() {
                   <p className="text-xs font-bold text-slate-500">סה"כ הכנסות מתועדות</p>
                   <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><TrendingUp className="w-4 h-4" /></div>
                 </div>
-                <p className="text-3xl font-extrabold text-purple-700 mt-2 tracking-tight">₪{(liveStoreRevenue + liveSupplierRevenue + livePosRevenue).toLocaleString()}</p>
+                <div className="flex items-end justify-between gap-2 mt-2">
+                  <p className="text-3xl font-extrabold text-purple-700 tracking-tight">₪{(liveStoreRevenue + liveSupplierRevenue + livePosRevenue).toLocaleString()}</p>
+                  <svg className="w-20 h-8 text-purple-500 shrink-0" viewBox="0 0 80 30" fill="none">
+                    <path d="M2 26 L18 22 L34 16 L50 18 L64 9 L78 4" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
                 <div className="mt-3 pt-2.5 border-t border-slate-100 text-[11px] text-slate-500 flex flex-wrap gap-x-2">
                   <span>אתר ₪{liveStoreRevenue.toLocaleString()}</span>·
                   <span>ספקים ₪{liveSupplierRevenue.toLocaleString()}</span>·
@@ -3795,6 +3889,97 @@ export default function App() {
                   </div>
                 );
               })()}
+            </div>
+
+            {/* מפת חום של פעילות ההוצאה (Heatmap) + טבלת מובילים ויעדים */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="lg:col-span-7 bg-white p-6 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                    <Flame className="w-4 h-4 text-orange-500" /> מפת חום — פעילות מכירות והזמנות (35 הימים האחרונים)
+                  </h3>
+                  <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                    <span>פחות</span>
+                    <span className="w-3 h-3 rounded-xs bg-slate-100 inline-block" />
+                    <span className="w-3 h-3 rounded-xs bg-emerald-200 inline-block" />
+                    <span className="w-3 h-3 rounded-xs bg-emerald-400 inline-block" />
+                    <span className="w-3 h-3 rounded-xs bg-emerald-600 inline-block" />
+                    <span>שיא</span>
+                  </div>
+                </div>
+                {(() => {
+                  const days = [];
+                  const dayMs = 24 * 60 * 60 * 1000;
+                  const todayStart = new Date();
+                  todayStart.setHours(0, 0, 0, 0);
+                  for (let i = 34; i >= 0; i--) {
+                    const start = todayStart.getTime() - i * dayMs;
+                    const end = start + dayMs;
+                    const count =
+                      posSales.filter(s => Number(s.timestamp || 0) >= start && Number(s.timestamp || 0) < end).length +
+                      ordersList.filter(o => !o.isTest && Number(o.timestamp || 0) >= start && Number(o.timestamp || 0) < end).length +
+                      supplierLogs.filter(l => Number(l.timestamp || 0) >= start && Number(l.timestamp || 0) < end).length;
+                    days.push({
+                      label: new Date(start).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' }),
+                      count
+                    });
+                  }
+                  return (
+                    <div className="grid grid-cols-7 gap-2 pt-1">
+                      {days.map((d, idx) => {
+                        const cls =
+                          d.count === 0 ? 'bg-slate-100 text-slate-400' :
+                          d.count === 1 ? 'bg-emerald-200 text-emerald-900' :
+                          d.count <= 3 ? 'bg-emerald-400 text-white' : 'bg-emerald-600 text-white shadow-xs';
+                        return (
+                          <div key={idx} title={`${d.label}: ${d.count} פעולות מכירה/הזמנה`} className={`p-2 rounded-xl text-center transition-transform hover:scale-105 ${cls}`}>
+                            <span className="text-[10px] font-bold block">{d.label}</span>
+                            <span className="text-xs font-black">{d.count > 0 ? d.count : '·'}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="lg:col-span-5 bg-white p-6 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-3.5">
+                <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                  <Trophy className="w-4 h-4 text-amber-500" /> מובילי הפצה וחנויות מובילות
+                </h3>
+                {(() => {
+                  const ranking = suppliersList
+                    .map(s => {
+                      const totalVol = supplierLogs
+                        .filter(l => (l.supplierName || '').trim() === (s.name || '').trim() && l.type !== 'return')
+                        .reduce((sum, l) => sum + Number(l.totalAmount || 0), 0);
+                      const held = getSupplierInventoryItems(s.name).reduce((sum, x) => sum + x.amount, 0);
+                      return { id: s.id, name: s.name, totalVol, held };
+                    })
+                    .sort((a, b) => b.totalVol - a.totalVol || b.held - a.held)
+                    .slice(0, 4);
+                  return ranking.length === 0 ? (
+                    <p className="text-xs text-slate-400 bg-slate-50 p-5 rounded-xl text-center">הוסף ספקים והזמנות כדי לראות את דירוג המפיצים המובילים.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {ranking.map((r, i) => (
+                        <div key={r.id} className="flex items-center justify-between p-3 bg-slate-50/90 rounded-xl ring-1 ring-slate-200/60 text-xs">
+                          <div className="flex items-center gap-2.5">
+                            <span className={`w-6 h-6 rounded-lg font-black flex items-center justify-center ${i === 0 ? 'bg-amber-400 text-slate-950' : 'bg-slate-200 text-slate-700'}`}>
+                              {i + 1}
+                            </span>
+                            <div>
+                              <span className="font-extrabold text-slate-800 block">{r.name}</span>
+                              <span className="text-[11px] text-slate-400">מלאי מוחזק: {r.held} עותקים</span>
+                            </div>
+                          </div>
+                          <span className="font-extrabold text-indigo-700">₪{r.totalVol.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -4130,6 +4315,31 @@ export default function App() {
                             <CheckCircle className="w-4 h-4" /> אשר מכירה והפחת מלאי
                           </button>
                         </div>
+
+                        {/* כפתור שליחת אישור רכישה מעוצב ללקוח בוואטסאפ מיד בסיום העסקה */}
+                        {lastPosSaleReceipt && (
+                          <div className="bg-sky-50 border border-sky-200 p-3.5 rounded-2xl flex items-center justify-between gap-2 text-xs">
+                            <div>
+                              <span className="font-extrabold text-sky-900 block">העסקה האחרונה (₪{Number(lastPosSaleReceipt.totalAmount || 0).toLocaleString()}) נרשמה!</span>
+                              <span className="text-[11px] text-sky-700">שלח אישור רכישה מעוצב ללקוח:</span>
+                            </div>
+                            <a
+                              href={`https://wa.me/?text=${encodeURIComponent(
+                                `📚 *אישור רכישה — הוצאת ספרי ישיבת ירוחם*\n` +
+                                `${lastPosSaleReceipt.buyerNote ? `לכבוד: ${lastPosSaleReceipt.buyerNote}\n` : ''}` +
+                                `תאריך: ${lastPosSaleReceipt.date}\n\n` +
+                                `${(lastPosSaleReceipt.items || []).map(i => `• ${i.title} (×${i.qty}) — ₪${Number(i.lineTotal || 0).toLocaleString()}`).join('\n')}\n\n` +
+                                `*סה"כ שולם (${lastPosSaleReceipt.paymentMethod}): ₪${Number(lastPosSaleReceipt.totalAmount || 0).toLocaleString()}*\n` +
+                                `תודה רבה ולימוד פורה!`
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl font-bold flex items-center gap-1.5 shrink-0 shadow-xs"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" /> שלח בוואטסאפ
+                            </a>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -4329,7 +4539,7 @@ export default function App() {
 
         {/* ==================== 4. INVENTORY MANAGEMENT ==================== */}
         {activeTab === 'inventory' && (
-          <div className="bg-white rounded-2xl shadow-xs ring-1 ring-slate-200/70 overflow-hidden">
+          <div className={`${isZenFocusMode ? 'fixed inset-0 z-[85] overflow-y-auto p-4 md:p-8 rounded-none' : 'rounded-2xl shadow-xs ring-1 ring-slate-200/70 overflow-hidden'} bg-white`}>
             <div className="p-4 md:p-6 border-b border-slate-100 space-y-4">
               <div className="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-3.5">
                 <div className="flex flex-col sm:flex-row gap-2.5 flex-1">
@@ -4355,6 +4565,17 @@ export default function App() {
 
                 {userRole === 'admin' && (
                   <div className="flex flex-wrap gap-2 print:hidden">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBlindCounts({});
+                        setBlindAuditSubmitted(false);
+                        setIsBlindAuditOpen(true);
+                      }}
+                      className="bg-amber-50 hover:bg-amber-100 text-amber-900 ring-1 ring-amber-200/80 px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
+                    >
+                      <EyeOff className="w-4 h-4 text-amber-600" /> ספירה עיוורת
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -4423,6 +4644,17 @@ export default function App() {
                 <button onClick={() => setIsCatalogModalOpen(true)} className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200/80 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"><BookMarked className="w-3.5 h-3.5" /> קטלוג לשליחה</button>
                 <button onClick={() => setIsGiftHistoryOpen(true)} className="bg-slate-50 hover:bg-slate-100 text-slate-700 ring-1 ring-slate-200/80 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"><History className="w-3.5 h-3.5" /> מעקב מתנות ({giftLogs.length})</button>
                 <div className="mr-auto flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsZenFocusMode(prev => !prev)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 transition-colors ${
+                      isZenFocusMode ? 'bg-indigo-600 text-white ring-indigo-600' : 'bg-white ring-slate-200 hover:bg-slate-50 text-slate-600'
+                    }`}
+                    title="מצב מיקוד (מסך מלא נקי לטבלה)"
+                  >
+                    {isZenFocusMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                    <span>{isZenFocusMode ? 'צא ממצב מיקוד' : 'מצב מיקוד'}</span>
+                  </button>
                   <button onClick={() => window.print()} className="bg-white ring-1 ring-slate-200 hover:bg-slate-50 text-slate-600 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"><Printer className="w-3.5 h-3.5" /> הדפס</button>
                   <button onClick={handleExportCSV} className="bg-white ring-1 ring-slate-200 hover:bg-slate-50 text-slate-600 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"><Download className="w-3.5 h-3.5" /> ייצוא CSV</button>
                 </div>
@@ -7677,6 +7909,262 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* מודאל עוזר AI בשפה חופשית ופקודות קוליות */}
+      {isAiAssistantOpen && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-gradient-to-l from-indigo-900 to-violet-950 text-white flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-white/15 flex items-center justify-center"><Bot className="w-5 h-5 text-amber-300" /></div>
+                <div>
+                  <h3 className="font-extrabold text-base">עוזר AI חכם — שאל את המערכת</h3>
+                  <p className="text-[11px] text-indigo-200">הקלד או דבר בעברית חופשית לקבלת נתונים מיידיים</p>
+                </div>
+              </div>
+              <button onClick={() => setIsAiAssistantOpen(false)} className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-4 overflow-y-auto space-y-3 flex-1 bg-slate-50/60">
+              {aiHistory.map((m, idx) => (
+                <div key={idx} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+                  <div className={`max-w-[85%] p-3.5 rounded-2xl text-xs whitespace-pre-line leading-relaxed shadow-2xs ${
+                    m.role === 'user'
+                      ? 'bg-indigo-600 text-white font-bold'
+                      : 'bg-white text-slate-800 ring-1 ring-slate-200/80'
+                  }`}>
+                    {m.text}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="px-4 py-2 bg-slate-50 border-t flex flex-wrap gap-1.5">
+              {['מה הרווח שלנו?', 'מי הספקים עם חוב?', 'אילו ספרים במלאי נמוך?', 'כמה מניטו יש במלאי?'].map(q => (
+                <button key={q} type="button" onClick={() => handleAskAiAssistant(q)} className="text-[11px] bg-white hover:bg-indigo-50 text-indigo-700 ring-1 ring-slate-200 px-2.5 py-1 rounded-full font-bold">
+                  {q}
+                </button>
+              ))}
+            </div>
+            <form onSubmit={e => { e.preventDefault(); handleAskAiAssistant(); }} className="p-3.5 border-t bg-white flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleStartVoiceRecognition}
+                className={`p-2.5 rounded-xl transition-all ${isListeningVoice ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                title="שאלה קולית במיקרופון"
+              >
+                {isListeningVoice ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </button>
+              <input
+                type="text"
+                value={aiQueryText}
+                onChange={e => setAiQueryText(e.target.value)}
+                placeholder="שאל משהו על המלאי, הרווחים או הספקים..."
+                className="flex-1 p-2.5 border border-slate-200 rounded-xl text-xs outline-none focus:border-indigo-500"
+              />
+              <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold">שלח</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* מודאל סימולטור "מה אם?" (What-If Pricing & Profit Simulator) */}
+      {isWhatIfOpen && (() => {
+        const avgSellPrice = 58;
+        const avgProdCost = 14.5;
+        const simulatedUnitPrice = Math.max(1, Math.round((avgSellPrice + Number(whatIfPriceDelta || 0)) * (1 - Number(whatIfDiscountPct || 0) / 100)));
+        const simulatedUnits = Math.max(0, Number(whatIfExtraUnits || 0));
+        const simulatedRevenue = simulatedUnits * simulatedUnitPrice;
+        const simulatedCost = simulatedUnits * avgProdCost;
+        const simulatedExtraProfit = simulatedRevenue - simulatedCost;
+        const totalProjectedProfit = Math.round(salesAnalytics.netProfitEstimate + simulatedExtraProfit);
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-lg overflow-hidden" dir="rtl">
+              <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
+                <div>
+                  <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Sliders className="w-5 h-5 text-indigo-600" /> סימולטור "מה אם?" (תמחור ומבצעים)</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">בדוק בזמן אמת איך שינוי מחיר או מבצע ישפיעו על הרווח הנקי</p>
+                </div>
+                <button onClick={() => setIsWhatIfOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="p-5 space-y-4">
+                <div className="space-y-3 bg-slate-50 p-4 rounded-2xl ring-1 ring-slate-200/70 text-xs">
+                  <div>
+                    <div className="flex justify-between font-bold mb-1">
+                      <span>כמות עותקים צפויה להימכר (שבת בוגרים / חגים):</span>
+                      <span className="text-indigo-700 font-extrabold">{simulatedUnits} עותקים</span>
+                    </div>
+                    <input type="range" min="0" max="1500" step="25" value={whatIfExtraUnits} onChange={e => setWhatIfExtraUnits(Number(e.target.value))} className="w-full accent-indigo-600" />
+                  </div>
+                  <div>
+                    <div className="flex justify-between font-bold mb-1">
+                      <span>שינוי במחיר ממוצע לספר (₪):</span>
+                      <span className="text-emerald-700 font-extrabold">{whatIfPriceDelta >= 0 ? `+₪${whatIfPriceDelta}` : `-₪${Math.abs(whatIfPriceDelta)}`} (מחיר יעד: ₪{simulatedUnitPrice})</span>
+                    </div>
+                    <input type="range" min="-20" max="30" step="1" value={whatIfPriceDelta} onChange={e => setWhatIfPriceDelta(Number(e.target.value))} className="w-full accent-emerald-600" />
+                  </div>
+                  <div>
+                    <div className="flex justify-between font-bold mb-1">
+                      <span>אחוז הנחת מבצע (%):</span>
+                      <span className="text-amber-700 font-extrabold">{whatIfDiscountPct}%</span>
+                    </div>
+                    <input type="range" min="0" max="50" step="5" value={whatIfDiscountPct} onChange={e => setWhatIfDiscountPct(Number(e.target.value))} className="w-full accent-amber-500" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-center">
+                  <div className="bg-indigo-50 p-4 rounded-2xl ring-1 ring-indigo-100">
+                    <span className="text-xs font-bold text-indigo-700 block">תוספת רווח מהמהלך</span>
+                    <span className={`text-2xl font-black ${simulatedExtraProfit >= 0 ? 'text-indigo-900' : 'text-rose-600'}`}>
+                      {simulatedExtraProfit >= 0 ? '+' : ''}₪{Math.round(simulatedExtraProfit).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="bg-emerald-50 p-4 rounded-2xl ring-1 ring-emerald-200">
+                    <span className="text-xs font-bold text-emerald-700 block">רווח נקי כולל צפוי</span>
+                    <span className="text-2xl font-black text-emerald-800">₪{totalProjectedProfit.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* מודאל ספירת מלאי עיוורת (Blind Stock Audit + דוח פערים) */}
+      {isBlindAuditOpen && (() => {
+        const auditRows = [...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => {
+          const countedRaw = blindCounts[b.id];
+          const hasCount = countedRaw !== undefined && countedRaw !== '';
+          const counted = hasCount ? Math.max(0, Number(countedRaw)) : null;
+          const systemStock = Number(b.publisherStock || 0);
+          const diff = hasCount ? counted - systemStock : 0;
+          return { book: b, hasCount, counted, systemStock, diff };
+        });
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden" dir="rtl">
+              <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
+                <div>
+                  <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><EyeOff className="w-5 h-5 text-amber-600" /> ספירת מלאי עיוורת (Blind Audit)</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">הזן את הכמות שספרת פיזית במחסן מבלי לראות את נתוני המחשב — ובסוף הצג דוח פערים</p>
+                </div>
+                <button onClick={() => setIsBlindAuditOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="p-5 overflow-y-auto space-y-2.5 flex-1">
+                {auditRows.map(({ book, hasCount, counted, systemStock, diff }) => (
+                  <div key={book.id} className="p-3 bg-slate-50/90 rounded-2xl ring-1 ring-slate-200/70 flex items-center justify-between gap-3 text-xs">
+                    <span className="font-bold text-slate-800 flex-1">{book.title}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="כמות שנספרה..."
+                      value={blindCounts[book.id] ?? ''}
+                      onChange={e => setBlindCounts(prev => ({ ...prev, [book.id]: e.target.value }))}
+                      className="w-28 p-2 border border-slate-300 rounded-xl text-center font-extrabold bg-white"
+                      dir="ltr"
+                    />
+                    {blindAuditSubmitted && hasCount && (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-slate-500">במחשב: <strong>{systemStock}</strong></span>
+                        <span className={`px-2.5 py-1 rounded-lg font-extrabold ${
+                          diff === 0 ? 'bg-emerald-100 text-emerald-800' :
+                          diff > 0 ? 'bg-indigo-100 text-indigo-800' : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {diff === 0 ? 'תואם ✓' : diff > 0 ? `+${diff}` : diff}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="p-4 border-t bg-slate-50/80 flex flex-wrap justify-between items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setBlindAuditSubmitted(true)}
+                  className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold"
+                >
+                  חשוף והשווה פערים
+                </button>
+                {blindAuditSubmitted && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const now = Date.now();
+                      const updates = auditRows.filter(r => r.hasCount && r.diff !== 0);
+                      if (updates.length === 0) {
+                        showToast('אין פערים לעדכון!', 'info');
+                        return;
+                      }
+                      setInventoryList(prev => prev.map(b => {
+                        const found = updates.find(u => u.book.id === b.id);
+                        return found ? { ...b, publisherStock: found.counted, updatedAt: now } : b;
+                      }));
+                      if (db && dbConnected) {
+                        try {
+                          await Promise.all(updates.map(u => updateDoc(getDocRef('inventory', u.book.id), { publisherStock: u.counted, updatedAt: now })));
+                        } catch {}
+                      }
+                      logAuditAction('מלאי', 'עדכון מלאי מספירה עיוורת', `עודכנו ${updates.length} ספרים`);
+                      setIsBlindAuditOpen(false);
+                      showToast(`המלאי עודכן לפי הספירה (${updates.length} ספרים)!`, 'success');
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-xs"
+                  >
+                    עדכן את המלאי במערכת לפי הספירה
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* מודאל כרטיס ביקור וקטלוג דיגיטלי חי (Public QR Card) */}
+      {isPublicCardOpen && (() => {
+        const creditUrl = paymentLinks.creditBit || DEFAULT_CREDIT_BIT_LINK;
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(creditUrl)}`;
+        return (
+          <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+              <div className="p-5 bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#2B3318] text-white flex justify-between items-start shrink-0">
+                <div>
+                  <span className="text-[11px] text-amber-300 font-bold">כרטיס ביקור & קטלוג מהיר</span>
+                  <h3 className="text-xl font-extrabold mt-0.5">הוצאת ספרי ישיבת ירוחם</h3>
+                  <p className="text-xs text-slate-300 mt-0.5">סרוק לתשלום מהיר או עיין ברשימת הספרים</p>
+                </div>
+                <button onClick={() => setIsPublicCardOpen(false)} className="p-1.5 rounded-xl bg-white/10 text-white"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="p-5 overflow-y-auto space-y-4 flex-1 text-center">
+                <div className="bg-slate-50 p-4 rounded-2xl ring-1 ring-slate-200 inline-block">
+                  <img src={qrUrl} alt="QR קטלוג ותשלום" className="w-44 h-44 mx-auto rounded-xl" />
+                  <p className="text-[11px] font-bold text-slate-600 mt-2">סריקה ישירה לדף הרכישה והסליקה</p>
+                </div>
+                <div className="text-right space-y-1.5 max-h-48 overflow-y-auto bg-slate-50/90 p-3.5 rounded-2xl ring-1 ring-slate-200/70">
+                  <p className="text-xs font-extrabold text-slate-800 mb-2">ספרי ההוצאה ומחירי צרכן:</p>
+                  {[...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => (
+                    <div key={b.id} className="flex justify-between items-center text-xs py-1 border-b border-slate-200/60 last:border-0">
+                      <span className="font-medium text-slate-700">{b.title}</span>
+                      <span className="font-extrabold text-emerald-700">₪{getEffectiveBookPrices(b).general || getEffectiveBookPrices(b).yeshiva}</span>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const txt = buildCatalogWhatsAppText() + `\n\n💳 לתשלום מהיר באשראי/ביט: ${creditUrl}`;
+                    navigator.clipboard?.writeText(txt);
+                    showToast('כרטיס הביקור והקטלוג הועתקו לשיתוף!', 'success');
+                  }}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5"
+                >
+                  <Share2 className="w-4 h-4" /> העתק כרטיס ביקור + קטלוג לשיתוף
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* מודאל אישור פעולות (Confirm Dialog) */}
       {confirmDialog && (
