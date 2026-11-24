@@ -425,6 +425,7 @@ export default function App() {
 
   // סימולטור "מה אם?" (What-If)
   const [isWhatIfOpen, setIsWhatIfOpen] = useState(false);
+  const [whatIfBookId, setWhatIfBookId] = useState('');
   const [whatIfPriceDelta, setWhatIfPriceDelta] = useState(5);
   const [whatIfExtraUnits, setWhatIfExtraUnits] = useState(250);
   const [whatIfDiscountPct, setWhatIfDiscountPct] = useState(0);
@@ -436,6 +437,7 @@ export default function App() {
 
   // כרטיס ביקור וקטלוג דיגיטלי חיצוני (QR Public Card)
   const [isPublicCardOpen, setIsPublicCardOpen] = useState(false);
+  const [publicCardTier, setPublicCardTier] = useState('general'); // 'general' | 'yeshiva' | 'supplier'
 
   useEffect(() => {
     try { localStorage.setItem('yhy_erp_pos_sound', JSON.stringify(posSoundEnabled)); } catch {}
@@ -3559,7 +3561,7 @@ export default function App() {
         </div>
         )}
 
-        {/* סרגל נעילת קיוסק לתלמידים בדוכן */}
+        {/* סרגל נעילת מצב דוכן */}
         {isKioskMode && (
           <div className="bg-gradient-to-l from-indigo-900 via-slate-900 to-indigo-950 text-white px-4 py-3 flex items-center justify-between gap-3 shadow-lg sticky top-0 z-30 print:hidden">
             <div className="flex items-center gap-2.5">
@@ -3567,7 +3569,7 @@ export default function App() {
                 <Store className="w-4 h-4" />
               </div>
               <div>
-                <span className="font-extrabold text-sm block leading-tight">מצב דוכן עצמאי (קיוסק) — הוצאת ספרי ישיבת ירוחם</span>
+                <span className="font-extrabold text-sm block leading-tight">מצב דוכן — הוצאת ספרי ישיבת ירוחם</span>
                 <span className="text-[11px] text-indigo-200">גישה מוגבלת לקופה המהירה בלבד (נתוני הנהלה ועלויות מוסתרים)</span>
               </div>
             </div>
@@ -3576,7 +3578,7 @@ export default function App() {
               onClick={() => { setKioskUnlockPass(''); setIsKioskUnlockOpen(true); }}
               className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-sm shrink-0"
             >
-              <Unlock className="w-3.5 h-3.5" /> שחרר מצב ניהול
+              <Unlock className="w-3.5 h-3.5" /> שחרר מצב דוכן
             </button>
           </div>
         )}
@@ -4065,12 +4067,12 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       setIsKioskMode(true);
-                      showToast('המערכת ננעלה למצב דוכן עצמאי (קיוסק)!', 'info');
+                      showToast('המערכת ננעלה למצב דוכן!', 'info');
                     }}
                     className="bg-slate-900 hover:bg-slate-800 text-amber-300 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs"
                     title="נעל את המסך לקופה בלבד עבור תורן בדוכן"
                   >
-                    <Store className="w-3.5 h-3.5" /> מצב קיוסק לתלמידים
+                    <Store className="w-3.5 h-3.5" /> מצב דוכן
                   </button>
                 )}
                 <div className="bg-slate-100 p-1.5 rounded-xl grid grid-cols-3 gap-1 ring-1 ring-slate-200/80 w-full sm:w-auto overflow-hidden">
@@ -7518,12 +7520,12 @@ export default function App() {
         </div>
       )}
 
-      {/* מודאל שחרור מצב קיוסק (סיסמת מנהל/משתמש) */}
+      {/* מודאל שחרור מצב דוכן (סיסמת מנהל/משתמש) */}
       {isKioskUnlockOpen && (
         <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-sm overflow-hidden" dir="rtl">
             <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
-              <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Unlock className="w-5 h-5 text-amber-600" /> שחרור נעילת דוכן (קיוסק)</h3>
+              <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Unlock className="w-5 h-5 text-amber-600" /> שחרור מצב דוכן</h3>
               <button onClick={() => setIsKioskUnlockOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
             </div>
             <form
@@ -7968,12 +7970,23 @@ export default function App() {
 
       {/* מודאל סימולטור "מה אם?" (What-If Pricing & Profit Simulator) */}
       {isWhatIfOpen && (() => {
-        const avgSellPrice = 58;
-        const avgProdCost = 14.5;
-        const simulatedUnitPrice = Math.max(1, Math.round((avgSellPrice + Number(whatIfPriceDelta || 0)) * (1 - Number(whatIfDiscountPct || 0) / 100)));
+        const selectedSimBook = inventoryList.find(b => b.id === whatIfBookId) || null;
+        const selectedEffPrices = selectedSimBook ? getEffectiveBookPrices(selectedSimBook) : null;
+        const selectedCatMatch = selectedSimBook ? findMatchingCatalogBook(selectedSimBook.title) : null;
+
+        const baseSellPrice = selectedSimBook
+          ? (selectedEffPrices?.general || selectedEffPrices?.yeshiva || 58)
+          : 58;
+        const baseProdCost = selectedSimBook
+          ? (Number(selectedSimBook.productionCost || 0) > 0
+              ? Number(selectedSimBook.productionCost)
+              : Number(selectedCatMatch?.productionCost || 14.5))
+          : 14.5;
+
+        const simulatedUnitPrice = Math.max(1, Math.round((baseSellPrice + Number(whatIfPriceDelta || 0)) * (1 - Number(whatIfDiscountPct || 0) / 100)));
         const simulatedUnits = Math.max(0, Number(whatIfExtraUnits || 0));
         const simulatedRevenue = simulatedUnits * simulatedUnitPrice;
-        const simulatedCost = simulatedUnits * avgProdCost;
+        const simulatedCost = simulatedUnits * baseProdCost;
         const simulatedExtraProfit = simulatedRevenue - simulatedCost;
         const totalProjectedProfit = Math.round(salesAnalytics.netProfitEstimate + simulatedExtraProfit);
 
@@ -7983,25 +7996,56 @@ export default function App() {
               <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
                 <div>
                   <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Sliders className="w-5 h-5 text-indigo-600" /> סימולטור "מה אם?" (תמחור ומבצעים)</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">בדוק בזמן אמת איך שינוי מחיר או מבצע ישפיעו על הרווח הנקי</p>
+                  <p className="text-xs text-slate-500 mt-0.5">בחר ספר ספציפי מהמלאי ובדוק איך שינוי מחיר או מבצע ישפיעו על הרווח</p>
                 </div>
                 <button onClick={() => setIsWhatIfOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
               </div>
               <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">בחר ספר ספציפי לסימולציה:</label>
+                  <select
+                    value={whatIfBookId}
+                    onChange={e => {
+                      setWhatIfBookId(e.target.value);
+                      setWhatIfPriceDelta(0);
+                    }}
+                    className="w-full p-2.5 border border-indigo-200 rounded-xl text-xs font-bold bg-indigo-50/40 text-slate-800 outline-none"
+                  >
+                    <option value="">ממוצע כללי של ספרי ההוצאה (₪58 ליח')</option>
+                    {[...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => {
+                      const eff = getEffectiveBookPrices(b);
+                      return (
+                        <option key={b.id} value={b.id}>
+                          {b.title} (מחיר צרכן: ₪{eff.general || eff.yeshiva} | במלאי: {calculateTotalStock(b)})
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {selectedSimBook && (
+                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] bg-slate-50 p-2.5 rounded-xl ring-1 ring-slate-200/70">
+                      <span>מחיר בסיס: <strong className="text-indigo-700">₪{baseSellPrice}</strong></span>
+                      <span>·</span>
+                      <span>עלות הפקה ליח': <strong className="text-rose-700">₪{baseProdCost.toFixed(2)}</strong></span>
+                      <span>·</span>
+                      <span>מלאי זמין: <strong className="text-emerald-700">{calculateTotalStock(selectedSimBook)} עותקים</strong></span>
+                    </div>
+                  )}
+                </div>
+
                 <div className="space-y-3 bg-slate-50 p-4 rounded-2xl ring-1 ring-slate-200/70 text-xs">
                   <div>
                     <div className="flex justify-between font-bold mb-1">
-                      <span>כמות עותקים צפויה להימכר (שבת בוגרים / חגים):</span>
+                      <span>כמות עותקים צפויה להימכר:</span>
                       <span className="text-indigo-700 font-extrabold">{simulatedUnits} עותקים</span>
                     </div>
-                    <input type="range" min="0" max="1500" step="25" value={whatIfExtraUnits} onChange={e => setWhatIfExtraUnits(Number(e.target.value))} className="w-full accent-indigo-600" />
+                    <input type="range" min="0" max="1500" step="10" value={whatIfExtraUnits} onChange={e => setWhatIfExtraUnits(Number(e.target.value))} className="w-full accent-indigo-600" />
                   </div>
                   <div>
                     <div className="flex justify-between font-bold mb-1">
-                      <span>שינוי במחיר ממוצע לספר (₪):</span>
+                      <span>שינוי במחיר הספר (₪):</span>
                       <span className="text-emerald-700 font-extrabold">{whatIfPriceDelta >= 0 ? `+₪${whatIfPriceDelta}` : `-₪${Math.abs(whatIfPriceDelta)}`} (מחיר יעד: ₪{simulatedUnitPrice})</span>
                     </div>
-                    <input type="range" min="-20" max="30" step="1" value={whatIfPriceDelta} onChange={e => setWhatIfPriceDelta(Number(e.target.value))} className="w-full accent-emerald-600" />
+                    <input type="range" min="-25" max="40" step="1" value={whatIfPriceDelta} onChange={e => setWhatIfPriceDelta(Number(e.target.value))} className="w-full accent-emerald-600" />
                   </div>
                   <div>
                     <div className="flex justify-between font-bold mb-1">
@@ -8123,43 +8167,96 @@ export default function App() {
       {/* מודאל כרטיס ביקור וקטלוג דיגיטלי חי (Public QR Card) */}
       {isPublicCardOpen && (() => {
         const creditUrl = paymentLinks.creditBit || DEFAULT_CREDIT_BIT_LINK;
+        const payboxUrl = paymentLinks.paybox || DEFAULT_PAYBOX_LINK;
         const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(creditUrl)}`;
+        const sortedCatalog = [...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he'));
+
+        const buildFullCardWhatsAppMessage = () => {
+          const tierTitle =
+            publicCardTier === 'yeshiva' ? 'מחירון תלמידי ובוגרי הישיבה' :
+            publicCardTier === 'supplier' ? 'מחירון ספקים וחנויות ספרים' :
+            'מחירון לצרכן';
+          const lines = sortedCatalog.map((b, idx) => {
+            const eff = getEffectiveBookPrices(b);
+            const selectedPrice =
+              publicCardTier === 'yeshiva' ? (eff.yeshiva || eff.general) :
+              publicCardTier === 'supplier' ? (eff.supplier || eff.general) :
+              (eff.general || eff.yeshiva);
+            return `${idx + 1}. *${b.title}* — ₪${selectedPrice} (צרכן: ₪${eff.general} | תלמיד: ₪${eff.yeshiva} | ספק: ₪${eff.supplier})`;
+          });
+          return (
+            `📚 *כרטיס ביקור וקטלוג — הוצאת ספרי ישיבת ירוחם*\n` +
+            `_${tierTitle}_\n\n` +
+            `${lines.join('\n')}\n\n` +
+            `💳 *לתשלום באשראי / ביט:*\n${creditUrl}\n\n` +
+            `📱 *לתשלום בפייבוקס:*\n${payboxUrl}`
+          );
+        };
+
         return (
           <div className="fixed inset-0 bg-slate-950/65 backdrop-blur-xs z-[98] flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
               <div className="p-5 bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#2B3318] text-white flex justify-between items-start shrink-0">
                 <div>
-                  <span className="text-[11px] text-amber-300 font-bold">כרטיס ביקור & קטלוג מהיר</span>
+                  <span className="text-[11px] text-amber-300 font-bold">כרטיס ביקור & קטלוג מחירים מלא</span>
                   <h3 className="text-xl font-extrabold mt-0.5">הוצאת ספרי ישיבת ירוחם</h3>
-                  <p className="text-xs text-slate-300 mt-0.5">סרוק לתשלום מהיר או עיין ברשימת הספרים</p>
+                  <p className="text-xs text-slate-300 mt-0.5">כולל מחירי צרכן, תלמיד ישיבה וספקים + ברקוד סליקה</p>
                 </div>
                 <button onClick={() => setIsPublicCardOpen(false)} className="p-1.5 rounded-xl bg-white/10 text-white"><X className="w-4 h-4" /></button>
               </div>
               <div className="p-5 overflow-y-auto space-y-4 flex-1 text-center">
-                <div className="bg-slate-50 p-4 rounded-2xl ring-1 ring-slate-200 inline-block">
-                  <img src={qrUrl} alt="QR קטלוג ותשלום" className="w-44 h-44 mx-auto rounded-xl" />
-                  <p className="text-[11px] font-bold text-slate-600 mt-2">סריקה ישירה לדף הרכישה והסליקה</p>
+                <div className="bg-slate-50 p-3.5 rounded-2xl ring-1 ring-slate-200 inline-block">
+                  <img src={qrUrl} alt="QR קטלוג ותשלום" className="w-40 h-40 mx-auto rounded-xl" />
+                  <p className="text-[11px] font-bold text-slate-600 mt-1.5">סריקה ישירה לדף הרכישה והסליקה</p>
                 </div>
-                <div className="text-right space-y-1.5 max-h-48 overflow-y-auto bg-slate-50/90 p-3.5 rounded-2xl ring-1 ring-slate-200/70">
-                  <p className="text-xs font-extrabold text-slate-800 mb-2">ספרי ההוצאה ומחירי צרכן:</p>
-                  {[...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => (
-                    <div key={b.id} className="flex justify-between items-center text-xs py-1 border-b border-slate-200/60 last:border-0">
-                      <span className="font-medium text-slate-700">{b.title}</span>
-                      <span className="font-extrabold text-emerald-700">₪{getEffectiveBookPrices(b).general || getEffectiveBookPrices(b).yeshiva}</span>
-                    </div>
-                  ))}
+
+                {/* בורר הדגשת מחירון לשליחה */}
+                <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold">
+                  <button type="button" onClick={() => setPublicCardTier('general')} className={`py-1.5 rounded-lg transition-all ${publicCardTier === 'general' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500'}`}>מחיר צרכן</button>
+                  <button type="button" onClick={() => setPublicCardTier('yeshiva')} className={`py-1.5 rounded-lg transition-all ${publicCardTier === 'yeshiva' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-500'}`}>מחיר תלמיד</button>
+                  <button type="button" onClick={() => setPublicCardTier('supplier')} className={`py-1.5 rounded-lg transition-all ${publicCardTier === 'supplier' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-500'}`}>מחיר ספק</button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const txt = buildCatalogWhatsAppText() + `\n\n💳 לתשלום מהיר באשראי/ביט: ${creditUrl}`;
-                    navigator.clipboard?.writeText(txt);
-                    showToast('כרטיס הביקור והקטלוג הועתקו לשיתוף!', 'success');
-                  }}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5"
-                >
-                  <Share2 className="w-4 h-4" /> העתק כרטיס ביקור + קטלוג לשיתוף
-                </button>
+
+                <div className="text-right space-y-1.5 max-h-52 overflow-y-auto bg-slate-50/90 p-3.5 rounded-2xl ring-1 ring-slate-200/70">
+                  <div className="flex justify-between items-center text-[11px] font-extrabold text-slate-500 pb-1.5 border-b border-slate-200">
+                    <span>שם הספר</span>
+                    <span>צרכן / תלמיד / ספק</span>
+                  </div>
+                  {sortedCatalog.map(b => {
+                    const eff = getEffectiveBookPrices(b);
+                    return (
+                      <div key={b.id} className="flex justify-between items-center text-xs py-1.5 border-b border-slate-200/60 last:border-0 gap-2">
+                        <span className="font-bold text-slate-800">{b.title}</span>
+                        <div className="flex items-center gap-1.5 shrink-0 text-[11px]">
+                          <span className={`px-1.5 py-0.5 rounded font-bold ${publicCardTier === 'general' ? 'bg-slate-800 text-white' : 'bg-slate-200/70 text-slate-700'}`}>₪{eff.general}</span>
+                          <span className={`px-1.5 py-0.5 rounded font-bold ${publicCardTier === 'yeshiva' ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-800'}`}>₪{eff.yeshiva}</span>
+                          <span className={`px-1.5 py-0.5 rounded font-bold ${publicCardTier === 'supplier' ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-800'}`}>₪{eff.supplier}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(buildFullCardWhatsAppMessage());
+                      showToast('כרטיס הביקור והקטלוג הועתקו לשיתוף!', 'success');
+                    }}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-800 py-3 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5"
+                  >
+                    <Copy className="w-4 h-4" /> העתק טקסט מלא
+                  </button>
+                  <a
+                    href={`https://wa.me/?text=${encodeURIComponent(buildFullCardWhatsAppMessage())}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-md"
+                  >
+                    <MessageCircle className="w-4 h-4" /> שלח ישירות בוואטסאפ
+                  </a>
+                </div>
               </div>
             </div>
           </div>
