@@ -1987,6 +1987,42 @@ export default function App() {
     }
   };
 
+  // --- הפקת ספרים (Kanban Tasks) ---
+  const handleAddTask = async (e) => {
+    e.preventDefault();
+    if (!newTaskForm.title.trim()) return;
+    const now = Date.now();
+    const taskObj = {
+      title: newTaskForm.title.trim(),
+      author: (newTaskForm.author || '').trim(),
+      status: newTaskForm.status || 'planned',
+      notes: (newTaskForm.notes || '').trim(),
+      invoices: [],
+      addedToInventory: false,
+      createdAt: now,
+      updatedAt: now
+    };
+    if (db && dbConnected) {
+      try { await addDoc(getCollRef('tasks'), taskObj); } catch { setTasksList(prev => [{ ...taskObj, id: 'task_' + now }, ...prev]); }
+    } else {
+      setTasksList(prev => [{ ...taskObj, id: 'task_' + now }, ...prev]);
+    }
+    setNewTaskForm({ title: '', author: '', status: 'planned', notes: '' });
+    setIsAddTaskModalOpen(false);
+    showToast(`פרויקט הספר "${taskObj.title}" נוצר בהצלחה!`, 'success');
+  };
+
+  const handleUpdateTaskStatus = async (task, nextStatus) => {
+    const now = Date.now();
+    const updated = { ...task, status: nextStatus, updatedAt: now };
+    setTasksList(prev => prev.map(t => t.id === task.id ? updated : t));
+    setSelectedTask(updated);
+    if (db && dbConnected && task.id) {
+      try { await updateDoc(getDocRef('tasks', task.id), { status: nextStatus, updatedAt: now }); } catch {}
+    }
+    showToast('שלב ההפקה עודכן!', 'success');
+  };
+
   const handleAddTaskInvoice = async (e) => {
     e.preventDefault();
     if (!selectedTask || !taskInvoiceForm.description.trim() || !taskInvoiceForm.amount) return;
@@ -2834,6 +2870,12 @@ export default function App() {
     { id: 'marketing', label: 'שיווק ויח"צ', icon: Megaphone, group: 'הפקה ושיווק' },
     { id: 'notes', label: 'לוח פתקים', icon: StickyNote, group: 'מערכת' },
     { id: 'integrations', label: 'אוטומציה וגיבוי', icon: Settings, group: 'מערכת' },
+    ...(userRole === 'admin' ? [{ id: 'users', label: 'ניהול משתמשים', icon: UserCog, group: 'מערכת' }] : [])
+  ];
+
+  const activeNavItem = navItems.find(i => i.id === activeTab) || navItems[0];
+  const userInitial = (currentUserName || 'מ').trim().charAt(0);
+
   // סגנונות מערכת מתקדמים, אנימציות ומעברים חלקים (Editorial Studio Theme)
   const themeStyles = `
     @import url('https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@600;700;800;900&family=Heebo:wght@400;500;600;700;800;900&display=swap');
