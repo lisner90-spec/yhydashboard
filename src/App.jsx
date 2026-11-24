@@ -11,8 +11,8 @@ import {
   ArrowLeftRight, Calculator, ClipboardList, Copy, CreditCard, Database,
   Minus, Wallet, BookMarked, Scale, Award, Eye, Check, Send,
   LogIn, LogOut, Lock, Shield, KeyRound, Sun, Moon, Sparkles,
-  ShieldCheck, RotateCcw, Zap, HardDrive, Sliders, FileCheck,
-  QrCode, Camera, BarChart3, Layers, Percent, Share2
+  QrCode, Camera, BarChart3, Layers, Percent, Share2,
+  Bell, Users, Calendar, Activity, Tag, MapPin
 } from 'lucide-react';
 
 // ==========================================
@@ -63,6 +63,18 @@ const initialInventory = [
 
 const normalizeBookTitle = (str = '') =>
   String(str).replace(/[-–—״"'׳.,]/g, ' ').replace(/\s+/g, ' ').trim();
+
+// זיהוי סדרת ספרים לצורך תיוג ויזואלי צבעוני
+const getBookSeriesBadge = (title = '') => {
+  const t = String(title || '');
+  if (t.includes('ונהר יוצא מעדן')) return { label: 'ונהר יוצא מעדן', cls: 'bg-cyan-100 text-cyan-800 border-cyan-200', strip: 'border-r-4 border-r-cyan-500' };
+  if (t.includes('להשקות את הגן')) return { label: 'להשקות את הגן', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200', strip: 'border-r-4 border-r-emerald-500' };
+  if (t.includes('כעץ שתול')) return { label: 'כעץ שתול', cls: 'bg-amber-100 text-amber-800 border-amber-200', strip: 'border-r-4 border-r-amber-500' };
+  if (t.includes('והתהלכתי')) return { label: 'והתהלכתי בתוככם', cls: 'bg-purple-100 text-purple-800 border-purple-200', strip: 'border-r-4 border-r-purple-500' };
+  if (t.includes('מניטו')) return { label: 'משנת מניטו', cls: 'bg-indigo-100 text-indigo-800 border-indigo-200', strip: 'border-r-4 border-r-indigo-500' };
+  if (t.includes('אותך אבקש')) return { label: 'ימי התשובה', cls: 'bg-rose-100 text-rose-800 border-rose-200', strip: 'border-r-4 border-r-rose-500' };
+  return null;
+};
 
 const findMatchingCatalogBook = (title = '') => {
   const norm = normalizeBookTitle(title);
@@ -222,6 +234,8 @@ export default function App() {
   const [printQuotes, setPrintQuotes] = useState(() => loadLocal('yhy_erp_print_quotes', []));
   const [campaignsList, setCampaignsList] = useState(() => loadLocal('yhy_erp_campaigns', []));
   const [prCopies, setPrCopies] = useState(() => loadLocal('yhy_erp_pr_copies', []));
+  const [customersList, setCustomersList] = useState(() => loadLocal('yhy_erp_customers', []));
+  const [auditLogs, setAuditLogs] = useState(() => loadLocal('yhy_erp_audit_logs', []));
 
   // --- התאמות ידניות לדאשבורד ---
   const [dashboardAdjustments, setDashboardAdjustments] = useState(() =>
@@ -335,6 +349,16 @@ export default function App() {
   const [isTabTransitioning, setIsTabTransitioning] = useState(false);
   const [webhookCheckState, setWebhookCheckState] = useState({ loading: false, status: null, message: '' });
   const [sendingTestOrder, setSendingTestOrder] = useState(false);
+
+  // --- Notifications, Date Filter, CRM & Audit States ---
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [dashboardDatePreset, setDashboardDatePreset] = useState('all'); // 'all' | 'month' | '30d' | 'custom'
+  const [dashboardDateFrom, setDashboardDateFrom] = useState('');
+  const [dashboardDateTo, setDashboardDateTo] = useState('');
+  const [isCustomersModalOpen, setIsCustomersModalOpen] = useState(false);
+  const [customerForm, setCustomerForm] = useState({ name: '', phone: '', address: '', category: 'בוגר ישיבה', notes: '' });
+  const [selectedPosCustomerId, setSelectedPosCustomerId] = useState('');
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
 
   // --- Advanced Suite States (Sets, Barcode Scanner, QR Payment, Daily Summary, Royalties) ---
   const [autoDecomposeSets, setAutoDecomposeSets] = useState(() => loadLocal('yhy_erp_decompose_sets', true));
@@ -462,6 +486,8 @@ export default function App() {
       unsubs.push(onSnapshot(getCollRef('print_quotes'), snap => setPrintQuotes(snap.docs.map(d => ({ id: d.id, ...d.data() }))), handleDbError));
       unsubs.push(onSnapshot(getCollRef('campaigns'), snap => setCampaignsList(snap.docs.map(d => ({ id: d.id, ...d.data() }))), handleDbError));
       unsubs.push(onSnapshot(getCollRef('pr_copies'), snap => setPrCopies(snap.docs.map(d => ({ id: d.id, ...d.data() }))), handleDbError));
+      unsubs.push(onSnapshot(getCollRef('customers'), snap => setCustomersList(snap.docs.map(d => ({ id: d.id, ...d.data() }))), handleDbError));
+      unsubs.push(onSnapshot(getCollRef('audit_logs'), snap => setAuditLogs(snap.docs.map(d => ({ id: d.id, ...d.data() }))), handleDbError));
       unsubs.push(onSnapshot(getDocRef('settings', 'dashboard_adjustments'), snap => {
         if (snap.exists()) {
           setDashboardAdjustments(prev => ({ ...prev, ...snap.data() }));
@@ -497,7 +523,26 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem('yhy_erp_print_quotes', JSON.stringify(printQuotes)); } catch {} }, [printQuotes]);
   useEffect(() => { try { localStorage.setItem('yhy_erp_campaigns', JSON.stringify(campaignsList)); } catch {} }, [campaignsList]);
   useEffect(() => { try { localStorage.setItem('yhy_erp_pr_copies', JSON.stringify(prCopies)); } catch {} }, [prCopies]);
+  useEffect(() => { try { localStorage.setItem('yhy_erp_customers', JSON.stringify(customersList)); } catch {} }, [customersList]);
+  useEffect(() => { try { localStorage.setItem('yhy_erp_audit_logs', JSON.stringify(auditLogs)); } catch {} }, [auditLogs]);
   useEffect(() => { try { localStorage.setItem('yhy_erp_dashboard_adj', JSON.stringify(dashboardAdjustments)); } catch {} }, [dashboardAdjustments]);
+
+  // --- תיעוד פעולות ביומן הביקורת (Audit Log) ---
+  const logAuditAction = async (category, action, details = '') => {
+    const entry = {
+      id: 'audit_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      category,
+      action,
+      details,
+      user: currentUserName,
+      date: new Date().toLocaleString('he-IL'),
+      timestamp: Date.now()
+    };
+    setAuditLogs(prev => [entry, ...prev].slice(0, 200));
+    if (db && dbConnected) {
+      try { await addDoc(getCollRef('audit_logs'), entry); } catch {}
+    }
+  };
 
   // ==========================================
   // פונקציות ליבה: מלאי, סטים, ספקים והתחברות
@@ -767,6 +812,7 @@ export default function App() {
     const val = Math.max(0, Number(rawVal || 0));
     const now = Date.now();
     setInventoryList(prev => prev.map(b => b.id === book.id ? { ...b, publisherStock: val, updatedAt: now } : b));
+    logAuditAction('מלאי', `עדכון מלאי מחסן: ${book.title}`, `כמות חדשה: ${val} (קודם: ${book.publisherStock || 0})`);
     if (db && dbConnected && book.id) {
       try { await updateDoc(getDocRef('inventory', book.id), { publisherStock: val, updatedAt: now }); } catch {}
     }
@@ -776,6 +822,7 @@ export default function App() {
     const nextStock = Math.max(0, Number(book.publisherStock || 0) + delta);
     const now = Date.now();
     setInventoryList(prev => prev.map(b => b.id === book.id ? { ...b, publisherStock: nextStock, updatedAt: now } : b));
+    logAuditAction('מלאי', `ספירה מהירה: ${book.title}`, `${delta > 0 ? '+' : ''}${delta} עותקים ← סה"כ ${nextStock}`);
     if (db && dbConnected && book.id) {
       try { await updateDoc(getDocRef('inventory', book.id), { publisherStock: nextStock, updatedAt: now }); } catch {}
     }
@@ -1568,6 +1615,8 @@ export default function App() {
     }
     setPosCart([]);
     setPosBuyerNote('');
+    setSelectedPosCustomerId('');
+    logAuditAction('קופה', `מכירה בדוכן ע"ס ₪${totalAmount.toLocaleString()}`, `${saleItems.map(i => `${i.title} ×${i.qty}`).join(', ')} (${posPaymentMethod})`);
     showToast(`מכירה הושלמה ע"ס ₪${totalAmount.toLocaleString()} והמלאי עודכן!`, 'success');
   };
 
@@ -1785,6 +1834,94 @@ export default function App() {
         showToast('הפתק נמחק.', 'info');
       }
     });
+  };
+
+  // --- איפוס ומחיקה בשיווק ויח"צ ---
+  const handleDeleteCampaign = async (camp) => {
+    setCampaignsList(prev => prev.filter(c => c.id !== camp.id));
+    logAuditAction('שיווק', `מחיקת קמפיין: ${camp.name}`);
+    if (db && dbConnected && camp.id) {
+      try { await deleteDoc(getDocRef('campaigns', camp.id)); } catch {}
+    }
+    showToast('הקמפיין נמחק.', 'info');
+  };
+
+  const handleResetAllCampaigns = () => {
+    setConfirmDialog({
+      title: 'איפוס נתוני קמפיינים',
+      message: `האם למחוק את כל ${campaignsList.length} הקמפיינים ולאפס את הוצאות הפרסום?`,
+      confirmText: 'אפס קמפיינים',
+      confirmStyle: 'bg-red-600 hover:bg-red-700',
+      icon: <RotateCcw className="w-6 h-6" />,
+      iconStyle: 'bg-red-100 text-red-600',
+      onConfirm: async () => {
+        const toDelete = [...campaignsList];
+        setCampaignsList([]);
+        logAuditAction('שיווק', 'איפוס מלא של כל הקמפיינים', `נמחקו ${toDelete.length} קמפיינים`);
+        if (db && dbConnected) {
+          try { await Promise.all(toDelete.filter(c => c.id).map(c => deleteDoc(getDocRef('campaigns', c.id)))); } catch {}
+        }
+        showToast('כל נתוני הקמפיינים אופסו!', 'success');
+      }
+    });
+  };
+
+  const handleDeletePrCopy = async (pr) => {
+    setPrCopies(prev => prev.filter(p => p.id !== pr.id));
+    logAuditAction('יח"צ', `מחיקת תיעוד עותק ביקורת: ${pr.bookTitle}`, pr.recipient);
+    if (db && dbConnected && pr.id) {
+      try { await deleteDoc(getDocRef('pr_copies', pr.id)); } catch {}
+    }
+    showToast('הרשומה נמחקה.', 'info');
+  };
+
+  const handleResetAllPrCopies = () => {
+    setConfirmDialog({
+      title: 'איפוס נתוני עותקי ביקורת ויח"צ',
+      message: `האם למחוק את כל ${prCopies.length} הרשומות של עותקי הביקורת ויח"צ?`,
+      confirmText: 'אפס יח"צ',
+      confirmStyle: 'bg-red-600 hover:bg-red-700',
+      icon: <RotateCcw className="w-6 h-6" />,
+      iconStyle: 'bg-red-100 text-red-600',
+      onConfirm: async () => {
+        const toDelete = [...prCopies];
+        setPrCopies([]);
+        logAuditAction('יח"צ', 'איפוס מלא של עותקי ביקורת ויח"צ', `נמחקו ${toDelete.length} רשומות`);
+        if (db && dbConnected) {
+          try { await Promise.all(toDelete.filter(p => p.id).map(p => deleteDoc(getDocRef('pr_copies', p.id)))); } catch {}
+        }
+        showToast('כל נתוני היח"צ אופסו!', 'success');
+      }
+    });
+  };
+
+  // --- ניהול לקוחות קבועים ובוגרים (CRM) ---
+  const handleAddCustomer = async (e) => {
+    e.preventDefault();
+    if (!customerForm.name.trim()) return;
+    const custObj = {
+      name: customerForm.name.trim(),
+      phone: customerForm.phone.trim(),
+      address: customerForm.address.trim(),
+      category: customerForm.category,
+      notes: customerForm.notes.trim(),
+      createdAt: Date.now()
+    };
+    if (db && dbConnected) {
+      try { await addDoc(getCollRef('customers'), custObj); } catch { setCustomersList(prev => [{ ...custObj, id: 'cust_' + Date.now() }, ...prev]); }
+    } else {
+      setCustomersList(prev => [{ ...custObj, id: 'cust_' + Date.now() }, ...prev]);
+    }
+    setCustomerForm({ name: '', phone: '', address: '', category: 'בוגר ישיבה', notes: '' });
+    showToast(`הלקוח "${custObj.name}" נשמר ברשימה!`, 'success');
+  };
+
+  const handleDeleteCustomer = async (cust) => {
+    setCustomersList(prev => prev.filter(c => c.id !== cust.id));
+    if (db && dbConnected && cust.id) {
+      try { await deleteDoc(getDocRef('customers', cust.id)); } catch {}
+    }
+    showToast('הלקוח הוסר מהרשימה.', 'info');
   };
 
   const handleExportFullBackup = () => {
@@ -2053,23 +2190,115 @@ export default function App() {
     () => Math.max(0, inventoryList.reduce((sum, b) => sum + calculateTotalStock(b) * Number(b.productionCost || 0), 0) + Number(dashboardAdjustments.extraProductionValue || 0)),
     [inventoryList, dashboardAdjustments.extraProductionValue]
   );
+
+  // סינון רשומות לפי טווח תאריכים בדאשבורד
+  const isTimestampInDashboardRange = (ts) => {
+    if (dashboardDatePreset === 'all') return true;
+    const t = Number(ts || 0);
+    if (!t) return true;
+    const now = new Date();
+    if (dashboardDatePreset === 'month') {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      return t >= startOfMonth;
+    }
+    if (dashboardDatePreset === '30d') {
+      return t >= Date.now() - 30 * 24 * 60 * 60 * 1000;
+    }
+    if (dashboardDatePreset === 'custom') {
+      if (dashboardDateFrom) {
+        const fromTs = new Date(dashboardDateFrom + 'T00:00:00').getTime();
+        if (t < fromTs) return false;
+      }
+      if (dashboardDateTo) {
+        const toTs = new Date(dashboardDateTo + 'T23:59:59').getTime();
+        if (t > toTs) return false;
+      }
+      return true;
+    }
+    return true;
+  };
+
+  const filteredDashboardOrders = useMemo(
+    () => ordersList.filter(o => isTimestampInDashboardRange(o.timestamp)),
+    [ordersList, dashboardDatePreset, dashboardDateFrom, dashboardDateTo]
+  );
+  const filteredDashboardSupplierLogs = useMemo(
+    () => supplierLogs.filter(l => isTimestampInDashboardRange(l.timestamp)),
+    [supplierLogs, dashboardDatePreset, dashboardDateFrom, dashboardDateTo]
+  );
+  const filteredDashboardPosSales = useMemo(
+    () => posSales.filter(s => isTimestampInDashboardRange(s.timestamp)),
+    [posSales, dashboardDatePreset, dashboardDateFrom, dashboardDateTo]
+  );
+
   const liveStoreRevenue = useMemo(
-    () => Math.max(0, ordersList.reduce((sum, o) => sum + Number(o.total || 0), 0) + Number(dashboardAdjustments.extraStoreRevenue || 0)),
-    [ordersList, dashboardAdjustments.extraStoreRevenue]
+    () => Math.max(0, filteredDashboardOrders.reduce((sum, o) => sum + Number(o.total || 0), 0) + (dashboardDatePreset === 'all' ? Number(dashboardAdjustments.extraStoreRevenue || 0) : 0)),
+    [filteredDashboardOrders, dashboardDatePreset, dashboardAdjustments.extraStoreRevenue]
   );
   const liveSupplierRevenue = useMemo(
-    () => Math.max(0, supplierLogs.filter(l => l.type !== 'return').reduce((sum, l) => sum + Number(l.totalAmount || 0), 0) + Number(dashboardAdjustments.extraSupplierRevenue || 0)),
-    [supplierLogs, dashboardAdjustments.extraSupplierRevenue]
+    () => Math.max(0, filteredDashboardSupplierLogs.filter(l => l.type !== 'return').reduce((sum, l) => sum + Number(l.totalAmount || 0), 0) + (dashboardDatePreset === 'all' ? Number(dashboardAdjustments.extraSupplierRevenue || 0) : 0)),
+    [filteredDashboardSupplierLogs, dashboardDatePreset, dashboardAdjustments.extraSupplierRevenue]
   );
   const livePosRevenue = useMemo(
-    () => Math.max(0, posSales.reduce((sum, s) => sum + Number(s.totalAmount || 0), 0) + Number(dashboardAdjustments.extraPosRevenue || 0)),
-    [posSales, dashboardAdjustments.extraPosRevenue]
+    () => Math.max(0, filteredDashboardPosSales.reduce((sum, s) => sum + Number(s.totalAmount || 0), 0) + (dashboardDatePreset === 'all' ? Number(dashboardAdjustments.extraPosRevenue || 0) : 0)),
+    [filteredDashboardPosSales, dashboardDatePreset, dashboardAdjustments.extraPosRevenue]
   );
   const totalOpenSupplierDebt = useMemo(
     () => Math.max(0, supplierLogs.reduce((sum, l) => sum + getLogRemainingDebt(l), 0) + Number(dashboardAdjustments.extraOpenDebt || 0)),
     [supplierLogs, dashboardAdjustments.extraOpenDebt]
   );
   const lowStockBooks = useMemo(() => inventoryList.filter(b => calculateTotalStock(b) < Number(b.threshold || 30)), [inventoryList]);
+
+  // מרכז התראות חכם (מלאי נמוך + הזמנות מתעכבות + חובות ספקים מעל 30 יום)
+  const smartNotifications = useMemo(() => {
+    const items = [];
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+
+    lowStockBooks.forEach(b => {
+      items.push({
+        id: 'low_' + b.id,
+        type: 'warning',
+        title: `מלאי נמוך: ${b.title}`,
+        desc: `נותרו ${calculateTotalStock(b)} עותקים (מתחת לרף ${b.threshold || 30})`,
+        tab: 'inventory'
+      });
+    });
+
+    pendingOrders.forEach(o => {
+      const ageDays = Math.floor((now - Number(o.timestamp || now)) / dayMs);
+      if (ageDays >= 1) {
+        items.push({
+          id: 'ord_' + o.id,
+          type: 'urgent',
+          title: `הזמנת חנות ממתינה (${ageDays} ימים)`,
+          desc: `#${String(o.orderId || '').replace(/^#/, '')} — ${o.customerName}`,
+          tab: 'orders'
+        });
+      }
+    });
+
+    suppliersList.forEach(s => {
+      const openDebt = getSupplierOpenDebt(s.name);
+      if (openDebt > 0) {
+        const oldestUnpaid = supplierLogs
+          .filter(l => (l.supplierName || '').trim() === (s.name || '').trim() && getLogRemainingDebt(l) > 0)
+          .sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0))[0];
+        const ageDays = oldestUnpaid ? Math.floor((now - Number(oldestUnpaid.timestamp || now)) / dayMs) : 0;
+        if (ageDays >= 30) {
+          items.push({
+            id: 'debt_' + s.id,
+            type: 'debt',
+            title: `חוב ספק פתוח מעל 30 יום: ${s.name}`,
+            desc: `יתרה לגבייה: ₪${openDebt.toLocaleString()} (${ageDays} ימים)`,
+            tab: 'suppliers'
+          });
+        }
+      }
+    });
+
+    return items;
+  }, [lowStockBooks, pendingOrders, suppliersList, supplierLogs]);
 
   // --- אנליטיקת רבי-מכר, רווחיות ודוח סיכום יומי ---
   const salesAnalytics = useMemo(() => {
@@ -2100,7 +2329,7 @@ export default function App() {
     };
 
     // 1. מכירות דוכן (POS)
-    posSales.forEach(sale => {
+    filteredDashboardPosSales.forEach(sale => {
       (sale.items || []).forEach(it => {
         const b = inventoryList.find(x => x.id === it.bookId);
         const st = ensureStat(it.title, b);
@@ -2113,7 +2342,7 @@ export default function App() {
     });
 
     // 2. הזמנות מהחנות (אתר — ללא הזמנות בדיקה)
-    ordersList.filter(o => !o.isTest).forEach(ord => {
+    filteredDashboardOrders.filter(o => !o.isTest).forEach(ord => {
       (ord.items || []).forEach(it => {
         const b = inventoryList.find(x => normalizeBookTitle(x.title) === normalizeBookTitle(it.name));
         const st = ensureStat(it.name, b);
@@ -2126,7 +2355,7 @@ export default function App() {
     });
 
     // 3. הזמנות ומכירות מול ספקים וחנויות (חילוץ שורות הספרים והכמויות מההיסטוריה)
-    supplierLogs.filter(l => l.type !== 'return').forEach(log => {
+    filteredDashboardSupplierLogs.filter(l => l.type !== 'return').forEach(log => {
       const lines = String(log.details || '').split('\n');
       lines.forEach(line => {
         // תבנית: "1. שם הספר — 10 עותקים × ₪30 = ₪300"
@@ -2173,7 +2402,7 @@ export default function App() {
       royaltyRows,
       totalRoyaltiesDue
     };
-  }, [posSales, ordersList, supplierLogs, campaignsList, inventoryList, liveStoreRevenue, liveSupplierRevenue, livePosRevenue]);
+  }, [filteredDashboardPosSales, filteredDashboardOrders, filteredDashboardSupplierLogs, campaignsList, inventoryList, liveStoreRevenue, liveSupplierRevenue, livePosRevenue]);
 
   const dailySummaryData = useMemo(() => {
     const todayStr = new Date().toLocaleDateString('he-IL');
@@ -2741,6 +2970,55 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2.5">
+            {/* מרכז התראות חכם */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsNotificationsOpen(prev => !prev)}
+                className={`relative p-2 rounded-xl ring-1 transition-all ${
+                  smartNotifications.length > 0
+                    ? 'bg-amber-50/90 text-amber-700 ring-amber-200 hover:bg-amber-100'
+                    : 'bg-slate-100 text-slate-500 ring-slate-200 hover:bg-white'
+                }`}
+                title="מרכז התראות חכם"
+              >
+                <Bell className="w-4 h-4" />
+                {smartNotifications.length > 0 && (
+                  <span className="absolute -top-1.5 -left-1.5 bg-rose-500 text-white text-[10px] font-extrabold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center shadow-xs">
+                    {smartNotifications.length}
+                  </span>
+                )}
+              </button>
+
+              {isNotificationsOpen && (
+                <div className="absolute left-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl ring-1 ring-slate-200/90 z-50 overflow-hidden" dir="rtl">
+                  <div className="p-3.5 border-b bg-slate-50/90 flex justify-between items-center">
+                    <span className="font-extrabold text-xs text-slate-800 flex items-center gap-1.5">
+                      <Bell className="w-3.5 h-3.5 text-amber-600" /> התראות מערכת ({smartNotifications.length})
+                    </span>
+                    <button onClick={() => setIsNotificationsOpen(false)} className="text-slate-400 hover:text-slate-700"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
+                    {smartNotifications.length === 0 ? (
+                      <div className="p-6 text-center text-xs text-emerald-700 font-medium">הכל תקין! אין התראות דחופות כרגע.</div>
+                    ) : (
+                      smartNotifications.map(n => (
+                        <button
+                          key={n.id}
+                          type="button"
+                          onClick={() => { setActiveTab(n.tab); setIsNotificationsOpen(false); }}
+                          className="w-full text-right p-3 hover:bg-indigo-50/50 transition-colors block"
+                        >
+                          <p className={`text-xs font-extrabold ${n.type === 'urgent' || n.type === 'debt' ? 'text-rose-700' : 'text-amber-800'}`}>{n.title}</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">{n.desc}</p>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
               type="button"
               onClick={() => { setIsCommandOpen(true); setCommandQuery(''); }}
@@ -2766,6 +3044,23 @@ export default function App() {
               className="bg-amber-50 hover:bg-amber-100 text-amber-800 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-amber-200/80 transition-all"
             >
               <Calculator className="w-3.5 h-3.5" /> מחשבון ספרים
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsCustomersModalOpen(true)}
+              className="bg-sky-50 hover:bg-sky-100 text-sky-800 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-sky-200/80 transition-all"
+            >
+              <Users className="w-3.5 h-3.5" /> לקוחות ובוגרים ({customersList.length})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsAuditModalOpen(true)}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-slate-200 transition-all"
+              title="יומן תנועות וביקורת מלאי"
+            >
+              <Activity className="w-3.5 h-3.5" /> יומן פעולות
             </button>
 
             <button
@@ -2837,12 +3132,54 @@ export default function App() {
                   <button onClick={() => { setCalcItems([{ bookId: inventoryList[0]?.id || '', quantity: 10, customPrice: '' }]); setCalcDiscountPct(0); setIsPurchaseCalcOpen(true); }} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
                     <Calculator className="w-4 h-4 text-amber-300" /> מחשבון ספרים
                   </button>
+                  <button onClick={() => setIsCustomersModalOpen(true)} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
+                    <Users className="w-4 h-4 text-sky-300" /> לקוחות ({customersList.length})
+                  </button>
+                  <button onClick={() => setIsAuditModalOpen(true)} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
+                    <Activity className="w-4 h-4 text-rose-300" /> יומן פעולות
+                  </button>
                   {userRole === 'admin' && (
                     <button onClick={() => setIsDashboardEditOpen(true)} className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-md transition-all">
                       <Sliders className="w-4 h-4" /> ערוך נתוני דאשבורד
                     </button>
                   )}
                 </div>
+              </div>
+            </div>
+
+            {/* סרגל סינון דוחות לפי טווח תאריכים */}
+            <div className="bg-white p-4 rounded-2xl shadow-xs ring-1 ring-slate-200/70 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs font-extrabold text-slate-700">
+                <Calendar className="w-4 h-4 text-indigo-600" />
+                <span>טווח תאריכים לניתוח מכירות ורווחיות:</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[
+                  { id: 'all', label: 'כל הזמן' },
+                  { id: 'month', label: 'החודש הנוכחי' },
+                  { id: '30d', label: '30 ימים אחרונים' },
+                  { id: 'custom', label: 'טווח מותאם' }
+                ].map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setDashboardDatePreset(p.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      dashboardDatePreset === p.id
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+                {dashboardDatePreset === 'custom' && (
+                  <div className="flex items-center gap-1.5 mr-2">
+                    <input type="date" value={dashboardDateFrom} onChange={e => setDashboardDateFrom(e.target.value)} className="p-1.5 border border-slate-200 rounded-xl text-xs" dir="ltr" />
+                    <span className="text-xs text-slate-400">עד</span>
+                    <input type="date" value={dashboardDateTo} onChange={e => setDashboardDateTo(e.target.value)} className="p-1.5 border border-slate-200 rounded-xl text-xs" dir="ltr" />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -2931,51 +3268,51 @@ export default function App() {
 
               <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 hover:shadow-md hover:-translate-y-0.5 transition-all">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-slate-500">שווי מלאי (צרכן / הדפסה)</p>
-                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><DollarSign className="w-4 h-4" /></div>
+            {/* פס ויזואלי להתפלגות המלאי + התפלגות הכנסות לפי ערוצים */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-3">
+                <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
+                  <span className="font-extrabold text-slate-800 text-sm">התפלגות המלאי: מחסן ראשי מול ספקים</span>
+                  <div className="flex items-center gap-3">
+                    <span className="flex items-center gap-1.5 font-bold text-indigo-600"><span className="w-2.5 h-2.5 rounded-full bg-indigo-500" /> מחסן: {totalWarehouseCopies.toLocaleString()} ({totalCopiesInSystem > 0 ? Math.round((totalWarehouseCopies / totalCopiesInSystem) * 100) : 0}%)</span>
+                    <span className="flex items-center gap-1.5 font-bold text-emerald-600"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> ספקים: {totalSuppliersCopies.toLocaleString()} ({totalCopiesInSystem > 0 ? Math.round((totalSuppliersCopies / totalCopiesInSystem) * 100) : 0}%)</span>
+                  </div>
                 </div>
-                <p className="text-3xl font-extrabold text-emerald-700 mt-2 tracking-tight">₪{Math.round(totalRetailValue).toLocaleString()}</p>
-                <p className="text-xs text-slate-500 mt-3 pt-2.5 border-t border-slate-100">לפי עלות הדפסה: <strong className="text-rose-600">₪{Math.round(totalProductionValue).toLocaleString()}</strong></p>
+                <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
+                  <div
+                    className="bg-gradient-to-l from-indigo-500 to-violet-500 h-full transition-all duration-500"
+                    style={{ width: `${totalCopiesInSystem > 0 ? Math.min(100, (totalWarehouseCopies / totalCopiesInSystem) * 100) : 0}%` }}
+                  />
+                  <div
+                    className="bg-gradient-to-l from-emerald-400 to-teal-500 h-full transition-all duration-500"
+                    style={{ width: `${totalCopiesInSystem > 0 ? Math.min(100, (totalSuppliersCopies / totalCopiesInSystem) * 100) : 0}%` }}
+                  />
+                </div>
               </div>
 
-              <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-purple-200/70 hover:shadow-md hover:-translate-y-0.5 transition-all">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-purple-700">הכנסות מתועדות</p>
-                  <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><TrendingUp className="w-4 h-4" /></div>
-                </div>
-                <p className="text-3xl font-extrabold text-purple-900 mt-2 tracking-tight">₪{Math.round(liveStoreRevenue + liveSupplierRevenue + livePosRevenue).toLocaleString()}</p>
-                <p className="text-[11px] text-slate-500 mt-3 pt-2.5 border-t border-slate-100">אתר: ₪{Math.round(liveStoreRevenue).toLocaleString()} · ספקים: ₪{Math.round(liveSupplierRevenue).toLocaleString()} · דוכן: ₪{Math.round(livePosRevenue).toLocaleString()}</p>
-              </div>
-
-              <div onClick={() => setActiveTab('suppliers')} className="cursor-pointer bg-gradient-to-br from-rose-50 to-white p-5 rounded-2xl shadow-xs ring-1 ring-rose-200/80 hover:shadow-md hover:-translate-y-0.5 transition-all">
-                <div className="flex justify-between items-center">
-                  <p className="text-xs font-bold text-rose-800">יתרת חוב פתוחה מספקים</p>
-                  <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center"><Wallet className="w-4 h-4" /></div>
-                </div>
-                <p className="text-3xl font-extrabold text-rose-700 mt-2 tracking-tight">₪{Math.round(totalOpenSupplierDebt).toLocaleString()}</p>
-                <p className="text-xs text-rose-600/90 font-medium mt-3 pt-2.5 border-t border-rose-100">לחץ למעבר למסך ספקים וגבייה ←</p>
-              </div>
-            </div>
-
-            {/* פס ויזואלי להתפלגות המלאי */}
-            <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-3">
-              <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
-                <span className="font-extrabold text-slate-800 text-sm">התפלגות המלאי: מחסן ראשי מול ספקים וחנויות</span>
-                <div className="flex items-center gap-4">
-                  <span className="flex items-center gap-1.5 font-bold text-indigo-600"><span className="w-2.5 h-2.5 rounded-full bg-indigo-500" /> מחסן ראשי: {totalWarehouseCopies.toLocaleString()} ({totalCopiesInSystem > 0 ? Math.round((totalWarehouseCopies / totalCopiesInSystem) * 100) : 0}%)</span>
-                  <span className="flex items-center gap-1.5 font-bold text-emerald-600"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> אצל ספקים: {totalSuppliersCopies.toLocaleString()} ({totalCopiesInSystem > 0 ? Math.round((totalSuppliersCopies / totalCopiesInSystem) * 100) : 0}%)</span>
-                </div>
-              </div>
-              <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
-                <div
-                  className="bg-gradient-to-l from-indigo-500 to-violet-500 h-full transition-all duration-500"
-                  style={{ width: `${totalCopiesInSystem > 0 ? Math.min(100, (totalWarehouseCopies / totalCopiesInSystem) * 100) : 0}%` }}
-                />
-                <div
-                  className="bg-gradient-to-l from-emerald-400 to-teal-500 h-full transition-all duration-500"
-                  style={{ width: `${totalCopiesInSystem > 0 ? Math.min(100, (totalSuppliersCopies / totalCopiesInSystem) * 100) : 0}%` }}
-                />
-              </div>
+              {(() => {
+                const revSum = liveStoreRevenue + liveSupplierRevenue + livePosRevenue;
+                const webPct = revSum > 0 ? Math.round((liveStoreRevenue / revSum) * 100) : 0;
+                const supPct = revSum > 0 ? Math.round((liveSupplierRevenue / revSum) * 100) : 0;
+                const posPct = revSum > 0 ? Math.max(0, 100 - webPct - supPct) : 0;
+                return (
+                  <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-3">
+                    <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
+                      <span className="font-extrabold text-slate-800 text-sm">התפלגות הכנסות לפי ערוצי מכירה</span>
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <span className="flex items-center gap-1 font-bold text-purple-600"><span className="w-2.5 h-2.5 rounded-full bg-purple-500" /> אתר ({webPct}%)</span>
+                        <span className="flex items-center gap-1 font-bold text-sky-600"><span className="w-2.5 h-2.5 rounded-full bg-sky-500" /> ספקים ({supPct}%)</span>
+                        <span className="flex items-center gap-1 font-bold text-amber-600"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> דוכן ({posPct}%)</span>
+                      </div>
+                    </div>
+                    <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
+                      <div className="bg-purple-500 h-full transition-all duration-500" style={{ width: `${webPct}%` }} />
+                      <div className="bg-sky-500 h-full transition-all duration-500" style={{ width: `${supPct}%` }} />
+                      <div className="bg-amber-500 h-full transition-all duration-500" style={{ width: `${posPct}%` }} />
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -3164,6 +3501,23 @@ export default function App() {
                       <button key={m} type="button" onClick={() => setPosPaymentMethod(m)} className={`py-2 rounded-xl text-xs font-bold border transition-all ${posPaymentMethod === m ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>{m}</button>
                     ))}
                   </div>
+                  {customersList.length > 0 && (
+                    <select
+                      value={selectedPosCustomerId}
+                      onChange={e => {
+                        const cid = e.target.value;
+                        setSelectedPosCustomerId(cid);
+                        const found = customersList.find(c => c.id === cid);
+                        if (found) setPosBuyerNote(`${found.name}${found.phone ? ` (${found.phone})` : ''}`);
+                      }}
+                      className="w-full p-2 border border-sky-200 rounded-xl text-xs bg-sky-50/50 text-slate-700 font-medium outline-none"
+                    >
+                      <option value="">בחר לקוח / בוגר שמור (אופציונלי)...</option>
+                      {customersList.map(c => (
+                        <option key={c.id} value={c.id}>{c.name} — {c.category}</option>
+                      ))}
+                    </select>
+                  )}
                   <input type="text" value={posBuyerNote} onChange={e => setPosBuyerNote(e.target.value)} placeholder="שם קונה / הערה (אופציונלי)" className="w-full p-2.5 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white outline-none transition-colors" />
                   <div className="bg-gradient-to-l from-emerald-50 to-teal-50/70 border border-emerald-200/80 p-4 rounded-2xl flex justify-between items-center">
                     <span className="font-bold text-emerald-900 text-sm">סה"כ לתשלום:</span>
@@ -3466,10 +3820,15 @@ export default function App() {
                       const supProfit = supPrice > 0 ? supPrice - cost : 0;
 
                       return (
-                        <tr key={book.id} className="hover:bg-indigo-50/20 transition-colors">
+                        <tr key={book.id} className={`hover:bg-indigo-50/20 transition-colors ${getBookSeriesBadge(book.title)?.strip || ''}`}>
                           <td className="py-4 px-5">
                             <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5 flex-wrap">
                               <span>{book.title}</span>
+                              {getBookSeriesBadge(book.title) && (
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${getBookSeriesBadge(book.title).cls}`}>
+                                  {getBookSeriesBadge(book.title).label}
+                                </span>
+                              )}
                               {(book.isSet || (book.setComponents || []).length > 0) && (
                                 <span className="text-[10px] font-extrabold bg-teal-100 text-teal-800 px-2 py-0.5 rounded-full">
                                   סט ({getPossibleSetsFromComponents(book) ?? 0} להרכבה)
@@ -3943,10 +4302,21 @@ export default function App() {
         {activeTab === 'marketing' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white p-6 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-4">
-              <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2.5">
-                <span className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><Megaphone className="w-4 h-4" /></span>
-                קמפיינים ופרסום
-              </h3>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2.5">
+                  <span className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><Megaphone className="w-4 h-4" /></span>
+                  קמפיינים ופרסום
+                </h3>
+                {userRole === 'admin' && campaignsList.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleResetAllCampaigns}
+                    className="bg-rose-50 hover:bg-rose-100 text-rose-700 ring-1 ring-rose-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> אפס קמפיינים
+                  </button>
+                )}
+              </div>
               {userRole === 'admin' && (
                 <form
                   onSubmit={async (e) => {
@@ -3974,9 +4344,21 @@ export default function App() {
                   const pct = Number(c.budget) > 0 ? Math.min(100, Math.round((Number(c.spent || 0) / Number(c.budget)) * 100)) : 0;
                   return (
                     <div key={c.id} className="p-3.5 bg-slate-50/90 rounded-xl ring-1 ring-slate-200/70 space-y-2">
-                      <div className="flex justify-between items-center text-sm">
+                      <div className="flex justify-between items-center text-sm gap-2">
                         <span className="font-bold text-slate-800">{c.name}</span>
-                        <span className="text-xs text-slate-500">{c.channel}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500">{c.channel}</span>
+                          {userRole === 'admin' && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCampaign(c)}
+                              className="text-slate-400 hover:text-rose-600 p-1 rounded-lg"
+                              title="מחק קמפיין"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                         <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${pct}%` }} />
@@ -3992,10 +4374,21 @@ export default function App() {
             </div>
 
             <div className="bg-white p-6 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-4">
-              <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2.5">
-                <span className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><FileText className="w-4 h-4" /></span>
-                עותקי ביקורת ויח"צ
-              </h3>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="font-extrabold text-slate-900 text-lg flex items-center gap-2.5">
+                  <span className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><FileText className="w-4 h-4" /></span>
+                  עותקי ביקורת ויח"צ
+                </h3>
+                {userRole === 'admin' && prCopies.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleResetAllPrCopies}
+                    className="bg-rose-50 hover:bg-rose-100 text-rose-700 ring-1 ring-rose-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> אפס יח"צ
+                  </button>
+                )}
+              </div>
               {userRole === 'admin' && (
                 <form
                   onSubmit={async (e) => {
@@ -4019,12 +4412,24 @@ export default function App() {
                 {prCopies.length === 0 ? (
                   <p className="text-center text-slate-400 text-xs py-6">עדיין לא תועדו עותקי ביקורת.</p>
                 ) : prCopies.map(pr => (
-                  <div key={pr.id} className="p-3.5 bg-slate-50/90 rounded-xl ring-1 ring-slate-200/70 flex justify-between items-center text-xs">
+                  <div key={pr.id} className="p-3.5 bg-slate-50/90 rounded-xl ring-1 ring-slate-200/70 flex justify-between items-center text-xs gap-2">
                     <div>
                       <p className="font-bold text-slate-800">{pr.bookTitle}</p>
                       <p className="text-slate-500 mt-0.5">{pr.recipient} · {pr.role}</p>
                     </div>
-                    <span className="text-slate-400">{pr.date}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-slate-400">{pr.date}</span>
+                      {userRole === 'admin' && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeletePrCopy(pr)}
+                          className="text-slate-400 hover:text-rose-600 p-1 rounded-lg"
+                          title="מחק רשומה"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -4033,389 +4438,20 @@ export default function App() {
         )}
 
         {/* ==================== 9. INTEGRATIONS & BACKUP ==================== */}
-        {activeTab === 'integrations' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-3xl p-5 md:p-6 shadow-xs ring-1 ring-indigo-200/80 space-y-4">
-              <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
-                <div>
-                  <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
-                    <Zap className="w-5 h-5 text-amber-500 shrink-0" /> אוטומציה וחיבור Webhook לחנות WooCommerce
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">הזמנות חדשות מהאתר יקפצו מיד ללשונית "הזמנות חנות" ויפחיתו אוטומטית מהמלאי.</p>
-                </div>
-                <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto shrink-0">
-                  <button
-                    type="button"
-                    disabled={webhookCheckState.loading}
-                    onClick={handlePingWebhook}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 ring-1 ring-slate-200"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${webhookCheckState.loading ? 'animate-spin' : ''}`} /> בדוק חיבור שרת
-                  </button>
-                  <button
-                    type="button"
-                    disabled={sendingTestOrder}
-                    onClick={handleSendTestOrder}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs"
-                  >
-                    <Send className="w-3.5 h-3.5" /> {sendingTestOrder ? 'שולח...' : 'שלח הזמנת ניסיון'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 bg-[#0F172A] text-emerald-400 p-3.5 rounded-xl font-mono text-xs ring-1 ring-slate-800" dir="ltr">
-                <span className="flex-1 truncate select-all">{getWebhookUrl()}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard?.writeText(getWebhookUrl());
-                    showToast('כתובת ה-Webhook הועתקה!', 'success');
-                  }}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded-lg text-[11px] font-sans font-bold flex items-center gap-1 shrink-0"
-                >
-                  <Copy className="w-3.5 h-3.5" /> העתק
-                </button>
-              </div>
-
-              {webhookCheckState.message && (
-                <div className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
-                  webhookCheckState.status === 'ok'
-                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                    : webhookCheckState.status === 'error'
-                      ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
-                      : 'bg-slate-50 text-slate-600 ring-1 ring-slate-200'
-                }`}>
-                  {webhookCheckState.status === 'ok' ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
-                  <span>{webhookCheckState.message}</span>
-                </div>
-              )}
-
-              <div className="bg-slate-50/90 p-4 rounded-2xl ring-1 ring-slate-200/70 text-xs text-slate-600 space-y-1.5">
-                <p className="font-extrabold text-slate-800">הגדרות נדרשות בוורדפרס (WooCommerce ← הגדרות ← מתקדם ← Webhooks):</p>
-                <p>1. <strong>סטטוס (Status):</strong> פעיל (Active)</p>
-                <p>2. <strong>נושא (Topic):</strong> הזמנה נוצרה (Order created)</p>
-                <p>3. <strong>כתובת מסירה (Delivery URL):</strong> הדבק את הכתובת שמופיעה למעלה ושמור.</p>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-3xl p-6 shadow-xs ring-1 ring-emerald-200/80 space-y-5">
-              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-100 pb-5">
-                <div className="flex items-start gap-3.5">
-                  <div className={`p-3.5 rounded-2xl ring-1 ${autoBackupSettings.enabled ? 'bg-emerald-50 text-emerald-600 ring-emerald-200' : 'bg-slate-100 text-slate-500 ring-slate-200'}`}>
-                    <ShieldCheck className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-extrabold text-slate-900">גיבוי אוטומטי ונקודות שחזור</h3>
-                      <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${autoBackupSettings.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                        {autoBackupSettings.enabled ? 'פעיל' : 'מושהה'}
-                      </span>
-                    </div>
-                    <p className="text-slate-500 text-sm mt-0.5">
-                      המערכת שומרת אוטומטית נקודות שחזור של כל הנתונים לפי התדירות שתבחר.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => createAutoSnapshot('נקודת שחזור ידנית', false)}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-sm shadow-emerald-600/20"
-                  >
-                    <HardDrive className="w-4 h-4" /> צור נקודת שחזור עכשיו
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAutoBackupSettings(prev => ({ ...prev, enabled: !prev.enabled }))}
-                    className={`px-4 py-2.5 rounded-xl font-bold text-xs ring-1 transition-all ${
-                      autoBackupSettings.enabled
-                        ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 ring-slate-200'
-                        : 'bg-indigo-600 hover:bg-indigo-700 text-white ring-indigo-600'
-                    }`}
-                  >
-                    {autoBackupSettings.enabled ? 'השהה גיבוי אוטומטי' : 'הפעל גיבוי אוטומטי'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-slate-50/90 p-4 rounded-2xl ring-1 ring-slate-200/70 space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-600">תדירות גיבוי אוטומטי</label>
-                  <select
-                    value={autoBackupSettings.intervalMinutes}
-                    onChange={e => setAutoBackupSettings(prev => ({ ...prev, intervalMinutes: Number(e.target.value) }))}
-                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-sm font-bold outline-none"
-                  >
-                    <option value={15}>כל 15 דקות</option>
-                    <option value={30}>כל 30 דקות (מומלץ)</option>
-                    <option value={60}>כל שעה</option>
-                    <option value={240}>כל 4 שעות</option>
-                    <option value={1440}>פעם ביום</option>
-                  </select>
-                </div>
-
-                <div className="bg-slate-50/90 p-4 rounded-2xl ring-1 ring-slate-200/70 space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-600">מספר נקודות שחזור לשמירה</label>
-                  <select
-                    value={autoBackupSettings.maxSnapshots}
-                    onChange={e => setAutoBackupSettings(prev => ({ ...prev, maxSnapshots: Number(e.target.value) }))}
-                    className="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-sm font-bold outline-none"
-                  >
-                    <option value={3}>3 נקודות אחרונות</option>
-                    <option value={5}>5 נקודות אחרונות (מומלץ)</option>
-                    <option value={10}>10 נקודות אחרונות</option>
-                  </select>
-                </div>
-
-                <div className="bg-indigo-50/70 p-4 rounded-2xl ring-1 ring-indigo-100 flex flex-col justify-center">
-                  <span className="text-xs font-bold text-indigo-700">גיבוי אוטומטי אחרון</span>
-                  <span className="text-base font-extrabold text-indigo-900 mt-1">
-                    {autoSnapshots[0] ? autoSnapshots[0].dateLabel : 'טרם נוצר גיבוי'}
-                  </span>
-                  <span className="text-[11px] text-indigo-600 mt-0.5">
-                    נשמרו {autoSnapshots.length} מתוך {autoBackupSettings.maxSnapshots} נקודות
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-2.5">
-                <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
-                  <History className="w-4 h-4 text-indigo-600" /> היסטוריית נקודות שחזור זמינות ({autoSnapshots.length})
-                </h4>
-                {autoSnapshots.length === 0 ? (
-                  <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl p-6 text-center text-xs text-slate-400">
-                    עדיין לא נשמרו נקודות שחזור. לחץ על "צור נקודת שחזור עכשיו".
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {autoSnapshots.map((snap, idx) => (
-                      <div key={snap.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-slate-50/90 hover:bg-indigo-50/30 rounded-2xl ring-1 ring-slate-200/70 transition-colors">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-extrabold text-xs shrink-0 ${idx === 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200/80 text-slate-600'}`}>
-                            {idx === 0 ? <CheckCircle className="w-4 h-4" /> : `#${idx + 1}`}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-slate-900 text-sm">{snap.dateLabel}</span>
-                              <span className="text-[10px] font-bold bg-white ring-1 ring-slate-200 text-slate-600 px-2 py-0.5 rounded-full">{snap.reason}</span>
-                            </div>
-                            <p className="text-xs text-slate-500 mt-0.5">
-                              {snap.summary?.books || 0} ספרים · {snap.summary?.suppliers || 0} ספקים · {snap.summary?.orders || 0} הזמנות · {snap.sizeKB || 1}KB
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => handleRestoreSnapshot(snap)}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs"
-                          >
-                            <RotateCcw className="w-3.5 h-3.5" /> שחזר
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDownloadSnapshot(snap)}
-                            className="bg-white hover:bg-slate-100 text-slate-700 ring-1 ring-slate-200 px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1"
-                            title="הורד קובץ JSON"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteSnapshot(snap.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl"
-                            title="מחק נקודת שחזור"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                      <div>
+                        <p className="font-bold text-slate-800">{pr.bookTitle}</p>
+                        <p className="text-slate-500 mt-0.5">{pr.recipient} · {pr.role}</p>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl p-6 shadow-xs ring-1 ring-slate-200/70 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div className="flex items-start gap-3">
-                <div className="p-3 rounded-2xl bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100">
-                  <Database className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-slate-900 text-base">גיבוי ושחזור ידני מלא (קובץ JSON)</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">הורד קובץ גיבוי אחד של כל הנתונים למחשב שלך או שחזר מקובץ שמור.</p>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleExportFullBackup}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs"
-                >
-                  <Download className="w-4 h-4" /> הורד גיבוי מלא
-                </button>
-                <label className="bg-slate-100 hover:bg-slate-200 text-slate-700 ring-1 ring-slate-200 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer">
-                  <Upload className="w-4 h-4" /> שחזר מקובץ גיבוי
-                  <input type="file" accept=".json" onChange={handleImportBackupFile} className="hidden" />
-                </label>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ==================== 10. NOTES ==================== */}
-        {activeTab === 'notes' && (
-          <div className="space-y-6">
-            <form onSubmit={handleAddNote} className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 flex flex-col sm:flex-row gap-3">
-              <input
-                type="text"
-                value={newNoteText}
-                onChange={e => setNewNoteText(e.target.value)}
-                placeholder="כתוב פתק או תזכורת חדשה לצוות ההוצאה..."
-                className="flex-1 p-3 border border-slate-200 rounded-xl bg-slate-50/80 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 text-sm outline-none transition-all"
-              />
-              <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm shadow-indigo-600/20 transition-all"><Plus className="w-4 h-4" /> הוסף פתק</button>
-            </form>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {notesList.map(note => (
-                <div key={note.id} className="bg-gradient-to-br from-amber-50 to-yellow-50/70 ring-1 ring-amber-200/80 border-t-4 border-t-amber-400 p-4 rounded-2xl shadow-xs hover:shadow-md transition-all relative flex flex-col justify-between min-h-[160px]">
-                  <button
-                    onClick={() => handleDeleteNote(note)}
-                    className="absolute top-3 left-3 bg-white/80 hover:bg-rose-500 hover:text-white text-amber-900 w-7 h-7 rounded-full flex items-center justify-center shadow-2xs transition-colors"
-                    title="מחק פתק"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                  <p className="text-sm text-slate-800 whitespace-pre-wrap pl-8 leading-relaxed font-medium">{note.text}</p>
-                  <p className="text-[11px] text-amber-800/70 mt-4 pt-2 border-t border-amber-200/60">{note.date}</p>
-                </div>
-              ))}
-              {notesList.length === 0 && <p className="col-span-full text-center text-slate-400 py-10">אין פתקים כרגע.</p>}
-            </div>
-          </div>
-        )}
-
-        {/* ==================== 11. USER MANAGEMENT (ADMIN ONLY) ==================== */}
-        {activeTab === 'users' && userRole === 'admin' && (
-          <div className="space-y-6">
-            <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70">
-              <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
-                <span className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><UserCog className="w-5 h-5" /></span>
-                ניהול משתמשים והרשאות
-              </h2>
-              <p className="text-xs text-slate-500 mt-1">הוסף חברי צוות, קבע הרשאות (מנהל מלא או צופה בלבד) ועדכן סיסמאות</p>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <form onSubmit={handleAddUser} className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-3.5 h-fit">
-                <h3 className="font-extrabold text-slate-800 text-base flex items-center gap-2 border-b border-slate-100 pb-3">
-                  <Plus className="w-4 h-4 text-indigo-600" /> הוספת משתמש חדש
-                </h3>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">שם מלא *</label>
-                  <input required type="text" placeholder="למשל: דוד כהן" value={newUserForm.name} onChange={e => setNewUserForm({ ...newUserForm, name: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">שם משתמש להתחברות *</label>
-                  <input required type="text" placeholder="username" value={newUserForm.username} onChange={e => setNewUserForm({ ...newUserForm, username: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" dir="ltr" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">סיסמה *</label>
-                  <input required type="password" placeholder="בחר סיסמה..." value={newUserForm.password} onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" dir="ltr" />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1">אימייל (אופציונלי)</label>
-                    <input type="email" placeholder="name@example.com" value={newUserForm.email} onChange={e => setNewUserForm({ ...newUserForm, email: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" dir="ltr" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1">טלפון לוואטסאפ (אופציונלי)</label>
-                    <input type="tel" placeholder="050-0000000" value={newUserForm.phone} onChange={e => setNewUserForm({ ...newUserForm, phone: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" dir="ltr" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">רמת הרשאה</label>
-                  <select value={newUserForm.role} onChange={e => setNewUserForm({ ...newUserForm, role: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50">
-                    <option value="viewer">צופה בלבד (ללא עריכה ומחיקה)</option>
-                    <option value="admin">מנהל מערכת (גישה מלאה)</option>
-                  </select>
-                </div>
-                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center justify-center gap-2 transition-colors">
-                  <Plus className="w-4 h-4" /> צור משתמש
-                </button>
-              </form>
-
-              <div className="lg:col-span-2 bg-white rounded-2xl shadow-xs ring-1 ring-slate-200/70 overflow-hidden">
-                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
-                  <h3 className="font-bold text-slate-800 text-sm">משתמשים רשומים במערכת ({usersList.length})</h3>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-right text-sm">
-                    <thead className="bg-slate-50/70 text-xs text-slate-500 border-b uppercase">
-                      <tr>
-                        <th className="p-3.5 font-bold">שם מלא</th>
-                        <th className="p-3.5 font-bold">שם משתמש</th>
-                        <th className="p-3.5 font-bold text-center">הרשאה</th>
-                        <th className="p-3.5 font-bold text-center">פעולות</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {usersList.map(u => (
-                        <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
-                          <td className="p-3.5 font-bold text-slate-800">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-700 font-extrabold text-xs flex items-center justify-center shrink-0">
-                                {(u.name || 'מ').charAt(0)}
-                              </div>
-                              <span>{u.name}</span>
-                              {u.id === currentUser?.id && <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">אתה</span>}
-                            </div>
-                          </td>
-                          <td className="p-3.5 text-slate-600 font-mono text-xs" dir="ltr">{u.username}</td>
-                          <td className="p-3.5 text-center">
-                            <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full ${u.role === 'admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'}`}>
-                              <Shield className="w-3 h-3" />
-                              {u.role === 'admin' ? 'מנהל מערכת' : 'צופה בלבד'}
-                            </span>
-                          </td>
-                          <td className="p-3.5 text-center">
-                            <div className="flex justify-center gap-1">
-                              <button
-                                onClick={() => handleSendCredentialsWhatsApp(u)}
-                                className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors"
-                                title="שלח פרטי התחברות בוואטסאפ"
-                              >
-                                <MessageCircle className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleSendCredentialsEmail(u)}
-                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
-                                title="שלח פרטי התחברות במייל"
-                              >
-                                <Mail className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => setEditingUser({ ...u, email: u.email || '', phone: u.phone || '', newPassword: '' })}
-                                className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
-                                title="ערוך משתמש / שנה סיסמה"
-                              >
-                                <KeyRound className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteUser(u)}
-                                disabled={u.id === currentUser?.id}
-                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                                title="מחק משתמש"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-slate-400">{pr.date}</span>
+                        {userRole === 'admin' && (
+                          <button type="button" onClick={() => handleDeletePrCopy(pr)} className="text-slate-400 hover:text-rose-600 p-1 rounded-lg" title="מחק רשומה">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -6153,6 +6189,116 @@ export default function App() {
                     <span>₪{salesAnalytics.totalRoyaltiesDue.toLocaleString()}</span>
                   </div>
                 </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Customers & Alumni CRM + Shipping Labels Modal */}
+      {isCustomersModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[95] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Users className="w-5 h-5 text-sky-600" /> לקוחות קבועים, בוגרים ומדבקות משלוח</h3>
+                <p className="text-xs text-slate-500 mt-0.5">שמור פרטי קונים חוזרים והדפס מדבקות כתובת למשלוחים בלחיצה</p>
+              </div>
+              <button onClick={() => setIsCustomersModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-5 overflow-y-auto space-y-4 flex-1">
+              {userRole === 'admin' && (
+                <form onSubmit={handleAddCustomer} className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-sky-50/60 p-4 rounded-2xl ring-1 ring-sky-200/80">
+                  <input required placeholder="שם מלא *" value={customerForm.name} onChange={e => setCustomerForm({ ...customerForm, name: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white font-bold" />
+                  <input placeholder="טלפון לוואטסאפ" value={customerForm.phone} onChange={e => setCustomerForm({ ...customerForm, phone: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white" dir="ltr" />
+                  <input placeholder="כתובת מלאה למשלוח (עיר, רחוב, מיקוד)" value={customerForm.address} onChange={e => setCustomerForm({ ...customerForm, address: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white sm:col-span-2" />
+                  <select value={customerForm.category} onChange={e => setCustomerForm({ ...customerForm, category: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-xs bg-white">
+                    <option value="בוגר ישיבה">בוגר ישיבה</option>
+                    <option value="תלמיד / אברך">תלמיד / אברך</option>
+                    <option value="מנוי קבוע">מנוי קבוע</option>
+                    <option value="ידיד / תורם">ידיד / תורם</option>
+                  </select>
+                  <button type="submit" className="bg-sky-600 hover:bg-sky-700 text-white py-2.5 px-4 rounded-xl text-xs font-bold">+ הוסף לרשימה</button>
+                </form>
+              )}
+
+              {customersList.length === 0 ? (
+                <p className="text-center text-slate-400 text-xs py-8">עדיין לא נשמרו לקוחות ברשימה.</p>
+              ) : (
+                <div className="space-y-2">
+                  {customersList.map(cust => (
+                    <div key={cust.id} className="p-3.5 bg-slate-50/90 rounded-2xl ring-1 ring-slate-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-slate-900 text-sm">{cust.name}</span>
+                          <span className="text-[10px] font-bold bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full">{cust.category}</span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-3">
+                          {cust.phone && <span>📞 {cust.phone}</span>}
+                          {cust.address && <span>📍 {cust.address}</span>}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsCustomersModalOpen(false);
+                            setPrintDoc({
+                              type: 'packing_slip',
+                              docTitle: 'מדבקת משלוח לנמען',
+                              orderId: String(Date.now()).slice(-4),
+                              date: new Date().toLocaleDateString('he-IL'),
+                              recipient: `${cust.name}${cust.phone ? ` | טל': ${cust.phone}` : ''}${cust.address ? ` | כתובת: ${cust.address}` : ''}`,
+                              items: [{ name: 'משלוח ספרי הוצאת ישיבת ירוחם', quantity: 1 }]
+                            });
+                          }}
+                          className="bg-white hover:bg-slate-100 text-slate-700 ring-1 ring-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1"
+                        >
+                          <Printer className="w-3.5 h-3.5" /> מדבקת משלוח
+                        </button>
+                        {userRole === 'admin' && (
+                          <button type="button" onClick={() => handleDeleteCustomer(cust)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded-xl"><Trash2 className="w-4 h-4" /></button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Audit Log / Activity History Modal */}
+      {isAuditModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[95] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Activity className="w-5 h-5 text-indigo-600" /> יומן תנועות וביקורת (Audit Log)</h3>
+                <p className="text-xs text-slate-500 mt-0.5">תיעוד כרונולוגי של פעולות מלאי, מכירות ואיפוסים בצוות</p>
+              </div>
+              <button onClick={() => setIsAuditModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-5 overflow-y-auto space-y-2 flex-1">
+              {auditLogs.length === 0 ? (
+                <p className="text-center text-slate-400 text-xs py-10">עדיין לא נרשמו פעולות ביומן הביקורת.</p>
+              ) : (
+                auditLogs.map(log => (
+                  <div key={log.id} className="p-3 bg-slate-50/90 rounded-xl ring-1 ring-slate-200/70 flex justify-between items-start gap-3 text-xs">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-md text-[10px]">{log.category}</span>
+                        <span className="font-bold text-slate-900">{log.action}</span>
+                      </div>
+                      {log.details && <p className="text-slate-600 mt-1">{log.details}</p>}
+                    </div>
+                    <div className="text-left shrink-0 text-[11px] text-slate-400">
+                      <span className="font-bold text-slate-600 block">{log.user}</span>
+                      <span>{log.date}</span>
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </div>
