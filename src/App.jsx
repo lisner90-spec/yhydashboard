@@ -11,7 +11,7 @@ import {
   ArrowLeftRight, Calculator, ClipboardList, Copy, CreditCard, Database,
   Minus, Wallet, BookMarked, Scale, Award, Eye, Check, Send,
   LogIn, LogOut, Lock, Shield, KeyRound, Sun, Moon, Sparkles,
-  ShieldCheck, RotateCcw, Command, Zap, HardDrive
+  ShieldCheck, RotateCcw, Zap, HardDrive, Sliders, FileCheck
 } from 'lucide-react';
 
 // ==========================================
@@ -98,7 +98,6 @@ const getEffectiveBookPrices = (book) => {
   const supplier = Number(p.supplier || catalogMatch?.prices?.supplier || 0);
   const hasExplicitGuest = p.yeshivaGuest !== undefined && p.yeshivaGuest !== null && Number(p.yeshivaGuest) > 0;
 
-  // אם לספר הקיים עדיין לא נשמר מחיר "שני/אורח", מושכים את זוג מחירי הישיבה המעודכנים מהמחירון
   const yeshiva = hasExplicitGuest
     ? Number(p.yeshiva || catalogMatch?.prices?.yeshiva || general)
     : Number(catalogMatch?.prices?.yeshiva ?? p.yeshiva ?? general);
@@ -142,6 +141,17 @@ const emptySupplierForm = {
   notes: ''
 };
 
+const defaultDashboardAdjustments = {
+  extraCopies: 0,
+  extraWarehouseCopies: 0,
+  extraRetailValue: 0,
+  extraProductionValue: 0,
+  extraStoreRevenue: 0,
+  extraSupplierRevenue: 0,
+  extraPosRevenue: 0,
+  extraOpenDebt: 0
+};
+
 const loadLocal = (key, fallback) => {
   try {
     const raw = localStorage.getItem(key);
@@ -160,7 +170,7 @@ const formatWhatsAppPhone = (rawPhone) => {
 };
 
 export default function App() {
-  // --- Navigation & Auth State ---
+  // --- Navigation & Auth State (ברירת מחדל: דאשבורד) ---
   const [activeTab, setActiveTab] = useState('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [dbConnected, setDbConnected] = useState(false);
@@ -208,6 +218,12 @@ export default function App() {
   const [campaignsList, setCampaignsList] = useState(() => loadLocal('yhy_erp_campaigns', []));
   const [prCopies, setPrCopies] = useState(() => loadLocal('yhy_erp_pr_copies', []));
 
+  // --- התאמות ידניות לדאשבורד ---
+  const [dashboardAdjustments, setDashboardAdjustments] = useState(() =>
+    loadLocal('yhy_erp_dashboard_adj', defaultDashboardAdjustments)
+  );
+  const [isDashboardEditOpen, setIsDashboardEditOpen] = useState(false);
+
   // --- Toast & Confirm Dialog ---
   const [toast, setToast] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
@@ -224,60 +240,46 @@ export default function App() {
   const [isGiftHistoryOpen, setIsGiftHistoryOpen] = useState(false);
   const [giftForm, setGiftForm] = useState({ bookId: '', quantity: 1, recipient: '', category: 'תורם', notes: '' });
 
-  // --- Suppliers, Orders & Consignment UI States ---
+  // --- Suppliers, Orders, Consignment, Quick Calc & Smart Text Parser States ---
   const [supplierSearch, setSupplierSearch] = useState('');
   const [supplierSort, setSupplierSort] = useState('alphabetical');
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [supplierForm, setSupplierForm] = useState(emptySupplierForm);
+
+  // עריכת מלאי אצל ספק ספציפי
   const [viewingSupplierStock, setViewingSupplierStock] = useState(null);
+  const [supplierStockDraft, setSupplierStockDraft] = useState({});
+  const [newBookForSupplier, setNewBookForSupplier] = useState({ bookId: '', amount: 10 });
+
+  // הפקת הזמנה לספק (כולל עריכת מחיר לכל ספר)
   const [isSupplierInvoiceModalOpen, setIsSupplierInvoiceModalOpen] = useState(false);
   const [invoiceSupplier, setInvoiceSupplier] = useState(null);
-  const [invoiceItems, setInvoiceItems] = useState([{ bookId: '', quantity: 10 }]);
+  const [invoiceItems, setInvoiceItems] = useState([{ bookId: '', quantity: 10, customPrice: 0 }]);
   const [deductFromWarehouse, setDeductFromWarehouse] = useState(true);
   const [invoiceNotes, setInvoiceNotes] = useState('');
+
+  // מחשבון קניית ספרים מהיר (ללא הזמנה)
+  const [isPurchaseCalcOpen, setIsPurchaseCalcOpen] = useState(false);
+  const [calcPriceTier, setCalcPriceTier] = useState('supplier');
+  const [calcDiscountPct, setCalcDiscountPct] = useState(0);
+  const [calcItems, setCalcItems] = useState([{ bookId: '', quantity: 10 }]);
+
+  // קליטת הזמנה וקבלה אוטומטית מהודעת טקסט של ספק
+  const [isParseOrderModalOpen, setIsParseOrderModalOpen] = useState(false);
+  const [rawOrderMessage, setRawOrderMessage] = useState('');
+  const [parsedSupplierName, setParsedSupplierName] = useState('');
+  const [parsedItems, setParsedItems] = useState([]);
+  const [parsedDeductWarehouse, setParsedDeductWarehouse] = useState(true);
+  const [parsedMarkAsPaid, setParsedMarkAsPaid] = useState(true);
+
+  // קונסיגנציה והיסטוריה
   const [isConsignmentModalOpen, setIsConsignmentModalOpen] = useState(false);
   const [consignmentSupplier, setConsignmentSupplier] = useState(null);
   const [consignmentForm, setConsignmentForm] = useState({ type: 'sale', bookId: '', quantity: 1, unitPrice: 0, notes: '' });
   const [isSupplierHistoryModalOpen, setIsSupplierHistoryModalOpen] = useState(false);
   const [selectedSupplierForHistory, setSelectedSupplierForHistory] = useState(null);
   const [partialPayInputs, setPartialPayInputs] = useState({});
-  const [supplierStockDraft, setSupplierStockDraft] = useState([]);
-  const [newSupplierStockBookId, setNewSupplierStockBookId] = useState('');
-  const [newSupplierStockQty, setNewSupplierStockQty] = useState(5);
-
-  // --- Quick Book Calculator & Smart Message Parser States ---
-  const [isQuickCalcOpen, setIsQuickCalcOpen] = useState(false);
-  const [quickCalcTier, setQuickCalcTier] = useState('supplier');
-  const [quickCalcDiscount, setQuickCalcDiscount] = useState(0);
-  const [quickCalcItems, setQuickCalcItems] = useState([{ bookId: '', quantity: 1 }]);
-
-  const [isParseOrderModalOpen, setIsParseOrderModalOpen] = useState(false);
-  const [rawOrderMessage, setRawOrderMessage] = useState('');
-  const [parsedOrderSupplierId, setParsedOrderSupplierId] = useState('');
-  const [parsedOrderItems, setParsedOrderItems] = useState([]);
-  const [parsedOrderDeductStock, setParsedOrderDeductStock] = useState(true);
-  const [parsedOrderNotes, setParsedOrderNotes] = useState('');
-
-  // --- Dashboard Manual Adjustments ---
-  const [dashboardAdjustments, setDashboardAdjustments] = useState(() =>
-    loadLocal('yhy_erp_dashboard_adjustments', {
-      copiesDelta: 0,
-      warehouseDelta: 0,
-      retailValueDelta: 0,
-      productionValueDelta: 0,
-      storeRevenueDelta: 0,
-      supplierRevenueDelta: 0,
-      posRevenueDelta: 0,
-      openDebtDelta: 0
-    })
-  );
-  const [isDashboardEditOpen, setIsDashboardEditOpen] = useState(false);
-  const [dashboardEditDraft, setDashboardEditDraft] = useState(dashboardAdjustments);
-
-  useEffect(() => {
-    try { localStorage.setItem('yhy_erp_dashboard_adjustments', JSON.stringify(dashboardAdjustments)); } catch {}
-  }, [dashboardAdjustments]);
 
   // --- Orders & POS UI States ---
   const [ordersSubTab, setOrdersSubTab] = useState('pending');
@@ -341,7 +343,6 @@ export default function App() {
     loadLocal('yhy_erp_auto_snapshots', [])
   );
 
-  // שמירת הפניה עדכנית לנתונים עבור טיימר הגיבוי האוטומטי (ללא איפוס הטיימר בכל עריכה)
   const latestDataRef = useRef({});
   latestDataRef.current = {
     inventory: inventoryList,
@@ -357,14 +358,12 @@ export default function App() {
     prCopies
   };
 
-  // פס מעבר עליון חלק בעת החלפת מסכים
   useEffect(() => {
     setIsTabTransitioning(true);
     const t = setTimeout(() => setIsTabTransitioning(false), 360);
     return () => clearTimeout(t);
   }, [activeTab]);
 
-  // קיצור מקלדת Ctrl+K / Cmd+K לחיפוש וניווט מהיר
   useEffect(() => {
     const onKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -379,7 +378,6 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  // שמירת הגדרות הגיבוי האוטומטי
   useEffect(() => {
     try { localStorage.setItem('yhy_erp_autobackup_settings', JSON.stringify(autoBackupSettings)); } catch {}
   }, [autoBackupSettings]);
@@ -395,7 +393,7 @@ export default function App() {
   const getCollRef = (collName) => collection(db, 'erp', appId, collName);
   const getDocRef = (collName, docId) => doc(db, 'erp', appId, collName, docId);
 
-  // --- Sync with Firebase (with safe fallback) ---
+  // --- Sync with Firebase ---
   useEffect(() => {
     if (!db) return;
     const handleDbError = (err) => {
@@ -420,6 +418,11 @@ export default function App() {
       unsubs.push(onSnapshot(getCollRef('print_quotes'), snap => setPrintQuotes(snap.docs.map(d => ({ id: d.id, ...d.data() }))), handleDbError));
       unsubs.push(onSnapshot(getCollRef('campaigns'), snap => setCampaignsList(snap.docs.map(d => ({ id: d.id, ...d.data() }))), handleDbError));
       unsubs.push(onSnapshot(getCollRef('pr_copies'), snap => setPrCopies(snap.docs.map(d => ({ id: d.id, ...d.data() }))), handleDbError));
+      unsubs.push(onSnapshot(getDocRef('settings', 'dashboard_adjustments'), snap => {
+        if (snap.exists()) {
+          setDashboardAdjustments(prev => ({ ...prev, ...snap.data() }));
+        }
+      }, handleDbError));
       unsubs.push(onSnapshot(getCollRef('users'), snap => {
         if (!snap.empty) {
           setUsersList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -450,6 +453,7 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem('yhy_erp_print_quotes', JSON.stringify(printQuotes)); } catch {} }, [printQuotes]);
   useEffect(() => { try { localStorage.setItem('yhy_erp_campaigns', JSON.stringify(campaignsList)); } catch {} }, [campaignsList]);
   useEffect(() => { try { localStorage.setItem('yhy_erp_pr_copies', JSON.stringify(prCopies)); } catch {} }, [prCopies]);
+  useEffect(() => { try { localStorage.setItem('yhy_erp_dashboard_adj', JSON.stringify(dashboardAdjustments)); } catch {} }, [dashboardAdjustments]);
 
   // ==========================================
   // התחברות וניהול משתמשים
@@ -635,6 +639,30 @@ export default function App() {
       }
     });
     return items.sort((a, b) => a.title.localeCompare(b.title, 'he'));
+  };
+
+  // ==========================================
+  // שמירת התאמות ידניות לדאשבורד
+  // ==========================================
+  const handleSaveDashboardAdjustments = async (e) => {
+    e.preventDefault();
+    const cleaned = {
+      extraCopies: Number(dashboardAdjustments.extraCopies || 0),
+      extraWarehouseCopies: Number(dashboardAdjustments.extraWarehouseCopies || 0),
+      extraRetailValue: Number(dashboardAdjustments.extraRetailValue || 0),
+      extraProductionValue: Number(dashboardAdjustments.extraProductionValue || 0),
+      extraStoreRevenue: Number(dashboardAdjustments.extraStoreRevenue || 0),
+      extraSupplierRevenue: Number(dashboardAdjustments.extraSupplierRevenue || 0),
+      extraPosRevenue: Number(dashboardAdjustments.extraPosRevenue || 0),
+      extraOpenDebt: Number(dashboardAdjustments.extraOpenDebt || 0),
+      updatedAt: Date.now()
+    };
+    setDashboardAdjustments(cleaned);
+    if (db && dbConnected) {
+      try { await setDoc(getDocRef('settings', 'dashboard_adjustments'), cleaned, { merge: true }); } catch {}
+    }
+    setIsDashboardEditOpen(false);
+    showToast('נתוני הדאשבורד הידניים נשמרו בהצלחה!', 'success');
   };
 
   // ==========================================
@@ -850,7 +878,7 @@ export default function App() {
   };
 
   // ==========================================
-  // פעולות ספקים, הזמנות, קונסיגנציה וגבייה
+  // פעולות ספקים, עריכת מלאי ספק, קליטה חכמה וגבייה
   // ==========================================
   const handleSaveSupplier = async (e) => {
     e.preventDefault();
@@ -902,40 +930,38 @@ export default function App() {
     });
   };
 
-  const openSupplierOrderModal = (supplier) => {
-    const firstBook = inventoryList[0];
-    const firstPrice = firstBook ? getEffectiveBookPrices(firstBook).supplier : 0;
-    setInvoiceSupplier(supplier);
-    setInvoiceItems([{ bookId: firstBook?.id || '', quantity: 10, customPrice: firstPrice }]);
-    setDeductFromWarehouse(true);
-    setInvoiceNotes('');
-    setIsSupplierInvoiceModalOpen(true);
-  };
-
-  const openSupplierStockEditor = (supplier) => {
-    const items = getSupplierInventoryItems(supplier.name);
-    setSupplierStockDraft(items.map(it => ({ ...it })));
-    const unusedBook = inventoryList.find(b => !items.some(it => it.bookId === b.id));
-    setNewSupplierStockBookId(unusedBook?.id || inventoryList[0]?.id || '');
-    setNewSupplierStockQty(5);
+  // פתיחת חלון עריכת מלאי אצל ספק ספציפי
+  const openEditSupplierStockModal = (supplier) => {
+    const draft = {};
+    getSupplierInventoryItems(supplier.name).forEach(it => {
+      draft[it.bookId] = it.amount;
+    });
+    setSupplierStockDraft(draft);
+    const firstUnused = inventoryList.find(b => !draft[b.id]);
+    setNewBookForSupplier({ bookId: firstUnused?.id || inventoryList[0]?.id || '', amount: 10 });
     setViewingSupplierStock(supplier);
   };
 
-  const handleSaveSupplierStockEdits = async () => {
+  // שמירת שינויי מלאי אצל ספק ספציפי
+  const handleSaveSupplierStockChanges = async () => {
     if (!viewingSupplierStock) return;
     const supName = viewingSupplierStock.name;
-    const draftMap = new Map(supplierStockDraft.map(item => [item.bookId, Math.max(0, Number(item.amount) || 0)]));
     const updatedBooks = [];
 
     setInventoryList(prev => prev.map(book => {
-      const hasDraft = draftMap.has(book.id);
-      const currentBreakdown = [...(book.breakdown || [])];
-      const existingIdx = currentBreakdown.findIndex(r => r.location === supName);
+      const hasDraft = Object.prototype.hasOwnProperty.call(supplierStockDraft, book.id);
+      const existingIdx = (book.breakdown || []).findIndex(r => r.location === supName);
       if (!hasDraft && existingIdx === -1) return book;
 
-      const targetAmount = hasDraft ? draftMap.get(book.id) : 0;
-      let nextBreakdown = currentBreakdown.filter(r => r.location !== supName);
-      if (targetAmount > 0) {
+      const targetAmount = hasDraft ? Math.max(0, Number(supplierStockDraft[book.id] || 0)) : 0;
+      const nextBreakdown = [...(book.breakdown || [])];
+      if (existingIdx !== -1) {
+        if (targetAmount > 0) {
+          nextBreakdown[existingIdx] = { ...nextBreakdown[existingIdx], amount: targetAmount };
+        } else {
+          nextBreakdown.splice(existingIdx, 1);
+        }
+      } else if (targetAmount > 0) {
         nextBreakdown.push({ location: supName, amount: targetAmount });
       }
       const updated = { ...book, breakdown: nextBreakdown, updatedAt: Date.now() };
@@ -945,199 +971,56 @@ export default function App() {
 
     if (db && dbConnected && updatedBooks.length > 0) {
       try {
-        await Promise.all(
-          updatedBooks.map(b =>
-            updateDoc(getDocRef('inventory', b.id), { breakdown: b.breakdown, updatedAt: b.updatedAt })
-          )
-        );
-      } catch (err) {
-        console.error('Error updating supplier stock:', err);
-      }
-    }
-
-    setViewingSupplierStock(null);
-    showToast(`מלאי הספק "${supName}" עודכן בהצלחה!`, 'success');
-  };
-
-  const handleParseRawSupplierMessage = (text) => {
-    setRawOrderMessage(text);
-    const lines = String(text || '')
-      .split(/\r?\n/)
-      .map(l => l.trim())
-      .filter(Boolean);
-
-    // ניסיון לזהות ספק מתוך הטקסט
-    const matchedSup = suppliersList.find(s => s.name && text.includes(s.name));
-    if (matchedSup && !parsedOrderSupplierId) {
-      setParsedOrderSupplierId(matchedSup.id);
-    }
-
-    const detected = [];
-    for (const line of lines) {
-      // חיפוש כמות בשורה (למשל: 10 עותקים, x10, 10 יח', או מספר בתחילת/סוף שורה)
-      const qtyMatch =
-        line.match(/(?:×|x|\*)\s*(\d+)/i) ||
-        line.match(/(\d+)\s*(?:עותקים|יח'|יחידות|ספרים)/) ||
-        line.match(/(?:^|[\s\-–:])(\d{1,4})(?:\s*$)/);
-      const qty = qtyMatch ? Math.max(1, Number(qtyMatch[1])) : 1;
-
-      // ניקוי המספרים ומילות הקישור לזיהוי שם הספר
-      const cleanedLine = line
-        .replace(/(?:×|x|\*)\s*\d+/gi, '')
-        .replace(/\d+\s*(?:עותקים|יח'|יחידות|ספרים)/g, '')
-        .replace(/^\d+[\.\)\-\s]+/, '')
-        .trim();
-
-      let matchedBook = findMatchingCatalogBook(cleanedLine);
-      if (matchedBook) {
-        const liveBook = inventoryList.find(b => normalizeBookTitle(b.title) === normalizeBookTitle(matchedBook.title)) ||
-                         inventoryList.find(b => b.id === matchedBook.id);
-        if (liveBook) matchedBook = liveBook;
-      } else {
-        const normLine = normalizeBookTitle(cleanedLine);
-        if (normLine.length >= 3) {
-          matchedBook = inventoryList.find(b => {
-            const nb = normalizeBookTitle(b.title);
-            return nb && (nb.includes(normLine) || normLine.includes(nb));
-          });
-        }
-      }
-
-      if (matchedBook) {
-        const existing = detected.find(d => d.bookId === matchedBook.id);
-        const unitPrice = getEffectiveBookPrices(matchedBook).supplier;
-        if (existing) {
-          existing.quantity += qty;
-        } else {
-          detected.push({
-            bookId: matchedBook.id,
-            title: matchedBook.title,
-            quantity: qty,
-            unitPrice
-          });
-        }
-      }
-    }
-
-    setParsedOrderItems(detected);
-  };
-
-  const handleConfirmParsedOrder = async (generateReceipt = true) => {
-    const supplier = suppliersList.find(s => s.id === parsedOrderSupplierId);
-    if (!supplier) {
-      showToast('אנא בחר ספק / חנות מהרשימה.', 'warning');
-      return;
-    }
-    const validItems = parsedOrderItems
-      .filter(i => i.bookId && Number(i.quantity) > 0)
-      .map(i => {
-        const book = inventoryList.find(b => b.id === i.bookId);
-        const price = Number(i.unitPrice ?? 0);
-        const qty = Number(i.quantity);
-        return {
-          bookId: i.bookId,
-          title: book?.title || i.title || 'ספר',
-          quantity: qty,
-          price,
-          lineTotal: price * qty
-        };
-      });
-
-    if (validItems.length === 0) {
-      showToast('לא זוהו ספרים תקינים בהזמנה. תוכל להוסיף שורה ידנית.', 'warning');
-      return;
-    }
-
-    const totalOrderPrice = validItems.reduce((s, i) => s + i.lineTotal, 0);
-    const updatedBooks = [];
-
-    setInventoryList(prev => prev.map(book => {
-      const orderItem = validItems.find(v => v.bookId === book.id);
-      if (!orderItem) return book;
-      const newPublisherStock = parsedOrderDeductStock
-        ? Math.max(0, Number(book.publisherStock || 0) - orderItem.quantity)
-        : Number(book.publisherStock || 0);
-
-      const currentBreakdown = [...(book.breakdown || [])];
-      const existingIdx = currentBreakdown.findIndex(b => b.location === supplier.name);
-      if (existingIdx !== -1) {
-        currentBreakdown[existingIdx] = {
-          ...currentBreakdown[existingIdx],
-          amount: Number(currentBreakdown[existingIdx].amount || 0) + orderItem.quantity
-        };
-      } else {
-        currentBreakdown.push({ location: supplier.name, amount: orderItem.quantity });
-      }
-      const updated = { ...book, publisherStock: newPublisherStock, breakdown: currentBreakdown, updatedAt: Date.now() };
-      updatedBooks.push(updated);
-      return updated;
-    }));
-
-    if (db && dbConnected && updatedBooks.length > 0) {
-      try {
         await Promise.all(updatedBooks.map(b =>
-          updateDoc(getDocRef('inventory', b.id), {
-            publisherStock: b.publisherStock,
-            breakdown: b.breakdown,
-            updatedAt: b.updatedAt
-          })
+          updateDoc(getDocRef('inventory', b.id), { breakdown: b.breakdown, updatedAt: b.updatedAt })
         ));
       } catch {}
     }
 
-    const itemsText = validItems
-      .map((item, idx) => `${idx + 1}. ${item.title} — ${item.quantity} עותקים × ₪${item.price} = ₪${item.lineTotal.toLocaleString()}`)
-      .join('\n') + (parsedOrderNotes.trim() ? `\nהערות: ${parsedOrderNotes.trim()}` : '');
-
     const logObj = {
-      supplierName: supplier.name,
-      action: 'הזמנה אוטומטית מהודעת ספק + קבלה',
-      type: 'order',
+      supplierName: supName,
+      action: 'עדכון ידני של מלאי הספק',
+      type: 'adjustment',
       user: currentUserName,
       date: new Date().toLocaleString('he-IL'),
       timestamp: Date.now(),
-      totalAmount: totalOrderPrice,
-      paymentStatus: 'unpaid',
+      totalAmount: 0,
+      paymentStatus: 'paid',
       paidAmount: 0,
-      details: itemsText
+      details: `עודכנו כמויות המלאי אצל ${supName} ידנית על ידי ${currentUserName}.`
     };
-
     if (db && dbConnected) {
       try { await addDoc(getCollRef('supplier_logs'), logObj); } catch { setSupplierLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]); }
     } else {
       setSupplierLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]);
     }
 
-    setIsParseOrderModalOpen(false);
-    setRawOrderMessage('');
-    setParsedOrderItems([]);
-    setParsedOrderNotes('');
-    showToast(`ההזמנה עבור "${supplier.name}" נקלטה והמלאי עודכן!`, 'success');
+    setViewingSupplierStock(null);
+    showToast(`מלאי הספרים אצל "${supName}" עודכן בהצלחה!`, 'success');
+  };
 
-    if (generateReceipt) {
-      const dateStr = new Date().toLocaleDateString('he-IL');
-      setPrintDoc({
-        type: 'supplier_delivery',
-        docTitle: 'אישור הזמנה וקבלה / תעודת משלוח',
-        orderId: `RCP-${Date.now().toString().slice(-5)}`,
-        date: dateStr,
-        recipient: `${supplier.name}${supplier.address ? ' — ' + supplier.address : ''}`,
-        totalAmount: totalOrderPrice,
-        notes: parsedOrderNotes.trim(),
-        items: validItems.map(i => ({ name: i.title, quantity: i.quantity, price: i.price, lineTotal: i.lineTotal }))
-      });
-    }
+  const openSupplierOrderModal = (supplier) => {
+    const firstBook = inventoryList[0];
+    setInvoiceSupplier(supplier);
+    setInvoiceItems([{
+      bookId: firstBook?.id || '',
+      quantity: 10,
+      customPrice: Number(firstBook?.prices?.supplier || 0)
+    }]);
+    setDeductFromWarehouse(true);
+    setInvoiceNotes('');
+    setIsSupplierInvoiceModalOpen(true);
   };
 
   const processSupplierOrder = async (mode) => {
-    // mode: 'email' | 'whatsapp' | 'save_only' | 'print'
     if (!invoiceSupplier) return;
     const validItems = invoiceItems
       .filter(i => i.bookId && Number(i.quantity) > 0)
       .map(i => {
         const book = inventoryList.find(b => b.id === i.bookId);
-        const defaultPrice = book ? getEffectiveBookPrices(book).supplier : 0;
-        const price = i.customPrice !== undefined && i.customPrice !== '' ? Number(i.customPrice) : defaultPrice;
+        const price = i.customPrice !== undefined && i.customPrice !== ''
+          ? Math.max(0, Number(i.customPrice))
+          : Number(book?.prices?.supplier || 0);
         const qty = Number(i.quantity);
         return {
           bookId: i.bookId,
@@ -1155,7 +1038,6 @@ export default function App() {
 
     const totalOrderPrice = validItems.reduce((s, i) => s + i.lineTotal, 0);
 
-    // עדכון אוטומטי של מלאי הספק + הפחתה מהמחסן הראשי (אם מסומן)
     const updatedBooks = [];
     setInventoryList(prev => prev.map(book => {
       const orderItem = validItems.find(v => v.bookId === book.id);
@@ -1193,7 +1075,6 @@ export default function App() {
       }
     }
 
-    // תיעוד בהיסטוריית הספק
     const itemsText = validItems
       .map((item, idx) => `${idx + 1}. ${item.title} — ${item.quantity} עותקים × ₪${item.price} = ₪${item.lineTotal.toLocaleString()}`)
       .join('\n') + (invoiceNotes.trim() ? `\nהערות: ${invoiceNotes.trim()}` : '');
@@ -1231,7 +1112,7 @@ export default function App() {
         `להלן פירוט הזמנת הספרים מהוצאת ספרי ישיבת ירוחם בתאריך ${dateStr}:\n\n` +
         `${itemsText}\n\n` +
         `----------------------------------------\n` +
-        `סה"כ לתשלום (לפי מחירון ספקים): ₪${totalOrderPrice.toLocaleString()}\n` +
+        `סה"כ לתשלום: ₪${totalOrderPrice.toLocaleString()}\n` +
         `----------------------------------------\n\n` +
         `נשמח לאישור קבלת ההזמנה.\nבברכה,\nהוצאת ספרי ישיבת ירוחם`;
       window.location.href = `mailto:${invoiceSupplier.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -1262,6 +1143,171 @@ export default function App() {
 
     setIsSupplierInvoiceModalOpen(false);
     showToast(`ההזמנה נשמרה ומלאי "${invoiceSupplier.name}" עודכן אוטומטית!`, 'success');
+  };
+
+  // ==========================================
+  // פענוח אוטומטי של הודעת הזמנה מספק והפקת הזמנה + קבלה
+  // ==========================================
+  const handleParseSupplierMessageText = (text) => {
+    setRawOrderMessage(text);
+    if (!text.trim()) {
+      setParsedItems([]);
+      return;
+    }
+
+    // זיהוי אוטומטי של ספק מתוך הטקסט (אם מוזכר שם של ספק קיים)
+    const matchedSup = suppliersList.find(s =>
+      s.name && text.toLowerCase().includes(s.name.trim().toLowerCase())
+    );
+    if (matchedSup && !parsedSupplierName) {
+      setParsedSupplierName(matchedSup.name);
+    }
+
+    const foundMap = new Map();
+    const lines = text.split(/\r?\n|,|;/).map(l => l.trim()).filter(Boolean);
+
+    const matchBookInSegment = (seg) => {
+      const normSeg = normalizeBookTitle(seg).toLowerCase();
+      if (!normSeg) return null;
+      // התאמה ישירה מול ספרים קיימים במלאי
+      let best = inventoryList.find(b => {
+        const nt = normalizeBookTitle(b.title).toLowerCase();
+        return nt && (normSeg.includes(nt) || nt.includes(normSeg));
+      });
+      if (best) return best;
+      // התאמה לפי מילות מפתח מהקטלוג
+      const catMatch = findMatchingCatalogBook(seg);
+      if (catMatch) {
+        best = inventoryList.find(b =>
+          normalizeBookTitle(b.title) === normalizeBookTitle(catMatch.title) ||
+          findMatchingCatalogBook(b.title)?.id === catMatch.id
+        );
+      }
+      return best || null;
+    };
+
+    lines.forEach(line => {
+      const book = matchBookInSegment(line);
+      if (!book) return;
+      // חילוץ כמות (למשל: 10, x10, 10x, 10 עותקים, 10 יח')
+      const numMatches = line.match(/(?:×|x|\*)?\s*(\d{1,4})\s*(?:×|x|\*|עותקים|יחידות|יח'|יח)?/i);
+      const qty = numMatches ? Math.max(1, Number(numMatches[1])) : 1;
+      const defaultPrice = Number(getEffectiveBookPrices(book).supplier || book.prices?.supplier || 0);
+
+      if (foundMap.has(book.id)) {
+        const prev = foundMap.get(book.id);
+        foundMap.set(book.id, { ...prev, quantity: prev.quantity + qty });
+      } else {
+        foundMap.set(book.id, {
+          bookId: book.id,
+          title: book.title,
+          quantity: qty,
+          unitPrice: defaultPrice
+        });
+      }
+    });
+
+    setParsedItems(Array.from(foundMap.values()));
+  };
+
+  const handleConfirmParsedOrderAndReceipt = async () => {
+    const supName = (parsedSupplierName || '').trim() || 'ספק / לקוח מוסדי';
+    const validItems = parsedItems.filter(i => i.bookId && Number(i.quantity) > 0);
+    if (validItems.length === 0) {
+      showToast('לא זוהו ספרים תקינים. ניתן להוסיף שורה ידנית למטה.', 'warning');
+      return;
+    }
+
+    const totalAmount = validItems.reduce((s, i) => s + Number(i.quantity) * Number(i.unitPrice || 0), 0);
+    const dateStr = new Date().toLocaleDateString('he-IL');
+    const receiptNum = `REC-${Date.now().toString().slice(-5)}`;
+
+    // עדכון מלאי (הפחתה מהמחסן + הוספה לספק אם רשום)
+    const updatedBooks = [];
+    setInventoryList(prev => prev.map(book => {
+      const item = validItems.find(v => v.bookId === book.id);
+      if (!item) return book;
+      const newPubStock = parsedDeductWarehouse
+        ? Math.max(0, Number(book.publisherStock || 0) - Number(item.quantity))
+        : Number(book.publisherStock || 0);
+      const nextBreakdown = [...(book.breakdown || [])];
+      const existingIdx = nextBreakdown.findIndex(r => r.location === supName);
+      if (existingIdx !== -1) {
+        nextBreakdown[existingIdx] = {
+          ...nextBreakdown[existingIdx],
+          amount: Number(nextBreakdown[existingIdx].amount || 0) + Number(item.quantity)
+        };
+      } else {
+        nextBreakdown.push({ location: supName, amount: Number(item.quantity) });
+      }
+      const updated = { ...book, publisherStock: newPubStock, breakdown: nextBreakdown, updatedAt: Date.now() };
+      updatedBooks.push(updated);
+      return updated;
+    }));
+
+    if (db && dbConnected && updatedBooks.length > 0) {
+      try {
+        await Promise.all(updatedBooks.map(b =>
+          updateDoc(getDocRef('inventory', b.id), { publisherStock: b.publisherStock, breakdown: b.breakdown, updatedAt: b.updatedAt })
+        ));
+      } catch {}
+    }
+
+    // הוספת ספק אוטומטית אם לא קיים ברשימה
+    if (!suppliersList.some(s => s.name === supName)) {
+      const newSup = { name: supName, contact: '', phone: '', email: '', address: '', notes: 'נוצר אוטומטית מקליטת הודעה', updatedAt: Date.now() };
+      if (db && dbConnected) {
+        try { await addDoc(getCollRef('suppliers'), newSup); } catch { setSuppliersList(prev => [...prev, { ...newSup, id: 'sup_' + Date.now() }]); }
+      } else {
+        setSuppliersList(prev => [...prev, { ...newSup, id: 'sup_' + Date.now() }]);
+      }
+    }
+
+    const itemsText = validItems
+      .map((item, idx) => `${idx + 1}. ${item.title} — ${item.quantity} עותקים × ₪${item.unitPrice} = ₪${(item.quantity * item.unitPrice).toLocaleString()}`)
+      .join('\n');
+
+    const logObj = {
+      supplierName: supName,
+      action: `הזמנה וקבלה אוטומטית מהודעה (${receiptNum})`,
+      type: 'order',
+      user: currentUserName,
+      date: new Date().toLocaleString('he-IL'),
+      timestamp: Date.now(),
+      totalAmount,
+      paymentStatus: parsedMarkAsPaid ? 'paid' : 'unpaid',
+      paidAmount: parsedMarkAsPaid ? totalAmount : 0,
+      details: itemsText
+    };
+
+    if (db && dbConnected) {
+      try { await addDoc(getCollRef('supplier_logs'), logObj); } catch { setSupplierLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]); }
+    } else {
+      setSupplierLogs(prev => [{ ...logObj, id: Date.now().toString() }, ...prev]);
+    }
+
+    setIsParseOrderModalOpen(false);
+    setRawOrderMessage('');
+    setParsedItems([]);
+
+    // פתיחת קבלה / תעודת משלוח להדפסה אוטומטית
+    setPrintDoc({
+      type: 'supplier_delivery',
+      docTitle: parsedMarkAsPaid ? 'קבלה ותעודת משלוח לספק' : 'אישור הזמנה ותעודת משלוח לספק',
+      orderId: receiptNum,
+      date: dateStr,
+      recipient: supName,
+      totalAmount,
+      notes: parsedMarkAsPaid ? 'התשלום התקבל וסומן כשולם במערכת.' : 'יתרה פתוחה לתשלום.',
+      items: validItems.map(i => ({
+        name: i.title,
+        quantity: Number(i.quantity),
+        price: Number(i.unitPrice),
+        lineTotal: Number(i.quantity) * Number(i.unitPrice)
+      }))
+    });
+
+    showToast(`ההזמנה והקבלה #${receiptNum} הופקו והמלאי עודכן!`, 'success');
   };
 
   // --- קונסיגנציה: דיווח מכירה / החזרה ---
@@ -1381,7 +1427,6 @@ export default function App() {
       icon: <CheckCircle className="w-6 h-6" />,
       iconStyle: 'bg-emerald-100 text-emerald-600',
       onConfirm: async () => {
-        // עדכון אופטימי מיידי
         setOrdersList(prev => prev.map(o => o.id === order.id ? { ...o, status: 'shipped', shippedAt: Date.now() } : o));
         if (db && dbConnected && order.id) {
           try { await updateDoc(getDocRef('orders', order.id), { status: 'shipped', shippedAt: Date.now() }); } catch {}
@@ -1777,9 +1822,9 @@ export default function App() {
 
   const handleExportFullBackup = () => {
     const payload = {
-      version: '3.0',
+      version: '3.2',
       exportedAt: new Date().toISOString(),
-      data: { inventory: inventoryList, suppliers: suppliersList, tasks: tasksList, orders: ordersList, notes: notesList, supplierLogs, giftLogs, posSales, printQuotes, campaigns: campaignsList, prCopies }
+      data: { inventory: inventoryList, suppliers: suppliersList, tasks: tasksList, orders: ordersList, notes: notesList, supplierLogs, giftLogs, posSales, printQuotes, campaigns: campaignsList, prCopies, dashboardAdjustments }
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -1822,6 +1867,7 @@ export default function App() {
             if (d.printQuotes) setPrintQuotes(d.printQuotes);
             if (d.campaigns) setCampaignsList(d.campaigns);
             if (d.prCopies) setPrCopies(d.prCopies);
+            if (d.dashboardAdjustments) setDashboardAdjustments(d.dashboardAdjustments);
             showToast('הנתונים שוחזרו בהצלחה!', 'success');
           }
         });
@@ -1834,7 +1880,7 @@ export default function App() {
   };
 
   // ==========================================
-  // מנוע גיבוי אוטומטי ונקודות שחזור (Time Machine)
+  // מנוע גיבוי אוטומטי ונקודות שחזור
   // ==========================================
   const persistSnapshotsSafely = (snapshotsArr) => {
     let list = [...snapshotsArr];
@@ -1844,7 +1890,6 @@ export default function App() {
         setAutoSnapshots(list);
         return true;
       } catch {
-        // במקרה של חריגת זיכרון דפדפן, מסירים את הנקודה הישנה ביותר ומנסים שוב
         list.pop();
       }
     }
@@ -1854,7 +1899,6 @@ export default function App() {
   const createAutoSnapshot = (reason = 'גיבוי אוטומטי מתוזמן', silent = true) => {
     try {
       const current = latestDataRef.current;
-      // להפחתת נפח בזיכרון המקומי, אם יש קבצים גדולים בהצעות הדפוס שומרים את הנתונים שלהם בבטחה
       const compactQuotes = (current.printQuotes || []).map(q => {
         if (q.fileData && String(q.fileData).length > 150000) {
           return { ...q, fileData: '' };
@@ -1893,10 +1937,8 @@ export default function App() {
     }
   };
 
-  // טיימר גיבוי אוטומטי רציף (בודק כל דקה האם הגיע הזמן ליצור גיבוי חדש)
   useEffect(() => {
     if (!currentUser || !autoBackupSettings.enabled) return;
-
     const checkAndRunBackup = () => {
       const intervalMs = Math.max(5, Number(autoBackupSettings.intervalMinutes || 30)) * 60 * 1000;
       const existing = loadLocal('yhy_erp_auto_snapshots', []);
@@ -1905,8 +1947,6 @@ export default function App() {
         createAutoSnapshot('גיבוי אוטומטי מתוזמן', true);
       }
     };
-
-    // בדיקה ראשונית 10 שניות לאחר הכניסה למערכת
     const initialTimer = setTimeout(checkAndRunBackup, 10000);
     const intervalId = setInterval(checkAndRunBackup, 60000);
     return () => {
@@ -1919,7 +1959,7 @@ export default function App() {
     if (!snapshot?.data) return;
     setConfirmDialog({
       title: 'שחזור מנקודת גיבוי אוטומטי',
-      message: `האם לשחזר את כל נתוני המערכת לנקודת הזמן ${snapshot.dateLabel}? (${snapshot.summary?.books || 0} ספרים, ${snapshot.summary?.suppliers || 0} ספקים)`,
+      message: `האם לשחזר את כל נתוני המערכת לנקודת הזמן ${snapshot.dateLabel}?`,
       confirmText: 'שחזר נקודה זו',
       confirmStyle: 'bg-indigo-600 hover:bg-indigo-700',
       icon: <RotateCcw className="w-6 h-6" />,
@@ -1944,7 +1984,7 @@ export default function App() {
 
   const handleDownloadSnapshot = (snapshot) => {
     const payload = {
-      version: '3.1-snapshot',
+      version: '3.2-snapshot',
       exportedAt: new Date(snapshot.createdAt).toISOString(),
       reason: snapshot.reason,
       data: snapshot.data
@@ -2000,40 +2040,69 @@ export default function App() {
         if (inventorySort === 'alphabetical') return (a.title || '').localeCompare(b.title || '', 'he');
         return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
       });
-  // --- מדדי דאשבורד חיים (כולל התאמות ידניות) ---
+  }, [inventoryList, searchQuery, inventorySort]);
+
+  const sortedSuppliers = useMemo(() => {
+    return [...suppliersList]
+      .filter(s =>
+        (s.name || '').toLowerCase().includes(supplierSearch.toLowerCase()) ||
+        (s.contact || '').toLowerCase().includes(supplierSearch.toLowerCase()) ||
+        (s.phone || '').toLowerCase().includes(supplierSearch.toLowerCase())
+      )
+      .sort((a, b) => {
+        if (supplierSort === 'alphabetical') return (a.name || '').localeCompare(b.name || '', 'he');
+        return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
+      });
+  }, [suppliersList, supplierSearch, supplierSort]);
+
+  const pendingOrders = useMemo(
+    () => [...ordersList].filter(o => o.status !== 'shipped').sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0)),
+    [ordersList]
+  );
+  const shippedOrders = useMemo(
+    () => [...ordersList].filter(o => o.status === 'shipped').sort((a, b) => Number(b.shippedAt || b.timestamp || 0) - Number(a.shippedAt || a.timestamp || 0)),
+    [ordersList]
+  );
+
+  // --- מדדי דאשבורד חיים + התאמות ידניות ---
   const totalCopiesInSystem = useMemo(
-    () => Math.max(0, inventoryList.reduce((sum, b) => sum + calculateTotalStock(b), 0) + Number(dashboardAdjustments.copiesDelta || 0)),
-    [inventoryList, dashboardAdjustments.copiesDelta]
+    () => Math.max(0, inventoryList.reduce((sum, b) => sum + calculateTotalStock(b), 0) + Number(dashboardAdjustments.extraCopies || 0)),
+    [inventoryList, dashboardAdjustments.extraCopies]
   );
   const totalWarehouseCopies = useMemo(
-    () => Math.max(0, inventoryList.reduce((sum, b) => sum + Number(b.publisherStock || 0), 0) + Number(dashboardAdjustments.warehouseDelta || 0)),
-    [inventoryList, dashboardAdjustments.warehouseDelta]
+    () => Math.max(0, inventoryList.reduce((sum, b) => sum + Number(b.publisherStock || 0), 0) + Number(dashboardAdjustments.extraWarehouseCopies || 0)),
+    [inventoryList, dashboardAdjustments.extraWarehouseCopies]
   );
   const totalRetailValue = useMemo(
-    () => Math.max(0, inventoryList.reduce((sum, b) => sum + calculateTotalStock(b) * Number(b.prices?.general || 0), 0) + Number(dashboardAdjustments.retailValueDelta || 0)),
-    [inventoryList, dashboardAdjustments.retailValueDelta]
+    () => Math.max(0, inventoryList.reduce((sum, b) => sum + calculateTotalStock(b) * Number(b.prices?.general || 0), 0) + Number(dashboardAdjustments.extraRetailValue || 0)),
+    [inventoryList, dashboardAdjustments.extraRetailValue]
   );
   const totalProductionValue = useMemo(
-    () => Math.max(0, inventoryList.reduce((sum, b) => sum + calculateTotalStock(b) * Number(b.productionCost || 0), 0) + Number(dashboardAdjustments.productionValueDelta || 0)),
-    [inventoryList, dashboardAdjustments.productionValueDelta]
+    () => Math.max(0, inventoryList.reduce((sum, b) => sum + calculateTotalStock(b) * Number(b.productionCost || 0), 0) + Number(dashboardAdjustments.extraProductionValue || 0)),
+    [inventoryList, dashboardAdjustments.extraProductionValue]
   );
   const liveStoreRevenue = useMemo(
-    () => Math.max(0, ordersList.reduce((sum, o) => sum + Number(o.total || 0), 0) + Number(dashboardAdjustments.storeRevenueDelta || 0)),
-    [ordersList, dashboardAdjustments.storeRevenueDelta]
+    () => Math.max(0, ordersList.reduce((sum, o) => sum + Number(o.total || 0), 0) + Number(dashboardAdjustments.extraStoreRevenue || 0)),
+    [ordersList, dashboardAdjustments.extraStoreRevenue]
   );
   const liveSupplierRevenue = useMemo(
-    () => Math.max(0, supplierLogs.filter(l => l.type !== 'return').reduce((sum, l) => sum + Number(l.totalAmount || 0), 0) + Number(dashboardAdjustments.supplierRevenueDelta || 0)),
-    [supplierLogs, dashboardAdjustments.supplierRevenueDelta]
+    () => Math.max(0, supplierLogs.filter(l => l.type !== 'return').reduce((sum, l) => sum + Number(l.totalAmount || 0), 0) + Number(dashboardAdjustments.extraSupplierRevenue || 0)),
+    [supplierLogs, dashboardAdjustments.extraSupplierRevenue]
   );
   const livePosRevenue = useMemo(
-    () => Math.max(0, posSales.reduce((sum, s) => sum + Number(s.totalAmount || 0), 0) + Number(dashboardAdjustments.posRevenueDelta || 0)),
-    [posSales, dashboardAdjustments.posRevenueDelta]
+    () => Math.max(0, posSales.reduce((sum, s) => sum + Number(s.totalAmount || 0), 0) + Number(dashboardAdjustments.extraPosRevenue || 0)),
+    [posSales, dashboardAdjustments.extraPosRevenue]
   );
   const totalOpenSupplierDebt = useMemo(
-    () => Math.max(0, supplierLogs.reduce((sum, l) => sum + getLogRemainingDebt(l), 0) + Number(dashboardAdjustments.openDebtDelta || 0)),
-    [supplierLogs, dashboardAdjustments.openDebtDelta]
+    () => Math.max(0, supplierLogs.reduce((sum, l) => sum + getLogRemainingDebt(l), 0) + Number(dashboardAdjustments.extraOpenDebt || 0)),
+    [supplierLogs, dashboardAdjustments.extraOpenDebt]
   );
   const lowStockBooks = useMemo(() => inventoryList.filter(b => calculateTotalStock(b) < Number(b.threshold || 30)), [inventoryList]);
+
+  const hasAnyDashboardAdjustment = useMemo(() => {
+    const keys = ['extraCopies', 'extraWarehouseCopies', 'extraRetailValue', 'extraProductionValue', 'extraStoreRevenue', 'extraSupplierRevenue', 'extraPosRevenue', 'extraOpenDebt'];
+    return keys.some(k => Number(dashboardAdjustments[k] || 0) !== 0);
+  }, [dashboardAdjustments]);
 
   // --- תפריט ניווט ראשי ---
   const navItems = [
@@ -2053,78 +2122,18 @@ export default function App() {
   const activeNavItem = navItems.find(i => i.id === activeTab) || navItems[0];
   const userInitial = (currentUserName || 'מ').trim().charAt(0);
 
-  // סגנונות מערכת מתקדמים למצב לילה (כהה), אנימציות מעברים וגלילה מודרנית
+  // סגנונות מערכת מתקדמים, אנימציות ומעברים חלקים
   const themeStyles = `
     @keyframes pageEnter {
-      0% { opacity: 0; transform: translateY(16px) scale(0.985); filter: blur(5px); }
+      0% { opacity: 0; transform: translateY(14px) scale(0.992); filter: blur(4px); }
       100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-    }
-    @keyframes staggerItem {
-      0% { opacity: 0; transform: translateY(12px) scale(0.99); }
-      100% { opacity: 1; transform: translateY(0) scale(1); }
-    }
-    @keyframes modalPop {
-      0% { opacity: 0; transform: translateY(20px) scale(0.94); filter: blur(4px); }
-      100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-    }
-    @keyframes backdropFade {
-      from { opacity: 0; backdrop-filter: blur(0px); }
-      to { opacity: 1; backdrop-filter: blur(6px); }
-    }
-    @keyframes toastSlideIn {
-      from { opacity: 0; transform: translateY(20px) scale(0.92); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
-    }
-    @keyframes tabProgressBar {
-      0% { transform: scaleX(0); opacity: 1; }
-      70% { transform: scaleX(0.88); opacity: 1; }
-      100% { transform: scaleX(1); opacity: 0; }
-    }
-    .animate-page-enter {
-      animation: pageEnter 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
-    }
-    .animate-page-enter .grid > div {
-      animation: staggerItem 0.46s cubic-bezier(0.16, 1, 0.3, 1) both;
-    }
-    .animate-page-enter .grid > div:nth-child(2) { animation-delay: 50ms; }
-    .animate-page-enter .grid > div:nth-child(3) { animation-delay: 100ms; }
-    .animate-page-enter .grid > div:nth-child(4) { animation-delay: 150ms; }
-    .animate-page-enter .grid > div:nth-child(5) { animation-delay: 200ms; }
-    .animate-tab-progress {
-      transform-origin: right center;
-      animation: tabProgressBar 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    }
-    .animate-toast {
-      animation: toastSlideIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
-    }
-    .erp-shell .fixed.inset-0 {
-      animation: backdropFade 0.24s ease-out both;
-    }
-    .erp-shell .fixed.inset-0 > div {
-      animation: modalPop 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
-    }
-    .erp-shell {
-      font-feature-settings: "tnum" on, "lnum" on;
-      background-image: radial-gradient(at 100% 0%, rgba(99, 102, 241, 0.08) 0px, transparent 45%),
-                        radial-gradient(at 0% 100%, rgba(16, 185, 129, 0.07) 0px, transparent 45%);
-      background-attachment: fixed;
-    }
-    .erp-shell.erp-dark {
-      background-image: radial-gradient(at 100% 0%, rgba(99, 102, 241, 0.14) 0px, transparent 48%),
-                        radial-gradient(at 0% 100%, rgba(16, 185, 129, 0.10) 0px, transparent 48%);
-    }
-    .erp-shell button {
-      transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease, color 0.2s ease, box-shadow 0.24s ease, border-color 0.2s ease;
-    }
-    .erp-shell button:active:not(:disabled) {
-      transform: scale(0.965);
     }
     @keyframes staggerItem {
       0% { opacity: 0; transform: translateY(10px); }
       100% { opacity: 1; transform: translateY(0); }
     }
     @keyframes modalPop {
-      0% { opacity: 0; transform: translateY(16px) scale(0.95); filter: blur(3px); }
+      0% { opacity: 0; transform: translateY(16px) scale(0.955); filter: blur(3px); }
       100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
     }
     @keyframes backdropFade {
@@ -2141,27 +2150,27 @@ export default function App() {
       100% { transform: scaleX(1); opacity: 0; }
     }
     .animate-page-enter {
-      animation: pageEnter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+      animation: pageEnter 0.36s cubic-bezier(0.16, 1, 0.3, 1) both;
     }
     .animate-page-enter .grid > div {
-      animation: staggerItem 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+      animation: staggerItem 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
     }
-    .animate-page-enter .grid > div:nth-child(2) { animation-delay: 45ms; }
-    .animate-page-enter .grid > div:nth-child(3) { animation-delay: 90ms; }
-    .animate-page-enter .grid > div:nth-child(4) { animation-delay: 135ms; }
-    .animate-page-enter .grid > div:nth-child(5) { animation-delay: 180ms; }
+    .animate-page-enter .grid > div:nth-child(2) { animation-delay: 40ms; }
+    .animate-page-enter .grid > div:nth-child(3) { animation-delay: 80ms; }
+    .animate-page-enter .grid > div:nth-child(4) { animation-delay: 120ms; }
+    .animate-page-enter .grid > div:nth-child(5) { animation-delay: 160ms; }
     .animate-tab-progress {
       transform-origin: right center;
       animation: tabProgressBar 0.36s cubic-bezier(0.22, 1, 0.36, 1) forwards;
     }
     .animate-toast {
-      animation: toastSlideIn 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+      animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
     }
     .erp-shell .fixed.inset-0 {
       animation: backdropFade 0.22s ease-out both;
     }
     .erp-shell .fixed.inset-0 > div {
-      animation: modalPop 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+      animation: modalPop 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
     }
     .erp-shell {
       font-feature-settings: "tnum" on, "lnum" on;
@@ -2304,7 +2313,6 @@ export default function App() {
     .erp-dark tr:hover {
       background-color: rgba(30, 41, 59, 0.65) !important;
     }
-    /* שמירה על רקע לבן נקי במסמכי הדפסה */
     .erp-dark .print-paper-surface,
     .erp-dark .print-paper-surface * {
       background-color: #FFFFFF !important;
@@ -2314,13 +2322,12 @@ export default function App() {
   `;
 
   // ==========================================
-  // מסך התחברות (כאשר המשתמש אינו מחובר)
+  // מסך התחברות
   // ==========================================
   if (!currentUser) {
     return (
       <div className={`min-h-screen relative flex items-center justify-center p-4 font-sans overflow-hidden transition-colors duration-300 ${darkMode ? 'bg-[#060A14]' : 'bg-gradient-to-br from-slate-100 via-indigo-50/60 to-slate-200'}`} dir="rtl">
         <style>{themeStyles}</style>
-        {/* כפתור החלפת מצב יום / לילה במסך ההתחברות */}
         <button
           type="button"
           onClick={() => setDarkMode(!darkMode)}
@@ -2334,7 +2341,6 @@ export default function App() {
           <span>{darkMode ? 'מצב יום' : 'מצב לילה'}</span>
         </button>
 
-        {/* רקע גרדיאנט מודרני */}
         <div className="pointer-events-none absolute -top-32 -right-32 w-96 h-96 rounded-full bg-[#4B5320]/30 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 -left-32 w-96 h-96 rounded-full bg-indigo-600/25 blur-3xl" />
 
@@ -2421,6 +2427,7 @@ export default function App() {
   return (
     <div className={`erp-shell min-h-screen flex flex-col lg:flex-row font-sans antialiased transition-colors duration-300 ${darkMode ? 'erp-dark bg-[#070B14] text-slate-100' : 'bg-[#F1F5F9] text-slate-800'}`} dir="rtl">
       <style>{themeStyles}</style>
+
       {/* Toast Notification */}
       {toast && (
         <div className={`animate-toast fixed bottom-20 lg:bottom-6 left-5 z-[100] px-4 py-3 rounded-2xl shadow-2xl backdrop-blur-md text-white text-sm font-bold flex items-center gap-2.5 ring-1 ring-white/20 print:hidden ${
@@ -2485,7 +2492,6 @@ export default function App() {
         </nav>
 
         <div className="p-4 border-t border-slate-800/80 bg-slate-900/60 space-y-3">
-          {/* מתג יום / לילה בסרגל הצד */}
           <button
             type="button"
             onClick={() => setDarkMode(!darkMode)}
@@ -2597,7 +2603,6 @@ export default function App() {
 
       {/* Main Content Wrapper */}
       <div className="flex-1 flex flex-col min-w-0 relative">
-        {/* פס טעינה דינמי בראש המסך בעת מעבר בין לשוניות */}
         {isTabTransitioning && (
           <div className="fixed top-0 inset-x-0 h-[3px] z-50 pointer-events-none print:hidden overflow-hidden">
             <div className="animate-tab-progress h-full w-full bg-gradient-to-l from-indigo-500 via-violet-500 to-emerald-400 shadow-[0_0_10px_rgba(99,102,241,0.7)]" />
@@ -2622,7 +2627,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2.5">
-            {/* כפתור חיפוש וניווט מהיר (Ctrl+K) */}
             <button
               type="button"
               onClick={() => { setIsCommandOpen(true); setCommandQuery(''); }}
@@ -2638,7 +2642,18 @@ export default function App() {
               <kbd className="text-[10px] font-mono bg-white/80 text-slate-500 px-1.5 py-0.5 rounded-md ring-1 ring-slate-200" dir="ltr">Ctrl+K</kbd>
             </button>
 
-            {/* חיווי סטטוס גיבוי אוטומטי */}
+            <button
+              type="button"
+              onClick={() => {
+                setCalcItems([{ bookId: inventoryList[0]?.id || '', quantity: 10 }]);
+                setCalcDiscountPct(0);
+                setIsPurchaseCalcOpen(true);
+              }}
+              className="bg-amber-50 hover:bg-amber-100 text-amber-800 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-amber-200/80 transition-all"
+            >
+              <Calculator className="w-3.5 h-3.5" /> מחשבון ספרים
+            </button>
+
             <button
               type="button"
               onClick={() => setActiveTab('integrations')}
@@ -2647,30 +2662,21 @@ export default function App() {
                   ? 'bg-emerald-50/90 text-emerald-700 ring-emerald-200/80 hover:bg-emerald-100'
                   : 'bg-slate-100 text-slate-500 ring-slate-200 hover:bg-slate-200/70'
               }`}
-              title={autoSnapshots[0] ? `גיבוי אוטומטי אחרון: ${autoSnapshots[0].dateLabel}` : 'הגדרות גיבוי אוטומטי'}
             >
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>{autoBackupSettings.enabled ? (autoSnapshots[0] ? `גובה אוטומטית` : 'גיבוי אוטומטי פעיל') : 'גיבוי אוטומטי כבוי'}</span>
+              <span>{autoBackupSettings.enabled ? 'גובה אוטומטית' : 'גיבוי כבוי'}</span>
             </button>
 
             {pendingOrders.length > 0 && activeTab !== 'orders' && (
               <button
                 onClick={() => setActiveTab('orders')}
-                className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
+                className="bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200/80 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
               >
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
                 {pendingOrders.length} הזמנות
               </button>
             )}
-            {activeTab !== 'pos' && (
-              <button
-                onClick={() => setActiveTab('pos')}
-                className="bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
-              >
-                <CreditCard className="w-3.5 h-3.5" /> קופה מהירה
-              </button>
-            )}
-            {/* כפתור החלפת מצב יום / לילה בראש הדף */}
+
             <button
               type="button"
               onClick={() => setDarkMode(!darkMode)}
@@ -2679,7 +2685,6 @@ export default function App() {
                   ? 'bg-slate-800 text-amber-300 ring-slate-700 hover:bg-slate-700'
                   : 'bg-slate-100 text-slate-700 ring-slate-200 hover:bg-slate-200/70'
               }`}
-              title={darkMode ? 'עבור למצב יום (בהיר)' : 'עבור למצב לילה (כהה)'}
             >
               {darkMode ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-indigo-600" />}
               <span>{darkMode ? 'מצב יום' : 'מצב לילה'}</span>
@@ -2693,7 +2698,6 @@ export default function App() {
         {/* ==================== 1. DASHBOARD ==================== */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            {/* באנר פתיחה חכם עם פעולות מהירות */}
             <div className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-[#0F172A] via-[#1E1B4B] to-[#312E81] p-6 md:p-7 text-white shadow-lg">
               <div className="pointer-events-none absolute -left-16 -top-16 w-64 h-64 rounded-full bg-indigo-500/20 blur-3xl" />
               <div className="pointer-events-none absolute -right-10 -bottom-20 w-64 h-64 rounded-full bg-emerald-500/15 blur-3xl" />
@@ -2701,6 +2705,7 @@ export default function App() {
                 <div className="space-y-1.5">
                   <div className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-3 py-1 rounded-full text-[11px] font-bold text-indigo-200 ring-1 ring-white/15">
                     <Sparkles className="w-3.5 h-3.5 text-amber-300" /> מרכז הבקרה החי של ההוצאה
+                    {hasAnyDashboardAdjustment && <span className="bg-amber-400/25 text-amber-200 px-2 py-0.5 rounded-full mr-1">כולל התאמות ידניות</span>}
                   </div>
                   <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight">שלום {currentUserName}, תמונת מצב עסקית</h2>
                   <p className="text-xs md:text-sm text-indigo-100/80">סקירה בזמן אמת של מלאי הספרים, שווי ההדפסה, הכנסות המכירות ויתרות הגבייה</p>
@@ -2709,18 +2714,12 @@ export default function App() {
                   <button onClick={() => setActiveTab('pos')} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
                     <CreditCard className="w-4 h-4 text-emerald-300" /> מכירה בדוכן
                   </button>
-                  <button onClick={() => setActiveTab('inventory')} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
-                    <Package className="w-4 h-4 text-indigo-300" /> ניהול מלאי
-                  </button>
-                  <button onClick={() => setActiveTab('print_quotes')} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
-                    <Scale className="w-4 h-4 text-amber-300" /> השוואת דפוסים
-                  </button>
-                  <button onClick={() => { setQuickCalcItems([{ bookId: inventoryList[0]?.id || '', quantity: 1 }]); setQuickCalcDiscount(0); setIsQuickCalcOpen(true); }} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
-                    <Calculator className="w-4 h-4 text-cyan-300" /> מחשבון ספרים
+                  <button onClick={() => { setCalcItems([{ bookId: inventoryList[0]?.id || '', quantity: 10 }]); setCalcDiscountPct(0); setIsPurchaseCalcOpen(true); }} className="bg-white/15 hover:bg-white/25 backdrop-blur-md text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-white/20 transition-all">
+                    <Calculator className="w-4 h-4 text-amber-300" /> מחשבון ספרים
                   </button>
                   {userRole === 'admin' && (
-                    <button onClick={() => { setDashboardEditDraft(dashboardAdjustments); setIsDashboardEditOpen(true); }} className="bg-amber-400/20 hover:bg-amber-400/30 backdrop-blur-md text-amber-100 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 ring-1 ring-amber-300/30 transition-all">
-                      <Edit className="w-4 h-4 text-amber-300" /> ערוך נתוני דאשבורד
+                    <button onClick={() => setIsDashboardEditOpen(true)} className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-md transition-all">
+                      <Sliders className="w-4 h-4" /> ערוך נתוני דאשבורד
                     </button>
                   )}
                 </div>
@@ -2736,7 +2735,7 @@ export default function App() {
                 <p className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">{totalCopiesInSystem.toLocaleString()}</p>
                 <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
                   <span>במחסן: <strong className="text-indigo-700">{totalWarehouseCopies.toLocaleString()}</strong></span>
-                  <span>ספקים: <strong className="text-slate-700">{(totalCopiesInSystem - totalWarehouseCopies).toLocaleString()}</strong></span>
+                  <span>ספקים: <strong className="text-slate-700">{Math.max(0, totalCopiesInSystem - totalWarehouseCopies).toLocaleString()}</strong></span>
                 </div>
               </div>
 
@@ -2774,17 +2773,17 @@ export default function App() {
                 <span className="font-extrabold text-slate-800 text-sm">התפלגות המלאי: מחסן ראשי מול ספקים וחנויות</span>
                 <div className="flex items-center gap-4">
                   <span className="flex items-center gap-1.5 font-bold text-indigo-600"><span className="w-2.5 h-2.5 rounded-full bg-indigo-500" /> מחסן ראשי ({totalCopiesInSystem > 0 ? Math.round((totalWarehouseCopies / totalCopiesInSystem) * 100) : 0}%)</span>
-                  <span className="flex items-center gap-1.5 font-bold text-emerald-600"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> אצל ספקים ({totalCopiesInSystem > 0 ? Math.round(((totalCopiesInSystem - totalWarehouseCopies) / totalCopiesInSystem) * 100) : 0}%)</span>
+                  <span className="flex items-center gap-1.5 font-bold text-emerald-600"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> אצל ספקים ({totalCopiesInSystem > 0 ? Math.round((Math.max(0, totalCopiesInSystem - totalWarehouseCopies) / totalCopiesInSystem) * 100) : 0}%)</span>
                 </div>
               </div>
               <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
                 <div
                   className="bg-gradient-to-l from-indigo-500 to-violet-500 h-full transition-all duration-500"
-                  style={{ width: `${totalCopiesInSystem > 0 ? (totalWarehouseCopies / totalCopiesInSystem) * 100 : 0}%` }}
+                  style={{ width: `${totalCopiesInSystem > 0 ? Math.min(100, (totalWarehouseCopies / totalCopiesInSystem) * 100) : 0}%` }}
                 />
                 <div
                   className="bg-gradient-to-l from-emerald-400 to-teal-500 h-full transition-all duration-500"
-                  style={{ width: `${totalCopiesInSystem > 0 ? ((totalCopiesInSystem - totalWarehouseCopies) / totalCopiesInSystem) * 100 : 0}%` }}
+                  style={{ width: `${totalCopiesInSystem > 0 ? Math.max(0, ((totalCopiesInSystem - totalWarehouseCopies) / totalCopiesInSystem) * 100) : 0}%` }}
                 />
               </div>
             </div>
@@ -3102,7 +3101,6 @@ export default function App() {
         {/* ==================== 4. INVENTORY MANAGEMENT ==================== */}
         {activeTab === 'inventory' && (
           <div className="bg-white rounded-2xl shadow-xs ring-1 ring-slate-200/70 overflow-hidden">
-            {/* Toolbar */}
             <div className="p-4 md:p-6 border-b border-slate-100 space-y-4">
               <div className="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-3.5">
                 <div className="flex flex-col sm:flex-row gap-2.5 flex-1">
@@ -3152,7 +3150,6 @@ export default function App() {
             </div>
 
             {isWarehouseMode ? (
-              /* --- מצב ספירת מלאי מהירה (מחסן) --- */
               <div className="p-4 md:p-6 bg-amber-50/30 space-y-4">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white ring-1 ring-amber-200/80 p-4 rounded-2xl shadow-xs">
                   <div>
@@ -3184,7 +3181,6 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              /* --- טבלת ניהול המלאי המלאה --- */
               <div className="overflow-x-auto">
                 <table className="w-full text-right text-sm min-w-[980px]">
                   <thead className="bg-slate-50/90 text-slate-500 border-b border-slate-200/80 text-xs uppercase tracking-wide">
@@ -3318,7 +3314,7 @@ export default function App() {
         {/* ==================== 5. SUPPLIERS & DISTRIBUTION ==================== */}
         {activeTab === 'suppliers' && (
           <div className="space-y-6">
-            <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3.5">
+            <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-3.5">
               <div className="flex flex-col sm:flex-row gap-2.5 flex-1">
                 <div className="relative flex-1">
                   <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
@@ -3341,26 +3337,155 @@ export default function App() {
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={() => { setQuickCalcItems([{ bookId: inventoryList[0]?.id || '', quantity: 1 }]); setQuickCalcDiscount(0); setIsQuickCalcOpen(true); }}
-                  className="bg-amber-50 hover:bg-amber-100 text-amber-900 ring-1 ring-amber-200/80 px-4 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all"
+                  type="button"
+                  onClick={() => {
+                    setCalcItems([{ bookId: inventoryList[0]?.id || '', quantity: 10 }]);
+                    setCalcDiscountPct(0);
+                    setIsPurchaseCalcOpen(true);
+                  }}
+                  className="bg-amber-50 hover:bg-amber-100 text-amber-900 ring-1 ring-amber-200/80 px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all"
                 >
-                  <Calculator className="w-4 h-4" /> מחשבון קניית ספרים
+                  <Calculator className="w-4 h-4 text-amber-600" /> מחשבון קניית ספרים
                 </button>
                 {userRole === 'admin' && (
                   <>
                     <button
-                      onClick={() => { setParsedOrderSupplierId(suppliersList[0]?.id || ''); setRawOrderMessage(''); setParsedOrderItems([]); setParsedOrderNotes(''); setIsParseOrderModalOpen(true); }}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm shadow-emerald-600/20 transition-all"
+                      type="button"
+                      onClick={() => {
+                        setRawOrderMessage('');
+                        setParsedSupplierName(suppliersList[0]?.name || '');
+                        setParsedItems([]);
+                        setParsedDeductWarehouse(true);
+                        setParsedMarkAsPaid(true);
+                        setIsParseOrderModalOpen(true);
+                      }}
+                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200/80 px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all"
                     >
-                      <FileText className="w-4 h-4" /> קליטה מהודעת ספק
+                      <FileCheck className="w-4 h-4 text-emerald-600" /> הזמנה מהודעת ספק
                     </button>
                     <button
                       onClick={() => { setEditingSupplier(null); setSupplierForm(emptySupplierForm); setIsSupplierModalOpen(true); }}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm shadow-indigo-600/20 transition-all"
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-600/20 transition-all"
                     >
                       <Plus className="w-4 h-4" /> הוסף ספק / חנות
                     </button>
                   </>
+                )}
+              </div>
+            </div>
+
+            {sortedSuppliers.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-14 text-center space-y-3">
+                <Truck className="w-12 h-12 text-slate-300 mx-auto" />
+                <h4 className="font-bold text-slate-700">עדיין לא הוגדרו ספקים או חנויות</h4>
+                <p className="text-sm text-slate-500">לחץ על "הוסף ספק / חנות" כדי להתחיל לנהל הזמנות, מלאי בקונסיגנציה וגבייה.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {sortedSuppliers.map(supplier => {
+                  const heldItems = getSupplierInventoryItems(supplier.name);
+                  const totalHeld = heldItems.reduce((s, i) => s + i.amount, 0);
+                  const openDebt = getSupplierOpenDebt(supplier.name);
+
+                  return (
+                    <div key={supplier.id} className="bg-white rounded-2xl shadow-xs ring-1 ring-slate-200/70 hover:shadow-md transition-all p-5 flex flex-col justify-between gap-4">
+                      <div className="space-y-3.5">
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 font-extrabold text-sm flex items-center justify-center shrink-0 ring-1 ring-slate-200/80">
+                              {(supplier.name || 'ס').charAt(0)}
+                            </div>
+                            <div>
+                              <h3 className="font-extrabold text-slate-900 text-base leading-tight">{supplier.name}</h3>
+                              {supplier.contact && <p className="text-xs text-slate-500 mt-0.5">איש קשר: {supplier.contact}</p>}
+                            </div>
+                          </div>
+                          {userRole === 'admin' && (
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => { setEditingSupplier(supplier); setSupplierForm({ name: supplier.name, contact: supplier.contact || '', phone: supplier.phone || '', email: supplier.email || '', address: supplier.address || '', notes: supplier.notes || '' }); setIsSupplierModalOpen(true); }}
+                                className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => handleDeleteSupplier(supplier)} className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="text-xs text-slate-600 space-y-1.5">
+                          {supplier.phone && <p className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-slate-400" /> {supplier.phone}</p>}
+                          {supplier.email && <p className="flex items-center gap-2"><Mail className="w-3.5 h-3.5 text-slate-400" /> {supplier.email}</p>}
+                          {supplier.notes && <p className="text-slate-500 bg-slate-50 p-2.5 rounded-xl ring-1 ring-slate-100 mt-1">{supplier.notes}</p>}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2.5 pt-1">
+                          <div className="bg-indigo-50/70 ring-1 ring-indigo-100 p-3 rounded-xl text-center">
+                            <p className="text-[11px] text-indigo-700 font-semibold">מלאי אצל הספק</p>
+                            <p className="text-lg font-extrabold text-indigo-900 mt-0.5">{totalHeld.toLocaleString()} עותקים</p>
+                          </div>
+                          <div className={`p-3 rounded-xl text-center ring-1 ${openDebt > 0 ? 'bg-rose-50/80 ring-rose-200/80' : 'bg-emerald-50/80 ring-emerald-200/80'}`}>
+                            <p className={`text-[11px] font-semibold ${openDebt > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>יתרת חוב פתוחה</p>
+                            <p className={`text-lg font-extrabold mt-0.5 ${openDebt > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>₪{openDebt.toLocaleString()}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 pt-3.5 border-t border-slate-100">
+                        <button onClick={() => openEditSupplierStockModal(supplier)} className="bg-slate-100 hover:bg-slate-200/80 text-slate-700 py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
+                          <Package className="w-3.5 h-3.5" /> מלאי ועריכה
+                        </button>
+                        <button onClick={() => { setSelectedSupplierForHistory(supplier); setIsSupplierHistoryModalOpen(true); }} className="bg-slate-100 hover:bg-slate-200/80 text-slate-700 py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
+                          <History className="w-3.5 h-3.5" /> היסטוריה וגבייה
+                        </button>
+                        {userRole === 'admin' && (
+                          <>
+                            <button onClick={() => openSupplierOrderModal(supplier)} className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors">
+                              <Send className="w-3.5 h-3.5" /> הפק הזמנה
+                            </button>
+                            <button onClick={() => openConsignmentModal(supplier)} className="bg-amber-50 hover:bg-amber-100 text-amber-900 ring-1 ring-amber-200/80 py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
+                              <ArrowLeftRight className="w-3.5 h-3.5" /> מכירה / החזרה
+                            </button>
+                          </>
+                        )}
+                        {openDebt > 0 && supplier.phone && (
+                          <button onClick={() => handleSendDebtWhatsAppReminder(supplier)} className="col-span-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors">
+                            <MessageCircle className="w-3.5 h-3.5" /> שלח תזכורת גבייה בוואטסאפ
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ==================== 6. PRODUCTION KANBAN ==================== */}
+        {activeTab === 'production' && (
+          <div className="space-y-6">
+            <div className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
+                  <span className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><KanbanSquare className="w-5 h-5" /></span>
+                  מעקב הפקת ספרים
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">לחץ על כל ספר לניהול שלבים, הוצאות הפקה, מחיקה או העברה למלאי</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => { setBreakEvenForm({ bookTitle: '', totalCost: 15000, printRun: 1000, sellPrice: 60 }); setIsBreakEvenModalOpen(true); }}
+                  className="bg-amber-50 hover:bg-amber-100 text-amber-900 ring-1 ring-amber-200/80 px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-1.5 transition-colors"
+                >
+                  <Calculator className="w-4 h-4" /> מחשבון נקודת איזון
+                </button>
+                {userRole === 'admin' && (
+                  <button onClick={() => setIsAddTaskModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-1.5 shadow-sm shadow-indigo-600/20 transition-all">
+                    <Plus className="w-4 h-4" /> פרויקט ספר חדש
+                  </button>
                 )}
               </div>
             </div>
@@ -3387,13 +3512,12 @@ export default function App() {
                               <h4 className="font-bold text-slate-900 text-sm leading-snug">{task.title}</h4>
                               {userRole === 'admin' && (
                                 <button
-                      <div className="grid grid-cols-2 gap-2 pt-3.5 border-t border-slate-100">
-                        <button onClick={() => openSupplierStockEditor(supplier)} className="bg-slate-100 hover:bg-slate-200/80 text-slate-700 py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
-                          <Package className="w-3.5 h-3.5" /> מלאי ועריכה
-                        </button>
-                        <button onClick={() => { setSelectedSupplierForHistory(supplier); setIsSupplierHistoryModalOpen(true); }} className="bg-slate-100 hover:bg-slate-200/80 text-slate-700 py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
-                          <History className="w-3.5 h-3.5" /> היסטוריה וגבייה
-                        </button>
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteTask(task); }}
+                                  className="text-slate-300 hover:text-rose-500 p-0.5 transition-colors"
+                                  title="מחק פרויקט"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
                               )}
                             </div>
                             {task.author && <p className="text-xs text-slate-500">{task.author}</p>}
@@ -3645,14 +3769,13 @@ export default function App() {
         {/* ==================== 9. INTEGRATIONS & BACKUP ==================== */}
         {activeTab === 'integrations' && (
           <div className="space-y-6">
-            {/* אוטומציה וחיבור Webhook לחנות WooCommerce (בראש העמוד לנוחות מקסימלית בנייד) */}
             <div className="bg-white rounded-3xl p-5 md:p-6 shadow-xs ring-1 ring-indigo-200/80 space-y-4">
               <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
                 <div>
                   <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
                     <Zap className="w-5 h-5 text-amber-500 shrink-0" /> אוטומציה וחיבור Webhook לחנות WooCommerce
                   </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">הזמנות חדשות מהאתר יקפצו מיד ללשונית "הזמנות חנות" ויפחיתו אוטומטית מהמלאי (עם הגנה מכפילויות).</p>
+                  <p className="text-xs text-slate-500 mt-0.5">הזמנות חדשות מהאתר יקפצו מיד ללשונית "הזמנות חנות" ויפחיתו אוטומטית מהמלאי.</p>
                 </div>
                 <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto shrink-0">
                   <button
@@ -3709,7 +3832,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* מנוע גיבוי אוטומטי ונקודות שחזור */}
             <div className="bg-white rounded-3xl p-6 shadow-xs ring-1 ring-emerald-200/80 space-y-5">
               <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-100 pb-5">
                 <div className="flex items-start gap-3.5">
@@ -3724,7 +3846,7 @@ export default function App() {
                       </span>
                     </div>
                     <p className="text-slate-500 text-sm mt-0.5">
-                      המערכת שומרת אוטומטית נקודות שחזור של כל הנתונים לפי התדירות שתבחר, כך שתמיד אפשר לחזור לאחור במקרה של תקלה.
+                      המערכת שומרת אוטומטית נקודות שחזור של כל הנתונים לפי התדירות שתבחר.
                     </p>
                   </div>
                 </div>
@@ -3750,7 +3872,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* הגדרות תדירות וכמות שמירה */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-slate-50/90 p-4 rounded-2xl ring-1 ring-slate-200/70 space-y-1.5">
                   <label className="block text-xs font-bold text-slate-600">תדירות גיבוי אוטומטי</label>
@@ -3791,14 +3912,13 @@ export default function App() {
                 </div>
               </div>
 
-              {/* רשימת נקודות השחזור */}
               <div className="space-y-2.5">
                 <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
                   <History className="w-4 h-4 text-indigo-600" /> היסטוריית נקודות שחזור זמינות ({autoSnapshots.length})
                 </h4>
                 {autoSnapshots.length === 0 ? (
                   <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl p-6 text-center text-xs text-slate-400">
-                    עדיין לא נשמרו נקודות שחזור. לחץ על "צור נקודת שחזור עכשיו" או המתן לגיבוי האוטומטי הראשון.
+                    עדיין לא נשמרו נקודות שחזור. לחץ על "צור נקודת שחזור עכשיו".
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -3850,7 +3970,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* גיבוי ושחזור ידני מלא (קובץ JSON) */}
             <div className="bg-white rounded-2xl p-6 shadow-xs ring-1 ring-slate-200/70 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div className="flex items-start gap-3">
                 <div className="p-3 rounded-2xl bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100">
@@ -3923,7 +4042,6 @@ export default function App() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Add User Form */}
               <form onSubmit={handleAddUser} className="bg-white p-5 rounded-2xl shadow-xs ring-1 ring-slate-200/70 space-y-3.5 h-fit">
                 <h3 className="font-extrabold text-slate-800 text-base flex items-center gap-2 border-b border-slate-100 pb-3">
                   <Plus className="w-4 h-4 text-indigo-600" /> הוספת משתמש חדש
@@ -3962,7 +4080,6 @@ export default function App() {
                 </button>
               </form>
 
-              {/* Users List */}
               <div className="lg:col-span-2 bg-white rounded-2xl shadow-xs ring-1 ring-slate-200/70 overflow-hidden">
                 <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
                   <h3 className="font-bold text-slate-800 text-sm">משתמשים רשומים במערכת ({usersList.length})</h3>
@@ -4041,12 +4158,12 @@ export default function App() {
           </div>
         </main>
 
-        {/* Mobile Native-Style Bottom Navigation Bar */}
+        {/* Mobile Native-Style Bottom Navigation Bar — דאשבורד במרכז */}
         <nav className={`lg:hidden fixed bottom-0 inset-x-0 z-30 border-t backdrop-blur-xl px-2 py-1.5 flex items-center justify-around print:hidden ${darkMode ? 'bg-[#0B1120]/95 border-slate-800' : 'bg-white/95 border-slate-200/90 shadow-[0_-4px_20px_rgba(15,23,42,0.06)]'}`}>
           {[
             { id: 'pos', label: 'קופה', icon: CreditCard },
             { id: 'inventory', label: 'מלאי', icon: Package },
-            { id: 'dashboard', label: 'דאשבורד', icon: LayoutDashboard },
+            { id: 'dashboard', label: 'דאשבורד', icon: LayoutDashboard, isCenter: true },
             { id: 'suppliers', label: 'ספקים', icon: Truck },
             { id: 'orders', label: 'הזמנות', icon: ShoppingCart, badge: pendingOrders.length },
           ].map(item => {
@@ -4056,10 +4173,14 @@ export default function App() {
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`relative flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-xl min-w-[58px] transition-all ${
-                  active
-                    ? 'text-indigo-600 bg-indigo-50/90 font-extrabold'
-                    : 'text-slate-500 hover:text-slate-800 font-medium'
+                className={`relative flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 rounded-2xl min-w-[58px] transition-all ${
+                  item.isCenter
+                    ? active
+                      ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/30 font-extrabold -translate-y-1'
+                      : 'bg-indigo-50/90 text-indigo-700 font-bold'
+                    : active
+                      ? 'text-indigo-600 bg-indigo-50/90 font-extrabold'
+                      : 'text-slate-500 hover:text-slate-800 font-medium'
                 }`}
               >
                 <Icon className={`w-5 h-5 ${active ? 'scale-110' : ''} transition-transform`} />
@@ -4078,6 +4199,372 @@ export default function App() {
       {/* ===================================================================== */}
       {/* MODALS */}
       {/* ===================================================================== */}
+
+      {/* Manual Dashboard Adjustments Modal */}
+      {isDashboardEditOpen && (
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="font-extrabold text-lg text-slate-900 flex items-center gap-2"><Sliders className="w-5 h-5 text-amber-600" /> התאמות ידניות של נתוני הדאשבורד</h3>
+                <p className="text-xs text-slate-500 mt-0.5">הזן תוספת (+) או הפחתה (-) לכל מדד בדאשבורד (למשל יתרות קודמות או מלאי חיצוני)</p>
+              </div>
+              <button onClick={() => setIsDashboardEditOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
+            </div>
+            <form onSubmit={handleSaveDashboardAdjustments} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-5 overflow-y-auto space-y-3.5 flex-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">התאמת סה"כ עותקים במערכת (+/-)</label>
+                    <input type="number" value={dashboardAdjustments.extraCopies} onChange={e => setDashboardAdjustments({ ...dashboardAdjustments, extraCopies: Number(e.target.value) })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold" dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">התאמת עותקים במחסן הראשי (+/-)</label>
+                    <input type="number" value={dashboardAdjustments.extraWarehouseCopies} onChange={e => setDashboardAdjustments({ ...dashboardAdjustments, extraWarehouseCopies: Number(e.target.value) })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold" dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-emerald-700 mb-1">התאמת שווי מלאי לצרכן ₪ (+/-)</label>
+                    <input type="number" value={dashboardAdjustments.extraRetailValue} onChange={e => setDashboardAdjustments({ ...dashboardAdjustments, extraRetailValue: Number(e.target.value) })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold" dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-rose-700 mb-1">התאמת שווי לפי עלות הדפסה ₪ (+/-)</label>
+                    <input type="number" value={dashboardAdjustments.extraProductionValue} onChange={e => setDashboardAdjustments({ ...dashboardAdjustments, extraProductionValue: Number(e.target.value) })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold" dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-purple-700 mb-1">התאמת הכנסות אתר ₪ (+/-)</label>
+                    <input type="number" value={dashboardAdjustments.extraStoreRevenue} onChange={e => setDashboardAdjustments({ ...dashboardAdjustments, extraStoreRevenue: Number(e.target.value) })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold" dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-purple-700 mb-1">התאמת הכנסות ספקים ₪ (+/-)</label>
+                    <input type="number" value={dashboardAdjustments.extraSupplierRevenue} onChange={e => setDashboardAdjustments({ ...dashboardAdjustments, extraSupplierRevenue: Number(e.target.value) })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold" dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-purple-700 mb-1">התאמת הכנסות דוכן/קופה ₪ (+/-)</label>
+                    <input type="number" value={dashboardAdjustments.extraPosRevenue} onChange={e => setDashboardAdjustments({ ...dashboardAdjustments, extraPosRevenue: Number(e.target.value) })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold" dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-rose-700 mb-1">התאמת יתרת חוב פתוחה ₪ (+/-)</label>
+                    <input type="number" value={dashboardAdjustments.extraOpenDebt} onChange={e => setDashboardAdjustments({ ...dashboardAdjustments, extraOpenDebt: Number(e.target.value) })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold" dir="ltr" />
+                  </div>
+                </div>
+              </div>
+              <div className="p-4 border-t bg-slate-50/80 flex justify-between items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setDashboardAdjustments(defaultDashboardAdjustments)}
+                  className="text-xs font-bold text-rose-600 hover:underline px-2 py-1.5"
+                >
+                  אפס את כל ההתאמות ל-0
+                </button>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setIsDashboardEditOpen(false)} className="px-4 py-2 text-sm text-slate-600">ביטול</button>
+                  <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-xs">שמור נתונים</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Book Purchase Calculator Modal (Without Issuing Order) */}
+      {isPurchaseCalcOpen && (() => {
+        const getTierPrice = (book) => {
+          const eff = getEffectiveBookPrices(book);
+          if (calcPriceTier === 'supplier') return eff.supplier;
+          if (calcPriceTier === 'yeshiva') return eff.yeshiva;
+          if (calcPriceTier === 'yeshivaGuest') return eff.yeshivaGuest;
+          return eff.general;
+        };
+
+        const rawSubtotal = calcItems.reduce((sum, row) => {
+          const b = inventoryList.find(x => x.id === row.bookId);
+          return sum + (b ? getTierPrice(b) * Math.max(0, Number(row.quantity || 0)) : 0);
+        }, 0);
+        const totalCopies = calcItems.reduce((sum, row) => sum + (row.bookId ? Math.max(0, Number(row.quantity || 0)) : 0), 0);
+        const discountAmount = Math.round((rawSubtotal * Math.max(0, Math.min(100, Number(calcDiscountPct || 0)))) / 100);
+        const finalTotal = Math.max(0, rawSubtotal - discountAmount);
+
+        const copyCalcSummary = () => {
+          const lines = calcItems
+            .filter(r => r.bookId && Number(r.quantity) > 0)
+            .map((r, idx) => {
+              const b = inventoryList.find(x => x.id === r.bookId);
+              const p = b ? getTierPrice(b) : 0;
+              return `${idx + 1}. ${b?.title} — ${r.quantity} עותקים × ₪${p} = ₪${(p * r.quantity).toLocaleString()}`;
+            });
+          const msg =
+            `📚 *חישוב הצעת מחיר — הוצאת ספרי ישיבת ירוחם*\n\n` +
+            `${lines.join('\n')}\n\n` +
+            `סה"כ עותקים: ${totalCopies}\n` +
+            (discountAmount > 0 ? `הנחה (${calcDiscountPct}%): -₪${discountAmount.toLocaleString()}\n` : '') +
+            `*סה"כ לתשלום: ₪${finalTotal.toLocaleString()}*`;
+          navigator.clipboard?.writeText(msg);
+          showToast('החישוב הועתק להדבקה בוואטסאפ / מייל!', 'success');
+        };
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+              <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
+                <div>
+                  <h3 className="font-extrabold text-lg text-slate-900 flex items-center gap-2"><Calculator className="w-5 h-5 text-amber-600" /> מחשבון קניית ספרים מהיר</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">חישוב מהיר של סל ספרים והנחות מבלי להוציא הזמנה או לשנות מלאי</p>
+                </div>
+                <button onClick={() => setIsPurchaseCalcOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="p-5 overflow-y-auto space-y-4 flex-1">
+                <div className="grid grid-cols-4 gap-1.5 bg-slate-100 p-1.5 rounded-xl text-xs font-bold">
+                  {[
+                    { id: 'supplier', label: 'ספקים' },
+                    { id: 'yeshiva', label: 'תלמיד ראשון' },
+                    { id: 'yeshivaGuest', label: 'שני / אורח' },
+                    { id: 'general', label: 'צרכן (אתר)' }
+                  ].map(t => (
+                    <button key={t.id} type="button" onClick={() => setCalcPriceTier(t.id)} className={`py-2 rounded-lg transition-all ${calcPriceTier === t.id ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'}`}>{t.label}</button>
+                  ))}
+                </div>
+
+                <div className="space-y-2.5">
+                  {calcItems.map((row, idx) => {
+                    const b = inventoryList.find(x => x.id === row.bookId);
+                    const price = b ? getTierPrice(b) : 0;
+                    return (
+                      <div key={idx} className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-slate-50/90 p-2.5 rounded-xl ring-1 ring-slate-200/70">
+                        <select
+                          value={row.bookId}
+                          onChange={e => {
+                            const next = [...calcItems];
+                            next[idx] = { ...next[idx], bookId: e.target.value };
+                            setCalcItems(next);
+                          }}
+                          className="flex-1 p-2 border border-slate-200 rounded-xl text-sm bg-white"
+                        >
+                          <option value="">בחר ספר...</option>
+                          {[...inventoryList].sort((a, z) => a.title.localeCompare(z.title, 'he')).map(book => (
+                            <option key={book.id} value={book.id}>{book.title} (₪{getTierPrice(book)})</option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min="1"
+                          value={row.quantity}
+                          onChange={e => {
+                            const next = [...calcItems];
+                            next[idx] = { ...next[idx], quantity: e.target.value };
+                            setCalcItems(next);
+                          }}
+                          className="w-20 p-2 border border-slate-200 rounded-xl text-sm text-center bg-white font-bold"
+                          dir="ltr"
+                        />
+                        <span className="text-xs font-extrabold text-indigo-700 w-24 text-center">₪{(price * Number(row.quantity || 0)).toLocaleString()}</span>
+                        {calcItems.length > 1 && (
+                          <button type="button" onClick={() => setCalcItems(calcItems.filter((_, i) => i !== idx))} className="text-slate-400 hover:text-rose-500 p-1"><X className="w-4 h-4" /></button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <button type="button" onClick={() => setCalcItems([...calcItems, { bookId: '', quantity: 5 }])} className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
+                    <Plus className="w-3.5 h-3.5" /> הוסף ספר נוסף לחישוב
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 bg-slate-50 p-3.5 rounded-2xl ring-1 ring-slate-200/70">
+                  <span className="text-xs font-bold text-slate-700">הנחה נוספת באחוזים (%):</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={calcDiscountPct}
+                    onChange={e => setCalcDiscountPct(Number(e.target.value))}
+                    className="w-24 p-2 border border-slate-200 rounded-xl text-sm text-center font-bold bg-white"
+                    dir="ltr"
+                  />
+                </div>
+
+                <div className="bg-emerald-50 ring-1 ring-emerald-200/80 p-4 rounded-2xl space-y-1.5">
+                  <div className="flex justify-between text-xs text-emerald-800">
+                    <span>סה"כ עותקים בחישוב:</span>
+                    <strong>{totalCopies.toLocaleString()} עותקים</strong>
+                  </div>
+                  {discountAmount > 0 && (
+                    <div className="flex justify-between text-xs text-rose-700">
+                      <span>הנחה ({calcDiscountPct}%):</span>
+                      <strong>-₪{discountAmount.toLocaleString()}</strong>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center pt-1.5 border-t border-emerald-200/60">
+                    <span className="font-bold text-emerald-900">סה"כ לתשלום:</span>
+                    <span className="text-2xl font-extrabold text-emerald-700">₪{finalTotal.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="p-4 border-t bg-slate-50/80 flex justify-between gap-2 shrink-0">
+                <button type="button" onClick={copyCalcSummary} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs">
+                  <Copy className="w-4 h-4" /> העתק פירוט לוואטסאפ
+                </button>
+                <button type="button" onClick={() => setIsPurchaseCalcOpen(false)} className="px-4 py-2.5 text-sm text-slate-600 font-medium">סגור</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Smart Parse Order & Auto-Receipt From Supplier Message Modal */}
+      {isParseOrderModalOpen && (() => {
+        const parsedTotal = parsedItems.reduce((s, i) => s + Number(i.quantity || 0) * Number(i.unitPrice || 0), 0);
+        return (
+          <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+              <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
+                <div>
+                  <h3 className="font-extrabold text-lg text-slate-900 flex items-center gap-2"><FileCheck className="w-5 h-5 text-emerald-600" /> הפקת הזמנה וקבלה אוטומטית מהודעת ספק</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">הדבק הודעת וואטסאפ או מייל מספק — המערכת תזהה ספרים, כמויות ומחירים אוטומטית</p>
+                </div>
+                <button onClick={() => setIsParseOrderModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
+              </div>
+
+              <div className="p-5 overflow-y-auto space-y-4 flex-1">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">הדבק כאן את הודעת ההזמנה מהספק:</label>
+                  <textarea
+                    rows="3"
+                    value={rawOrderMessage}
+                    onChange={e => handleParseSupplierMessageText(e.target.value)}
+                    placeholder={'לדוגמה:\nשלום, נשמח להזמין:\n10 אותך אבקש\n5 ונהר יוצא מעדן סט'}
+                    className="w-full p-3 border border-slate-200 rounded-2xl text-sm bg-slate-50/80 focus:bg-white outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">שם הספק / החנות המזמינה *</label>
+                  <input
+                    type="text"
+                    list="parse-suppliers-list"
+                    value={parsedSupplierName}
+                    onChange={e => setParsedSupplierName(e.target.value)}
+                    placeholder="הזן או בחר שם ספק..."
+                    className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold"
+                  />
+                  <datalist id="parse-suppliers-list">
+                    {suppliersList.map(s => <option key={s.id} value={s.name} />)}
+                  </datalist>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-slate-700">ספרים שזוהו (ניתן לערוך כמות ומחיר):</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const first = inventoryList[0];
+                        setParsedItems(prev => [...prev, {
+                          bookId: first?.id || '',
+                          title: first?.title || '',
+                          quantity: 5,
+                          unitPrice: Number(first?.prices?.supplier || 0)
+                        }]);
+                      }}
+                      className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> הוסף ספר ידנית
+                    </button>
+                  </div>
+
+                  {parsedItems.length === 0 ? (
+                    <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl p-5 text-center text-xs text-slate-400">
+                      הדבק הודעה למעלה כדי לזהות ספרים אוטומטית, או לחץ "הוסף ספר ידנית".
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {parsedItems.map((row, idx) => (
+                        <div key={idx} className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-slate-50/90 p-2.5 rounded-xl ring-1 ring-slate-200/70">
+                          <select
+                            value={row.bookId}
+                            onChange={e => {
+                              const b = inventoryList.find(x => x.id === e.target.value);
+                              const next = [...parsedItems];
+                              next[idx] = {
+                                ...next[idx],
+                                bookId: e.target.value,
+                                title: b?.title || '',
+                                unitPrice: Number(b?.prices?.supplier || 0)
+                              };
+                              setParsedItems(next);
+                            }}
+                            className="flex-1 p-2 border border-slate-200 rounded-xl text-xs bg-white font-bold"
+                          >
+                            {inventoryList.map(b => <option key={b.id} value={b.id}>{b.title}</option>)}
+                          </select>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[11px] text-slate-500">כמות:</span>
+                            <input
+                              type="number"
+                              min="1"
+                              value={row.quantity}
+                              onChange={e => {
+                                const next = [...parsedItems];
+                                next[idx] = { ...next[idx], quantity: Number(e.target.value) };
+                                setParsedItems(next);
+                              }}
+                              className="w-16 p-1.5 border border-slate-200 rounded-lg text-xs text-center font-bold bg-white"
+                              dir="ltr"
+                            />
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[11px] text-slate-500">₪ ליח':</span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={row.unitPrice}
+                              onChange={e => {
+                                const next = [...parsedItems];
+                                next[idx] = { ...next[idx], unitPrice: Number(e.target.value) };
+                                setParsedItems(next);
+                              }}
+                              className="w-20 p-1.5 border border-indigo-200 rounded-lg text-xs text-center font-bold bg-white"
+                              dir="ltr"
+                            />
+                          </div>
+                          <button type="button" onClick={() => setParsedItems(parsedItems.filter((_, i) => i !== idx))} className="text-slate-400 hover:text-rose-500 p-1">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700 bg-indigo-50/70 p-3 rounded-xl ring-1 ring-indigo-100 cursor-pointer">
+                    <input type="checkbox" checked={parsedDeductWarehouse} onChange={e => setParsedDeductWarehouse(e.target.checked)} className="w-4 h-4 rounded" />
+                    הפחת מהמחסן והוסף למלאי הספק
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-bold text-emerald-800 bg-emerald-50/70 p-3 rounded-xl ring-1 ring-emerald-200 cursor-pointer">
+                    <input type="checkbox" checked={parsedMarkAsPaid} onChange={e => setParsedMarkAsPaid(e.target.checked)} className="w-4 h-4 rounded" />
+                    סמן כשולם והפק קבלה אוטומטית
+                  </label>
+                </div>
+
+                <div className="bg-emerald-50 ring-1 ring-emerald-200/80 p-4 rounded-2xl flex justify-between items-center">
+                  <span className="font-bold text-emerald-900">סיכום אוטומטי להזמנה ולקבלה:</span>
+                  <span className="text-2xl font-extrabold text-emerald-700">₪{parsedTotal.toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div className="p-4 border-t bg-slate-50/80 flex justify-end gap-2 shrink-0">
+                <button type="button" onClick={() => setIsParseOrderModalOpen(false)} className="px-4 py-2 text-sm text-slate-600">ביטול</button>
+                <button
+                  type="button"
+                  onClick={handleConfirmParsedOrderAndReceipt}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-xs flex items-center gap-2"
+                >
+                  <CheckCircle className="w-4 h-4" /> הפק הזמנה וקבלה אוטומטית
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Add / Edit Book Modal */}
       {(isAddBookModalOpen || editingBook) && (() => {
@@ -4124,144 +4611,249 @@ export default function App() {
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-rose-700 mb-1">עלות הפקה (₪)</label>
-      {/* View & Edit Supplier Stock Modal */}
+                      <input type="number" min="0" step="0.01" value={formState.productionCost ?? 0} onChange={e => setFormState({ ...formState, productionCost: e.target.value })} className="w-full p-2.5 border border-rose-200 bg-rose-50/40 rounded-xl text-sm font-bold" dir="ltr" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-indigo-700 mb-1">מלאי במחסן הראשי</label>
+                      <input type="number" min="0" value={formState.publisherStock ?? 0} onChange={e => setFormState({ ...formState, publisherStock: e.target.value })} className="w-full p-2.5 border border-indigo-200 rounded-xl text-sm font-bold" dir="ltr" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">רף התראת מלאי</label>
+                      <input type="number" min="0" value={formState.threshold ?? 30} onChange={e => setFormState({ ...formState, threshold: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">דאנאק / מק"ט</label>
+                      <input type="text" value={formState.isbn || ''} onChange={e => setFormState({ ...formState, isbn: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-100 pt-3 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-bold text-slate-700">עותקים אצל ספקים וחנויות</label>
+                      <button
+                        type="button"
+                        onClick={() => setFormState({ ...formState, breakdown: [...(formState.breakdown || []), { location: '', amount: 0 }] })}
+                        className="text-xs text-indigo-600 font-bold hover:underline"
+                      >
+                        + הוסף ספק
+                      </button>
+                    </div>
+                    {(formState.breakdown || []).map((row, idx) => (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          list="suppliers-datalist"
+                          placeholder="שם ספק / חנות"
+                          value={row.location}
+                          onChange={e => {
+                            const next = [...formState.breakdown];
+                            next[idx] = { ...next[idx], location: e.target.value };
+                            setFormState({ ...formState, breakdown: next });
+                          }}
+                          className="flex-1 p-2 border border-slate-200 rounded-xl text-sm"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          value={row.amount}
+                          onChange={e => {
+                            const next = [...formState.breakdown];
+                            next[idx] = { ...next[idx], amount: e.target.value };
+                            setFormState({ ...formState, breakdown: next });
+                          }}
+                          className="w-24 p-2 border border-slate-200 rounded-xl text-sm text-center"
+                          dir="ltr"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setFormState({ ...formState, breakdown: formState.breakdown.filter((_, i) => i !== idx) })}
+                          className="text-slate-400 hover:text-rose-500 p-1"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <datalist id="suppliers-datalist">
+                      {suppliersList.map(s => <option key={s.id} value={s.name} />)}
+                    </datalist>
+                  </div>
+                </div>
+
+                <div className="p-4 border-t border-slate-100 bg-slate-50/80 shrink-0 flex justify-end gap-2">
+                  <button type="button" onClick={() => { setIsAddBookModalOpen(false); setEditingBook(null); }} className="px-4 py-2.5 rounded-xl text-sm text-slate-600 hover:bg-slate-200/70 font-medium">ביטול</button>
+                  <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2">
+                    <Check className="w-4 h-4" /> {isEdit ? 'שמור שינויים' : 'הוסף ספר למלאי'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Add / Edit Supplier Modal */}
+      {isSupplierModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
+              <h3 className="font-extrabold text-slate-900">{editingSupplier ? 'עריכת ספק' : 'הוספת ספק / חנות חדשה'}</h3>
+              <button onClick={() => setIsSupplierModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
+            </div>
+            <form onSubmit={handleSaveSupplier} className="p-5 space-y-3">
+              <input required placeholder="שם הספק / החנות *" value={supplierForm.name} onChange={e => setSupplierForm({ ...supplierForm, name: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" />
+              <input placeholder="שם איש קשר" value={supplierForm.contact} onChange={e => setSupplierForm({ ...supplierForm, contact: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" />
+              <input placeholder="טלפון (לוואטסאפ)" value={supplierForm.phone} onChange={e => setSupplierForm({ ...supplierForm, phone: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" dir="ltr" />
+              <input type="email" placeholder="אימייל לשליחת הזמנות" value={supplierForm.email} onChange={e => setSupplierForm({ ...supplierForm, email: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" dir="ltr" />
+              <input placeholder="כתובת למשלוח" value={supplierForm.address} onChange={e => setSupplierForm({ ...supplierForm, address: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" />
+              <textarea rows="2" placeholder="הערות..." value={supplierForm.notes} onChange={e => setSupplierForm({ ...supplierForm, notes: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500" />
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setIsSupplierModalOpen(false)} className="px-4 py-2 text-sm text-slate-600">ביטול</button>
+                <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-xs">שמור ספק</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* View & Edit Supplier Stock Modal (עריכת מלאי אצל כל ספק בפני עצמו) */}
       {viewingSupplierStock && (
         <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
             <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
               <div>
                 <h3 className="font-extrabold text-slate-900">ניהול ועריכת מלאי אצל: {viewingSupplierStock.name}</h3>
-                <p className="text-xs text-slate-500">עדכן ידנית כמויות קיימות או הוסף ספר חדש למלאי של ספק זה</p>
+                <p className="text-xs text-slate-500">עדכן ישירות את כמות העותקים שנמצאת אצל ספק זה או הוסף ספר</p>
               </div>
               <button onClick={() => setViewingSupplierStock(null)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
             </div>
-            <div className="p-5 overflow-y-auto space-y-4 flex-1">
-              {userRole === 'admin' && (
-                <div className="flex flex-wrap sm:flex-nowrap gap-2 bg-indigo-50/70 p-3 rounded-2xl ring-1 ring-indigo-100">
-                  <select
-                    value={newSupplierStockBookId}
-                    onChange={e => setNewSupplierStockBookId(e.target.value)}
-                    className="flex-1 p-2 border border-slate-200 rounded-xl text-xs bg-white font-medium"
-                  >
-                    {[...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => (
-                      <option key={b.id} value={b.id}>{b.title}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    min="1"
-                    value={newSupplierStockQty}
-                    onChange={e => setNewSupplierStockQty(e.target.value)}
-                    className="w-20 p-2 border border-slate-200 rounded-xl text-xs text-center bg-white font-bold"
-                    dir="ltr"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const book = inventoryList.find(b => b.id === newSupplierStockBookId);
-                      if (!book) return;
-                      const addQty = Math.max(1, Number(newSupplierStockQty || 1));
-                      setSupplierStockDraft(prev => {
-                        const exists = prev.find(i => i.bookId === book.id);
-                        if (exists) {
-                          return prev.map(i => i.bookId === book.id ? { ...i, amount: Number(i.amount || 0) + addQty } : i);
-                        }
-                        return [...prev, { bookId: book.id, title: book.title, amount: addQty, supplierPrice: getEffectiveBookPrices(book).supplier }];
-                      });
-                    }}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold shrink-0"
-                  >
-                    + הוסף לספק
-                  </button>
-                </div>
-              )}
 
-              {supplierStockDraft.length === 0 ? (
-                <p className="text-center text-slate-400 py-8 text-sm">אין כרגע ספרים רשומים אצל ספק זה. תוכל להוסיף למעלה.</p>
-              ) : (
-                <div className="space-y-2.5">
-                  <table className="w-full text-right text-sm">
-                    <thead className="bg-slate-50 text-xs text-slate-500 border-b">
-                      <tr>
-                        <th className="p-2.5">שם הספר</th>
-                        <th className="p-2.5 text-center">כמות אצל הספק</th>
-                        <th className="p-2.5 text-center">שווי (ספק)</th>
-                        {userRole === 'admin' && <th className="p-2.5 text-center">הסר</th>}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {supplierStockDraft.map((it, idx) => (
-                        <tr key={it.bookId}>
-                          <td className="p-2.5 font-medium">{it.title}</td>
-                          <td className="p-2.5 text-center">
+            <div className="p-5 overflow-y-auto space-y-4 flex-1">
+              {(() => {
+                const draftEntries = Object.entries(supplierStockDraft)
+                  .map(([bookId, amount]) => {
+                    const book = inventoryList.find(b => b.id === bookId);
+                    return book ? { book, amount: Number(amount || 0) } : null;
+                  })
+                  .filter(Boolean)
+                  .sort((a, b) => a.book.title.localeCompare(b.book.title, 'he'));
+
+                const totalQty = draftEntries.reduce((s, e) => s + e.amount, 0);
+
+                return (
+                  <>
+                    {draftEntries.length === 0 ? (
+                      <p className="text-center text-slate-400 py-6 text-sm">אין כרגע ספרים משויכים לספק זה. הוסף ספר למטה.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {draftEntries.map(({ book, amount }) => (
+                          <div key={book.id} className="flex items-center justify-between gap-2 bg-slate-50/90 p-3 rounded-xl ring-1 ring-slate-200/70">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-slate-800 text-sm truncate">{book.title}</p>
+                              <p className="text-[11px] text-slate-500">מחיר ספק: ₪{book.prices?.supplier || 0} · שווי: ₪{(amount * Number(book.prices?.supplier || 0)).toLocaleString()}</p>
+                            </div>
                             {userRole === 'admin' ? (
-                              <div className="inline-flex items-center gap-1">
+                              <div className="flex items-center gap-1.5">
                                 <button
                                   type="button"
-                                  onClick={() => setSupplierStockDraft(prev => prev.map((r, i) => i === idx ? { ...r, amount: Math.max(0, Number(r.amount || 0) - 1) } : r))}
-                                  className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center font-bold"
-                                >-</button>
+                                  onClick={() => setSupplierStockDraft(prev => ({ ...prev, [book.id]: Math.max(0, Number(prev[book.id] || 0) - 1) }))}
+                                  className="w-7 h-7 bg-white border border-slate-200 rounded-lg flex items-center justify-center"
+                                >
+                                  <Minus className="w-3.5 h-3.5" />
+                                </button>
                                 <input
                                   type="number"
                                   min="0"
-                                  value={it.amount}
-                                  onChange={e => setSupplierStockDraft(prev => prev.map((r, i) => i === idx ? { ...r, amount: Math.max(0, Number(e.target.value) || 0) } : r))}
-                                  className="w-16 p-1 border border-slate-200 rounded-lg text-center font-extrabold text-indigo-700"
+                                  value={amount}
+                                  onChange={e => setSupplierStockDraft(prev => ({ ...prev, [book.id]: Math.max(0, Number(e.target.value)) }))}
+                                  className="w-16 p-1.5 border border-indigo-200 rounded-lg text-sm font-extrabold text-center bg-white text-indigo-700"
                                   dir="ltr"
                                 />
                                 <button
                                   type="button"
-                                  onClick={() => setSupplierStockDraft(prev => prev.map((r, i) => i === idx ? { ...r, amount: Number(r.amount || 0) + 1 } : r))}
-                                  className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center font-bold"
-                                >+</button>
+                                  onClick={() => setSupplierStockDraft(prev => ({ ...prev, [book.id]: Number(prev[book.id] || 0) + 1 }))}
+                                  className="w-7 h-7 bg-white border border-slate-200 rounded-lg flex items-center justify-center"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                </button>
                               </div>
                             ) : (
-                              <span className="font-bold text-indigo-700">{it.amount}</span>
+                              <span className="font-extrabold text-indigo-700 text-base">{amount}</span>
                             )}
-                          </td>
-                          <td className="p-2.5 text-center font-medium">₪{(Number(it.amount || 0) * Number(it.supplierPrice || 0)).toLocaleString()}</td>
-                          {userRole === 'admin' && (
-                            <td className="p-2.5 text-center">
-                              <button
-                                type="button"
-                                onClick={() => setSupplierStockDraft(prev => prev.map((r, i) => i === idx ? { ...r, amount: 0 } : r))}
-                                className="text-slate-400 hover:text-rose-600 p-1"
-                                title="אפס כמות"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className="bg-indigo-50 ring-1 ring-indigo-100 p-3.5 rounded-xl flex justify-between font-bold text-indigo-900 text-sm">
-                    <span>סה"כ עותקים אצל הספק:</span>
-                    <span>{supplierStockDraft.reduce((s, i) => s + Number(i.amount || 0), 0).toLocaleString()} עותקים</span>
-                  </div>
-                </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {userRole === 'admin' && (
+                      <div className="bg-indigo-50/60 p-3.5 rounded-2xl ring-1 ring-indigo-100 space-y-2">
+                        <p className="text-xs font-bold text-indigo-900">+ הוסף ספר נוסף למלאי הספק:</p>
+                        <div className="flex gap-2">
+                          <select
+                            value={newBookForSupplier.bookId}
+                            onChange={e => setNewBookForSupplier(prev => ({ ...prev, bookId: e.target.value }))}
+                            className="flex-1 p-2 border border-slate-200 rounded-xl text-xs bg-white"
+                          >
+                            {[...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => (
+                              <option key={b.id} value={b.id}>{b.title}</option>
+                            ))}
+                          </select>
+                          <input
+                            type="number"
+                            min="1"
+                            value={newBookForSupplier.amount}
+                            onChange={e => setNewBookForSupplier(prev => ({ ...prev, amount: Number(e.target.value) }))}
+                            className="w-20 p-2 border border-slate-200 rounded-xl text-xs text-center font-bold bg-white"
+                            dir="ltr"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!newBookForSupplier.bookId) return;
+                              setSupplierStockDraft(prev => ({
+                                ...prev,
+                                [newBookForSupplier.bookId]: Number(prev[newBookForSupplier.bookId] || 0) + Math.max(1, Number(newBookForSupplier.amount || 1))
+                              }));
+                            }}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold"
+                          >
+                            הוסף
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="bg-indigo-50 ring-1 ring-indigo-100 p-3.5 rounded-xl flex justify-between font-bold text-indigo-900 text-sm">
+                      <span>סה"כ עותקים אצל הספק:</span>
+                      <span>{totalQty.toLocaleString()} עותקים</span>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            <div className="p-4 border-t bg-slate-50/80 flex justify-end gap-2 shrink-0">
+              <button type="button" onClick={() => setViewingSupplierStock(null)} className="px-4 py-2 text-sm text-slate-600">סגור</button>
+              {userRole === 'admin' && (
+                <button type="button" onClick={handleSaveSupplierStockChanges} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-xs flex items-center gap-1.5">
+                  <Check className="w-4 h-4" /> שמור מלאי ספק
+                </button>
               )}
             </div>
-            {userRole === 'admin' && (
-              <div className="p-4 border-t bg-slate-50/80 flex justify-end gap-2 shrink-0">
-                <button type="button" onClick={() => setViewingSupplierStock(null)} className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600">ביטול</button>
-                <button type="button" onClick={handleSaveSupplierStockEdits} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs">
-                  <Check className="w-4 h-4" /> שמור עדכון מלאי ספק
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}
 
-      {/* Supplier Order / Invoice Modal (with per-book custom price) */}
+      {/* Supplier Order / Invoice Modal (כולל עריכת מחיר לכל ספר בהזמנה) */}
       {isSupplierInvoiceModalOpen && invoiceSupplier && (() => {
         const orderTotal = invoiceItems.reduce((sum, item) => {
           const b = inventoryList.find(x => x.id === item.bookId);
-          const defaultPrice = b ? getEffectiveBookPrices(b).supplier : 0;
-          const unitPrice = item.customPrice !== undefined && item.customPrice !== '' ? Number(item.customPrice) : defaultPrice;
-          return sum + (unitPrice * Number(item.quantity || 0));
+          const price = item.customPrice !== undefined && item.customPrice !== ''
+            ? Number(item.customPrice)
+            : Number(b?.prices?.supplier || 0);
+          return sum + (price * Number(item.quantity || 0));
         }, 0);
 
         return (
@@ -4270,7 +4862,7 @@ export default function App() {
               <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
                 <div>
                   <h3 className="font-extrabold text-lg text-slate-900">הפקת הזמנה לספק: {invoiceSupplier.name}</h3>
-                  <p className="text-xs text-slate-500">ניתן לערוך ידנית את המחיר ליחידה לכל ספר בהזמנה זו</p>
+                  <p className="text-xs text-slate-500">ניתן לערוך ידנית את המחיר ליחידה עבור כל ספר בהזמנה זו</p>
                 </div>
                 <button onClick={() => setIsSupplierInvoiceModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
               </div>
@@ -4278,28 +4870,33 @@ export default function App() {
                 <div className="space-y-2.5">
                   {invoiceItems.map((row, idx) => {
                     const book = inventoryList.find(b => b.id === row.bookId);
-                    const defaultPrice = book ? getEffectiveBookPrices(book).supplier : 0;
-                    const unitPrice = row.customPrice !== undefined && row.customPrice !== '' ? Number(row.customPrice) : defaultPrice;
+                    const unitPrice = row.customPrice !== undefined && row.customPrice !== ''
+                      ? Number(row.customPrice)
+                      : Number(book?.prices?.supplier || 0);
+
                     return (
                       <div key={idx} className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-slate-50/90 p-2.5 rounded-xl ring-1 ring-slate-200/70">
                         <select
                           value={row.bookId}
                           onChange={e => {
-                            const selectedBook = inventoryList.find(b => b.id === e.target.value);
-                            const nextPrice = selectedBook ? getEffectiveBookPrices(selectedBook).supplier : 0;
+                            const selectedB = inventoryList.find(x => x.id === e.target.value);
                             const next = [...invoiceItems];
-                            next[idx] = { ...next[idx], bookId: e.target.value, customPrice: nextPrice };
+                            next[idx] = {
+                              ...next[idx],
+                              bookId: e.target.value,
+                              customPrice: Number(selectedB?.prices?.supplier || 0)
+                            };
                             setInvoiceItems(next);
                           }}
-                          className="flex-1 min-w-[170px] p-2 border border-slate-200 rounded-xl text-sm bg-white"
+                          className="flex-1 p-2 border border-slate-200 rounded-xl text-sm bg-white min-w-[160px]"
                         >
                           <option value="">בחר ספר...</option>
                           {[...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => (
                             <option key={b.id} value={b.id}>{b.title} (במחסן: {b.publisherStock})</option>
                           ))}
                         </select>
-                        <div className="flex items-center gap-1" title="כמות">
-                          <span className="text-[11px] text-slate-400">כמות:</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] text-slate-500">כמות:</span>
                           <input
                             type="number"
                             min="1"
@@ -4313,30 +4910,35 @@ export default function App() {
                             dir="ltr"
                           />
                         </div>
-                        <div className="flex items-center gap-1" title="מחיר מותאם ליחידה (₪)">
-                          <span className="text-[11px] text-slate-400">₪ ליח':</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] text-indigo-700 font-bold">₪ ליח':</span>
                           <input
                             type="number"
                             min="0"
                             step="0.5"
-                            value={row.customPrice ?? defaultPrice}
+                            value={row.customPrice ?? unitPrice}
                             onChange={e => {
                               const next = [...invoiceItems];
                               next[idx] = { ...next[idx], customPrice: e.target.value };
                               setInvoiceItems(next);
                             }}
-                            className="w-20 p-2 border border-indigo-200 rounded-xl text-sm text-center bg-indigo-50/40 font-extrabold text-indigo-700"
+                            className="w-20 p-2 border border-indigo-200 rounded-xl text-sm text-center bg-white font-extrabold text-indigo-700"
                             dir="ltr"
+                            title="ערוך מחיר לספק זה"
                           />
                         </div>
-                        <span className="text-xs font-extrabold text-slate-800 w-20 text-left">₪{(unitPrice * Number(row.quantity || 0)).toLocaleString()}</span>
+                        <span className="text-xs font-extrabold text-slate-800 w-20 text-center">₪{(unitPrice * Number(row.quantity || 0)).toLocaleString()}</span>
                         {invoiceItems.length > 1 && (
                           <button onClick={() => setInvoiceItems(invoiceItems.filter((_, i) => i !== idx))} className="text-slate-400 hover:text-rose-500 p-1"><X className="w-4 h-4" /></button>
                         )}
                       </div>
                     );
                   })}
-                  <button type="button" onClick={() => setInvoiceItems([...invoiceItems, { bookId: '', quantity: 10, customPrice: 0 }])} className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setInvoiceItems([...invoiceItems, { bookId: '', quantity: 10, customPrice: 0 }])}
+                    className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                  >
                     <Plus className="w-3.5 h-3.5" /> הוסף ספר נוסף להזמנה
                   </button>
                 </div>
@@ -4669,307 +5271,307 @@ export default function App() {
                     </div>
                     <table className="w-full text-right text-sm ring-1 ring-slate-200 rounded-xl overflow-hidden">
                       <thead className="bg-slate-50 text-xs border-b">
-      {/* Quick Book Purchase Calculator Modal (Without Issuing Order) */}
-      {isQuickCalcOpen && (() => {
-        const calcRows = quickCalcItems.map(row => {
-          const book = inventoryList.find(b => b.id === row.bookId);
-          const prices = book ? getEffectiveBookPrices(book) : { general: 0, supplier: 0, yeshiva: 0, yeshivaGuest: 0 };
-          const unitPrice = quickCalcTier === 'supplier' ? prices.supplier : quickCalcTier === 'yeshiva' ? prices.yeshiva : quickCalcTier === 'yeshivaGuest' ? prices.yeshivaGuest : prices.general;
-          const qty = Math.max(0, Number(row.quantity || 0));
-          return { ...row, title: book?.title || '', unitPrice, qty, lineTotal: unitPrice * qty };
-        });
-        const subtotal = calcRows.reduce((s, r) => s + r.lineTotal, 0);
-        const totalCopies = calcRows.reduce((s, r) => s + r.qty, 0);
-        const discountPct = Math.min(100, Math.max(0, Number(quickCalcDiscount || 0)));
-        const finalTotal = Math.round(subtotal * (1 - discountPct / 100));
-
-        return (
-          <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
-              <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
-                <div>
-                  <h3 className="font-extrabold text-lg text-slate-900 flex items-center gap-2"><Calculator className="w-5 h-5 text-amber-600" /> מחשבון קניית ספרים מהיר</h3>
-                  <p className="text-xs text-slate-500">חישוב הצעת מחיר מידית ללא הוצאת הזמנה וללא שינוי במלאי</p>
-                </div>
-                <button onClick={() => setIsQuickCalcOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
-              </div>
-
-              <div className="p-5 overflow-y-auto space-y-4 flex-1">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-slate-100 p-1.5 rounded-xl">
-                  {[
-                    { id: 'supplier', label: 'מחיר ספקים' },
-                    { id: 'general', label: 'מחיר אתר' },
-                    { id: 'yeshiva', label: 'תלמיד ישיבה' },
-                    { id: 'yeshivaGuest', label: 'ישיבה שני/אורח' }
-                  ].map(t => (
-                    <button key={t.id} type="button" onClick={() => setQuickCalcTier(t.id)} className={`py-2 rounded-lg text-xs font-bold transition-all ${quickCalcTier === t.id ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'}`}>
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="space-y-2">
-                  {calcRows.map((row, idx) => (
-                    <div key={idx} className="flex items-center gap-2 bg-slate-50/90 p-2.5 rounded-xl ring-1 ring-slate-200/70">
-                      <select
-                        value={row.bookId}
-                        onChange={e => setQuickCalcItems(prev => prev.map((r, i) => i === idx ? { ...r, bookId: e.target.value } : r))}
-                        className="flex-1 p-2 border border-slate-200 rounded-xl text-sm bg-white"
-                      >
-                        <option value="">בחר ספר...</option>
-                        {[...inventoryList].sort((a, b) => a.title.localeCompare(b.title, 'he')).map(b => (
-                          <option key={b.id} value={b.id}>{b.title}</option>
-                        ))}
-                      </select>
-                      <input
-                        type="number"
-                        min="1"
-                        value={row.quantity}
-                        onChange={e => setQuickCalcItems(prev => prev.map((r, i) => i === idx ? { ...r, quantity: e.target.value } : r))}
-                        className="w-20 p-2 border border-slate-200 rounded-xl text-sm text-center bg-white font-bold"
-                        dir="ltr"
-                      />
-                      <span className="text-xs text-slate-500 w-16 text-center">× ₪{row.unitPrice}</span>
-                      <span className="text-sm font-extrabold text-indigo-700 w-20 text-left">₪{row.lineTotal.toLocaleString()}</span>
-                      {quickCalcItems.length > 1 && (
-                        <button type="button" onClick={() => setQuickCalcItems(prev => prev.filter((_, i) => i !== idx))} className="text-slate-400 hover:text-rose-500 p-1"><X className="w-4 h-4" /></button>
-                      )}
-                    </div>
-                  ))}
-                  <button type="button" onClick={() => setQuickCalcItems(prev => [...prev, { bookId: inventoryList[0]?.id || '', quantity: 1 }])} className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
-                    <Plus className="w-3.5 h-3.5" /> הוסף ספר נוסף לחישוב
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between bg-slate-50 p-3.5 rounded-xl ring-1 ring-slate-200/70">
-                  <span className="text-xs font-bold text-slate-700">הנחה נוספת באחוזים (%):</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={quickCalcDiscount}
-                    onChange={e => setQuickCalcDiscount(e.target.value)}
-                    className="w-24 p-2 border border-slate-200 rounded-xl text-sm text-center font-bold bg-white"
-                    dir="ltr"
-                  />
-                </div>
-
-                <div className="bg-gradient-to-l from-indigo-50 to-emerald-50/70 ring-1 ring-indigo-200/80 p-4 rounded-2xl flex flex-wrap justify-between items-center gap-2">
-                  <div>
-                    <p className="text-xs font-bold text-slate-600">סה"כ עותקים: <strong>{totalCopies}</strong></p>
-                    {discountPct > 0 && <p className="text-xs text-emerald-700 font-bold">כולל {discountPct}% הנחה (במקום ₪{subtotal.toLocaleString()})</p>}
-                  </div>
-                  <div className="text-left">
-                    <span className="text-xs text-slate-500 block">סה"כ לתשלום:</span>
-                    <span className="text-2xl font-extrabold text-indigo-900">₪{finalTotal.toLocaleString()}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 border-t bg-slate-50/80 flex justify-between gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const summary = calcRows
-                      .filter(r => r.title && r.qty > 0)
-                      .map((r, i) => `${i + 1}. ${r.title} — ${r.qty} עותקים × ₪${r.unitPrice} = ₪${r.lineTotal.toLocaleString()}`)
-                      .join('\n');
-                    const fullMsg = `📚 *הצעת מחיר — הוצאת ספרי ישיבת ירוחם*\n\n${summary}\n\n*סה"כ לתשלום: ₪${finalTotal.toLocaleString()}*`;
-                    navigator.clipboard?.writeText(fullMsg);
-                    showToast('סיכום החישוב הועתק להדבקה!', 'success');
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs"
-                >
-                  <Copy className="w-4 h-4" /> העתק הצעה לוואטסאפ
-                </button>
-                <button type="button" onClick={() => setIsQuickCalcOpen(false)} className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200/70">סגור</button>
-              </div>
+                        <tr><th className="p-2.5">תרחיש</th><th className="p-2.5 text-center">עותקים</th><th className="p-2.5 text-center">הכנסה</th><th className="p-2.5 text-center">רווח נקי</th></tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {[50, 75, 100].map(pct => {
+                          const qty = Math.round((printRun * pct) / 100);
+                          const rev = qty * sellPrice;
+                          const net = rev - totalCost;
+                          return (
+                            <tr key={pct}>
+                              <td className="p-2.5 font-bold">{pct}% מהמהדורה</td>
+                              <td className="p-2.5 text-center">{qty.toLocaleString()}</td>
+                              <td className="p-2.5 text-center">₪{rev.toLocaleString()}</td>
+                              <td className={`p-2.5 text-center font-extrabold ${net >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{net >= 0 ? '+' : ''}₪{net.toLocaleString()}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </>
+                );
+              })()}
             </div>
           </div>
-        );
-      })()}
+        </div>
+      )}
 
-      {/* Smart Order Parser from Supplier Message Modal */}
-      {isParseOrderModalOpen && (() => {
-        const parsedTotal = parsedOrderItems.reduce((s, it) => s + (Number(it.quantity || 0) * Number(it.unitPrice || 0)), 0);
-        return (
-          <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
-              <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
-                <div>
-                  <h3 className="font-extrabold text-lg text-slate-900 flex items-center gap-2"><Sparkles className="w-5 h-5 text-emerald-600" /> קליטת הזמנה אוטומטית מהודעת ספק</h3>
-                  <p className="text-xs text-slate-500">הדבק את הודעת ההזמנה מהספק (מוואטסאפ או מייל) — המערכת תזהה ספרים וכמויות ותפיק הזמנה וקבלה</p>
-                </div>
-                <button onClick={() => setIsParseOrderModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
-              </div>
-
-              <div className="p-5 overflow-y-auto space-y-4 flex-1">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">בחר ספק / חנות מזמינה *</label>
-                  <select
-                    value={parsedOrderSupplierId}
-                    onChange={e => setParsedOrderSupplierId(e.target.value)}
-                    className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold bg-slate-50"
-                  >
-                    <option value="">-- בחר ספק מהרשימה --</option>
-                    {suppliersList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">הדבק כאן את הודעת ההזמנה מהספק:</label>
-                  <textarea
-                    rows="4"
-                    value={rawOrderMessage}
-                    onChange={e => handleParseRawSupplierMessage(e.target.value)}
-                    placeholder={`לדוגמה:\nשלום, נשמח להזמין:\n10 אותך אבקש\n5 ונהר יוצא מעדן סט\n8 להשקות את הגן סנהדרין`}
-                    className="w-full p-3 border border-slate-200 rounded-2xl text-sm bg-slate-50/80 focus:bg-white outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-extrabold text-slate-800">פריטים שזוהו בהזמנה ({parsedOrderItems.length}) — ניתן לערוך מחיר או כמות:</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const first = inventoryList[0];
-                        setParsedOrderItems(prev => [...prev, { bookId: first?.id || '', title: first?.title || '', quantity: 5, unitPrice: first ? getEffectiveBookPrices(first).supplier : 0 }]);
-                      }}
-                      className="text-xs font-bold text-indigo-600 hover:underline"
-                    >
-                      + הוסף שורה ידנית
-                    </button>
-                  </div>
-
-                  {parsedOrderItems.length === 0 ? (
-                    <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-4 text-center text-xs text-slate-400">
-                      הדבק טקסט בתיבה למעלה כדי שהמערכת תאתר אוטומטית את הספרים והכמויות.
-                    </div>
-                  ) : (
-                    parsedOrderItems.map((item, idx) => (
-                      <div key={idx} className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-emerald-50/50 p-2.5 rounded-xl ring-1 ring-emerald-200/70">
-                        <select
-                          value={item.bookId}
-                          onChange={e => {
-                            const b = inventoryList.find(x => x.id === e.target.value);
-                            setParsedOrderItems(prev => prev.map((r, i) => i === idx ? { ...r, bookId: e.target.value, title: b?.title || '', unitPrice: b ? getEffectiveBookPrices(b).supplier : 0 } : r));
-                          }}
-                          className="flex-1 min-w-[160px] p-2 border border-slate-200 rounded-xl text-xs bg-white font-bold"
-                        >
-                          {inventoryList.map(b => <option key={b.id} value={b.id}>{b.title}</option>)}
-                        </select>
-                        <input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={e => setParsedOrderItems(prev => prev.map((r, i) => i === idx ? { ...r, quantity: Number(e.target.value) || 1 } : r))}
-                          className="w-16 p-2 border border-slate-200 rounded-xl text-xs text-center bg-white font-bold"
-                          dir="ltr"
-                        />
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.5"
-                          value={item.unitPrice}
-                          onChange={e => setParsedOrderItems(prev => prev.map((r, i) => i === idx ? { ...r, unitPrice: Number(e.target.value) || 0 } : r))}
-                          className="w-20 p-2 border border-indigo-200 rounded-xl text-xs text-center bg-white font-extrabold text-indigo-700"
-                          dir="ltr"
-                        />
-                        <span className="text-xs font-extrabold text-slate-800 w-20 text-left">₪{(Number(item.quantity || 0) * Number(item.unitPrice || 0)).toLocaleString()}</span>
-                        <button type="button" onClick={() => setParsedOrderItems(prev => prev.filter((_, i) => i !== idx))} className="text-slate-400 hover:text-rose-500 p-1"><X className="w-4 h-4" /></button>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                <label className="flex items-center gap-2 text-xs font-bold text-slate-700 bg-indigo-50/70 p-3 rounded-xl ring-1 ring-indigo-100 cursor-pointer">
-                  <input type="checkbox" checked={parsedOrderDeductStock} onChange={e => setParsedOrderDeductStock(e.target.checked)} className="w-4 h-4 rounded" />
-                  הפחת מהמחסן הראשי והוסף אוטומטית למלאי הספק
-                </label>
-
-                <input type="text" value={parsedOrderNotes} onChange={e => setParsedOrderNotes(e.target.value)} placeholder="הערות לקבלה / משלוח (אופציונלי)..." className="w-full p-2.5 border border-slate-200 rounded-xl text-xs" />
-
-                <div className="bg-emerald-50 ring-1 ring-emerald-200 p-4 rounded-2xl flex justify-between items-center">
-                  <span className="font-bold text-emerald-900 text-sm">סיכום אוטומטי להזמנה וקבלה:</span>
-                  <span className="text-2xl font-extrabold text-emerald-700">₪{parsedTotal.toLocaleString()}</span>
-                </div>
-              </div>
-
-              <div className="p-4 border-t bg-slate-50/80 flex flex-wrap justify-end gap-2 shrink-0">
-                <button type="button" onClick={() => setIsParseOrderModalOpen(false)} className="px-4 py-2 text-xs font-bold text-slate-600">ביטול</button>
-                <button type="button" onClick={() => handleConfirmParsedOrder(false)} className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-xl text-xs font-bold">צור הזמנה ועדכן מלאי</button>
-                <button type="button" onClick={() => handleConfirmParsedOrder(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs">
-                  <Printer className="w-4 h-4" /> צור הזמנה + הפק קבלה להדפסה
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Dashboard Manual Adjustments Modal */}
-      {isDashboardEditOpen && (
+      {/* Digital Catalog Modal */}
+      {isCatalogModalOpen && (
         <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-lg overflow-hidden" dir="rtl">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-xl overflow-hidden" dir="rtl">
             <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
-              <div>
-                <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Edit className="w-5 h-5 text-indigo-600" /> עריכת התאמות ידניות בדאשבורד</h3>
-                <p className="text-xs text-slate-500">הזן ערך חיובי או שלילי (למשל 500 או ‎-200) להתאמת מדדי הבקרה</p>
+              <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><BookMarked className="w-5 h-5 text-emerald-600" /> קטלוג דיגיטלי לשליחה</h3>
+              <button onClick={() => setIsCatalogModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-3 gap-1.5 bg-slate-100 p-1 rounded-xl">
+                {[{ id: 'general', label: 'צרכן' }, { id: 'yeshiva', label: 'ישיבה' }, { id: 'supplier', label: 'ספקים' }].map(t => (
+                  <button key={t.id} onClick={() => setCatalogPriceTier(t.id)} className={`py-2 rounded-lg text-xs font-bold transition-all ${catalogPriceTier === t.id ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'}`}>{t.label}</button>
+                ))}
               </div>
-              <button onClick={() => setIsDashboardEditOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
-              {[
-                { key: 'copiesDelta', label: 'התאמת סה"כ עותקים במערכת' },
-                { key: 'warehouseDelta', label: 'התאמת עותקים במחסן הראשי' },
-                { key: 'retailValueDelta', label: 'התאמת שווי מלאי לצרכן (₪)' },
-                { key: 'productionValueDelta', label: 'התאמת שווי עלות הדפסה (₪)' },
-                { key: 'storeRevenueDelta', label: 'התאמת הכנסות אתר (₪)' },
-                { key: 'supplierRevenueDelta', label: 'התאמת הכנסות ספקים (₪)' },
-                { key: 'posRevenueDelta', label: 'התאמת הכנסות דוכן/קופה (₪)' },
-                { key: 'openDebtDelta', label: 'התאמת יתרת חוב פתוחה מספקים (₪)' },
-              ].map(field => (
-                <div key={field.key} className="flex items-center justify-between gap-3 bg-slate-50/90 p-2.5 rounded-xl ring-1 ring-slate-200/70">
-                  <label className="text-xs font-bold text-slate-700">{field.label}</label>
-                  <input
-                    type="number"
-                    value={dashboardEditDraft[field.key] ?? 0}
-                    onChange={e => setDashboardEditDraft(prev => ({ ...prev, [field.key]: Number(e.target.value) || 0 }))}
-                    className="w-28 p-2 border border-slate-200 rounded-xl text-sm text-center font-bold bg-white"
-                    dir="ltr"
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="p-4 border-t bg-slate-50/80 flex justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const zeroed = { copiesDelta: 0, warehouseDelta: 0, retailValueDelta: 0, productionValueDelta: 0, storeRevenueDelta: 0, supplierRevenueDelta: 0, posRevenueDelta: 0, openDebtDelta: 0 };
-                  setDashboardEditDraft(zeroed);
-                  setDashboardAdjustments(zeroed);
-                  setIsDashboardEditOpen(false);
-                  showToast('ההתאמות הידניות בדאשבורד אופסו!', 'info');
-                }}
-                className="px-3.5 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50"
-              >
-                אפס הכל ל-0
-              </button>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setIsDashboardEditOpen(false)} className="px-4 py-2 text-xs font-bold text-slate-600">ביטול</button>
+              <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                <input type="checkbox" checked={catalogOnlyInStock} onChange={e => setCatalogOnlyInStock(e.target.checked)} className="w-4 h-4 rounded" />
+                הצג רק ספרים שנמצאים במלאי
+              </label>
+              <textarea readOnly rows="8" value={buildCatalogWhatsAppText()} className="w-full p-3.5 border border-slate-200 rounded-xl bg-slate-50 text-xs leading-relaxed" />
+              <div className="grid grid-cols-2 gap-2.5">
+                <button onClick={handleCopyCatalogText} className="bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs"><Copy className="w-4 h-4" /> העתק לוואטסאפ</button>
                 <button
-                  type="button"
                   onClick={() => {
-                    setDashboardAdjustments(dashboardEditDraft);
-                    setIsDashboardEditOpen(false);
-                    showToast('נתוני הדאשבורד עודכנו!', 'success');
+                    setIsCatalogModalOpen(false);
+                    setPrintDoc({
+                      type: 'catalog',
+                      docTitle: 'קטלוג ספרי הוצאת ישיבת ירוחם',
+                      orderId: new Date().toLocaleDateString('he-IL'),
+                      date: new Date().toLocaleDateString('he-IL'),
+                      recipient: 'כלל הלקוחות והחנויות',
+                      items: getCatalogBooks().map(b => ({ name: b.title, author: b.author || '', price: getCatalogBookPrice(b) }))
+                    });
                   }}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs"
                 >
-                  שמור שינויים
+                  <Printer className="w-4 h-4" /> הדפס / שמור PDF
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Print House Quote Modal */}
+      {isAddQuoteModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center shrink-0">
+              <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><Scale className="w-5 h-5 text-indigo-600" /> הוספת הצעת מחיר מדפוס</h3>
+              <button onClick={() => setIsAddQuoteModalOpen(false)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
+            </div>
+            <form onSubmit={handleSavePrintQuote} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-5 overflow-y-auto space-y-3 flex-1">
+                <div className="grid grid-cols-2 gap-3">
+                  <input required placeholder="שם הספר / הפרויקט *" value={quoteForm.projectTitle} onChange={e => setQuoteForm({ ...quoteForm, projectTitle: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-sm" />
+                  <input required placeholder="שם בית הדפוס *" value={quoteForm.printerName} onChange={e => setQuoteForm({ ...quoteForm, printerName: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-sm" />
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <input required type="number" min="1" placeholder="כמות" value={quoteForm.copies} onChange={e => setQuoteForm({ ...quoteForm, copies: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+                  <input required type="number" min="1" placeholder="מחיר כולל (₪)" value={quoteForm.totalPrice} onChange={e => setQuoteForm({ ...quoteForm, totalPrice: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-sm font-bold" dir="ltr" />
+                  <input type="number" min="0" placeholder="ימי אספקה" value={quoteForm.deliveryDays} onChange={e => setQuoteForm({ ...quoteForm, deliveryDays: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+                </div>
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-700 bg-slate-50 p-3 rounded-xl ring-1 ring-slate-200/70">
+                  <input type="checkbox" checked={quoteForm.includesVat} onChange={e => setQuoteForm({ ...quoteForm, includesVat: e.target.checked })} className="w-4 h-4 rounded" />
+                  המחיר כולל מע"מ (אם לא מסומן — יתווסף 18% להשוואה אחידה)
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  <input type="number" min="0" placeholder="עמודים" value={quoteForm.pages} onChange={e => setQuoteForm({ ...quoteForm, pages: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+                  <select value={quoteForm.coverType} onChange={e => setQuoteForm({ ...quoteForm, coverType: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-sm">
+                    <option value="כריכה קשה">כריכה קשה</option>
+                    <option value="כריכה קשה + הטבעה">כריכה קשה + הטבעה</option>
+                    <option value="כריכה רכה">כריכה רכה</option>
+                    <option value="סיכות (חוברת)">סיכות (חוברת)</option>
+                  </select>
+                  <input placeholder="סוג נייר" value={quoteForm.paperType} onChange={e => setQuoteForm({ ...quoteForm, paperType: e.target.value })} className="p-2.5 border border-slate-200 rounded-xl text-sm" />
+                </div>
+                <textarea rows="2" placeholder="הערות והבדלים (הובלה, תנאי תשלום...)" value={quoteForm.notes} onChange={e => setQuoteForm({ ...quoteForm, notes: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" />
+                <label className="flex flex-col items-center justify-center gap-1.5 border border-dashed border-indigo-300 bg-indigo-50/50 hover:bg-indigo-50 p-4 rounded-2xl cursor-pointer transition-colors">
+                  <Upload className="w-5 h-5 text-indigo-600" />
+                  <span className="text-xs font-bold text-indigo-800">{quoteForm.fileName || 'העלה מסמך הצעת מחיר (PDF / תמונה עד 700KB)'}</span>
+                  <input type="file" accept=".pdf,image/*" onChange={handleQuoteFileUpload} className="hidden" />
+                </label>
+              </div>
+              <div className="p-4 border-t bg-slate-50/80 flex justify-end gap-2 shrink-0">
+                <button type="button" onClick={() => setIsAddQuoteModalOpen(false)} className="px-4 py-2 text-sm text-slate-600">ביטול</button>
+                <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-xs">שמור הצעה</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Quote Document Modal */}
+      {previewQuoteDoc && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+            <div className="p-4 border-b bg-slate-50/80 flex justify-between items-center">
+              <h3 className="font-extrabold text-slate-900">{previewQuoteDoc.printerName} — {previewQuoteDoc.fileName}</h3>
+              <div className="flex gap-2">
+                <a href={previewQuoteDoc.fileData} download={previewQuoteDoc.fileName} className="bg-indigo-600 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1"><Download className="w-3.5 h-3.5" /> הורד</a>
+                <button onClick={() => setPreviewQuoteDoc(null)} className="p-1.5 bg-white ring-1 ring-slate-200 rounded-xl"><X className="w-4 h-4 text-slate-500" /></button>
+              </div>
+            </div>
+            <div className="p-4 bg-slate-100 flex-1 overflow-auto flex items-center justify-center min-h-[400px]">
+              {previewQuoteDoc.fileType?.startsWith('image/') ? (
+                <img src={previewQuoteDoc.fileData} alt={previewQuoteDoc.fileName} className="max-w-full max-h-[70vh] rounded-xl shadow-sm" />
+              ) : previewQuoteDoc.fileType === 'application/pdf' ? (
+                <iframe src={previewQuoteDoc.fileData} title={previewQuoteDoc.fileName} className="w-full h-[70vh] bg-white rounded-xl" />
+              ) : (
+                <a href={previewQuoteDoc.fileData} download={previewQuoteDoc.fileName} className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold text-sm">הורד לצפייה</a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print Document Preview Modal */}
+      {printDoc && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+            <div className="p-4 border-b bg-slate-50/80 flex justify-between items-center print:hidden">
+              <h3 className="font-extrabold text-slate-900">{printDoc.docTitle}</h3>
+              <div className="flex gap-2">
+                <button onClick={() => window.print()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5"><Printer className="w-4 h-4" /> הדפס / שמור PDF</button>
+                <button onClick={() => setPrintDoc(null)} className="p-1.5 bg-white ring-1 ring-slate-200 rounded-xl"><X className="w-4 h-4 text-slate-500" /></button>
+              </div>
+            </div>
+            <div className="print-paper-surface p-6 overflow-y-auto space-y-4">
+              <div className="border-b pb-4 flex justify-between items-start">
+                <div>
+                  <h2 className="text-xl font-extrabold text-slate-900">הוצאת ספרי ישיבת ירוחם</h2>
+                  <p className="text-sm text-slate-600 mt-1">{printDoc.docTitle}</p>
+                </div>
+                <div className="text-left text-xs text-slate-500">
+                  <p>תאריך: {printDoc.date}</p>
+                  <p>מספר: {printDoc.orderId}</p>
+                </div>
+              </div>
+              <p className="text-sm"><strong>לכבוד:</strong> {printDoc.recipient}</p>
+              <table className="w-full text-right border-collapse border border-slate-200 text-sm">
+                <thead className="bg-slate-100">
+                  <tr>
+                    <th className="border border-slate-200 p-2">#</th>
+                    <th className="border border-slate-200 p-2">שם הספר</th>
+                    {printDoc.type === 'catalog' ? (
+                      <>
+                        <th className="border border-slate-200 p-2">מחבר</th>
+                        <th className="border border-slate-200 p-2 text-center">מחיר</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="border border-slate-200 p-2 text-center">כמות</th>
+                        {printDoc.type === 'supplier_delivery' && (
+                          <>
+                            <th className="border border-slate-200 p-2 text-center">מחיר ליח'</th>
+                            <th className="border border-slate-200 p-2 text-center">סה"כ</th>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(printDoc.items || []).map((item, idx) => (
+                    <tr key={idx}>
+                      <td className="border border-slate-200 p-2 text-center">{idx + 1}</td>
+                      <td className="border border-slate-200 p-2 font-medium">{item.name}</td>
+                      {printDoc.type === 'catalog' ? (
+                        <>
+                          <td className="border border-slate-200 p-2 text-slate-600">{item.author || '—'}</td>
+                          <td className="border border-slate-200 p-2 text-center font-bold">
+                            {Number(item.price) > 0 ? `₪${Number(item.price).toLocaleString()}` : 'בתיאום'}
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="border border-slate-200 p-2 text-center font-bold">{item.quantity}</td>
+                          {printDoc.type === 'supplier_delivery' && (
+                            <>
+                              <td className="border border-slate-200 p-2 text-center">₪{Number(item.price || 0).toLocaleString()}</td>
+                              <td className="border border-slate-200 p-2 text-center font-bold">₪{Number(item.lineTotal || 0).toLocaleString()}</td>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {printDoc.notes && (
+                <p className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                  <strong>הערות:</strong> {printDoc.notes}
+                </p>
+              )}
+              {printDoc.totalAmount > 0 && (
+                <div className="bg-slate-100 p-3.5 rounded-xl flex justify-between items-center font-extrabold text-slate-900">
+                  <span>סה"כ לתשלום:</span>
+                  <span>₪{Number(printDoc.totalAmount).toLocaleString()}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 w-full max-w-md overflow-hidden" dir="rtl">
+            <div className="p-5 border-b bg-slate-50/80 flex justify-between items-center">
+              <h3 className="font-extrabold text-slate-900 flex items-center gap-2"><KeyRound className="w-5 h-5 text-indigo-600" /> עריכת משתמש: {editingUser.name}</h3>
+              <button onClick={() => setEditingUser(null)} className="p-1.5 rounded-xl bg-white ring-1 ring-slate-200 text-slate-400"><X className="w-4 h-4" /></button>
+            </div>
+            <form onSubmit={handleSaveEditUser} className="p-5 space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">שם מלא</label>
+                <input required type="text" value={editingUser.name} onChange={e => setEditingUser({ ...editingUser, name: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">שם משתמש</label>
+                <input required type="text" value={editingUser.username} onChange={e => setEditingUser({ ...editingUser, username: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">אימייל</label>
+                  <input type="email" value={editingUser.email || ''} onChange={e => setEditingUser({ ...editingUser, email: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">טלפון לוואטסאפ</label>
+                  <input type="tel" value={editingUser.phone || ''} onChange={e => setEditingUser({ ...editingUser, phone: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">סיסמה חדשה (השאר ריק כדי לא לשנות)</label>
+                <input type="password" placeholder="••••••••" value={editingUser.newPassword || ''} onChange={e => setEditingUser({ ...editingUser, newPassword: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm" dir="ltr" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">רמת הרשאה</label>
+                <select value={editingUser.role} onChange={e => setEditingUser({ ...editingUser, role: e.target.value })} className="w-full p-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50">
+                  <option value="viewer">צופה בלבד</option>
+                  <option value="admin">מנהל מערכת</option>
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setEditingUser(null)} className="px-4 py-2 text-sm text-slate-600">ביטול</button>
+                <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-xs">שמור שינויים</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Dialog Modal */}
+      {confirmDialog && (
+        <div className="fixed inset-0 bg-slate-950/55 backdrop-blur-xs z-[90] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl ring-1 ring-slate-200/80 max-w-md w-full p-6 space-y-4" dir="rtl">
+            <div className="flex items-center gap-3.5">
+              <div className={`p-3 rounded-2xl ${confirmDialog.iconStyle || 'bg-red-100 text-red-600'}`}>{confirmDialog.icon}</div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-base">{confirmDialog.title}</h3>
+                <p className="text-sm text-slate-600 mt-0.5">{confirmDialog.message}</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setConfirmDialog(null)} className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100">ביטול</button>
+              <button
+                onClick={async () => {
+                  const fn = confirmDialog.onConfirm;
+                  setConfirmDialog(null);
+                  if (fn) await fn();
+                }}
+                className={`px-5 py-2 rounded-xl text-sm font-bold text-white shadow-sm ${confirmDialog.confirmStyle || 'bg-red-600 hover:bg-red-700'}`}
+              >
+                {confirmDialog.confirmText || 'אשר'}
+              </button>
             </div>
           </div>
         </div>
@@ -5051,6 +5653,12 @@ export default function App() {
 
                 <div className="space-y-1 pt-2 border-t border-slate-100">
                   <p className="px-3 text-[11px] font-bold text-slate-400">פעולות מהירות</p>
+                  <button
+                    onClick={() => { setCalcItems([{ bookId: inventoryList[0]?.id || '', quantity: 10 }]); setCalcDiscountPct(0); setIsPurchaseCalcOpen(true); setIsCommandOpen(false); }}
+                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl hover:bg-amber-50 text-sm font-bold text-amber-800 transition-colors"
+                  >
+                    <Calculator className="w-4 h-4" /> פתח מחשבון קניית ספרים מהיר
+                  </button>
                   <button
                     onClick={() => { createAutoSnapshot('נקודת שחזור מהירה', false); setIsCommandOpen(false); }}
                     className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl hover:bg-emerald-50 text-sm font-bold text-emerald-700 transition-colors"
